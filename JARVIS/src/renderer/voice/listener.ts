@@ -36,6 +36,9 @@ export class VoiceListener {
   private running = false;
   private startedAt = 0;
   private segStart = 0;
+  /** Момент, когда в фразе впервые прозвучала речь, и момент последней речи (без тишины вокруг). */
+  private speechFirstAt = 0;
+  private speechLastAt = 0;
 
   constructor(private o: ListenerOptions) {}
 
@@ -103,6 +106,8 @@ export class VoiceListener {
     this.segmentMs = 0;
     this.heard = false;
     this.segStart = performance.now();
+    this.speechFirstAt = 0;
+    this.speechLastAt = 0;
     const rec = new MediaRecorder(this.stream, { mimeType: 'audio/webm;codecs=opus' });
     rec.ondataavailable = (e) => e.data.size > 0 && chunks.push(e.data);
     this.recorder = rec;
@@ -125,7 +130,8 @@ export class VoiceListener {
     if (!rec) return;
     this.recorder = null;
     const chunks = this.chunks;
-    const meta = { startedAt: this.segStart, endedAt: performance.now() };
+    // Для определения эха важна длительность самой речи, а не записи с тишиной вокруг.
+    const meta = { startedAt: this.speechFirstAt || this.segStart, endedAt: this.speechLastAt || performance.now() };
     rec.onstop = () => {
       const blob = new Blob(chunks, { type: 'audio/webm' });
       if (blob.size > 0) this.o.onUtterance(blob, meta);
@@ -147,6 +153,9 @@ export class VoiceListener {
     this.segmentMs += POLL_MS;
 
     if (speaking) {
+      const nowT = performance.now();
+      if (!this.speechFirstAt) this.speechFirstAt = nowT;
+      this.speechLastAt = nowT;
       this.speechMs += POLL_MS;
       this.silenceMs = 0;
       if (!this.heard && this.speechMs >= minSpeech) {

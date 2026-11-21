@@ -146,7 +146,7 @@ try {
 
   // 4в. Главный экран подсказывает, почему он не отвечает: фраза без слова «Джарвис» в режиме ожидания
   await page.click('.nav-item:has-text("Джарвис")');
-  await page.waitForSelector('.hud-wakehint', { timeout: 20000 });
+  await page.waitForSelector('.hud-wakehint:has-text("Скажите")', { timeout: 30000 }); // окно «без слова Джарвис» закрыто
   transcripts = ['Купи хлеба и молока'];
   await page.waitForSelector('.hud-note-warn:has-text("нет слова")', { timeout: 30000 });
   step('фраза без слова «Джарвис» не молчит: на экране написано, что услышано и почему нет ответа');
