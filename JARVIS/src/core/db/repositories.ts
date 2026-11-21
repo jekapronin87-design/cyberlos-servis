@@ -66,7 +66,11 @@ export function validateSettingsPatch(patch: unknown): Partial<Settings> {
       out[key] = (p[key] as string).trim();
     }
   }
-  for (const key of ['memoryEnabled', 'allowProductionWrites', 'micEnabled', 'cameraEnabled', 'autoListen', 'launchAtLogin'] as const) {
+  if ('ttsSpeed' in p) {
+    if (typeof p.ttsSpeed !== 'number' || !Number.isFinite(p.ttsSpeed) || p.ttsSpeed < 0.7 || p.ttsSpeed > 1.8) throw new Error('Скорость речи: число от 0.7 до 1.8');
+    out.ttsSpeed = Math.round(p.ttsSpeed * 100) / 100;
+  }
+  for (const key of ['memoryEnabled', 'allowProductionWrites', 'micEnabled', 'cameraEnabled', 'autoListen', 'launchAtLogin', 'profileEnabled'] as const) {
     if (key in p) {
       if (typeof p[key] !== 'boolean') throw new Error(`Поле ${key} должно быть логическим`);
       out[key] = p[key] as boolean;

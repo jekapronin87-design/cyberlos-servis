@@ -98,7 +98,7 @@ export function useVoice(p: {
             if (wake) {
               setAwait(true);
               say('Слушаю вас…');
-              if (cur.settings.ttsMode !== 'off') void speak('Слушаю.', cur.settings.ttsMode, { systemVoice: cur.settings.systemVoice }).catch(() => {});
+              if (cur.settings.ttsMode !== 'off') void speak('Слушаю.', cur.settings.ttsMode, { systemVoice: cur.settings.systemVoice, speed: cur.settings.ttsSpeed }).catch(() => {});
             }
             return;
           }

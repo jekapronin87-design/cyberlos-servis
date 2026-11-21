@@ -74,6 +74,14 @@ const MIGRATIONS: string[] = [
   `
   ALTER TABLE attachments ADD COLUMN kind TEXT NOT NULL DEFAULT 'screen';
   `,
+  // 4: досье о пользователе (разделы свободного текста)
+  `
+  CREATE TABLE profile (
+    section TEXT PRIMARY KEY,
+    body TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  `,
 ];
 
 export function openDatabase(path: string): Db {

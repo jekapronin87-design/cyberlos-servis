@@ -21,6 +21,7 @@ export interface OrchestratorDeps {
   conversations: ConversationRepo;
   attachments: AttachmentRepo;
   computer: () => ComputerAccess;
+  profile: () => { title: string; body: string }[];
   memory: MemoryRepo;
   settings: SettingsRepo;
   tools: ToolRegistry;
@@ -85,6 +86,7 @@ export class ChatOrchestrator {
         const system = buildSystemPrompt({
           settings,
           folders: this.d.computer().folders,
+          profile: settings.profileEnabled ? this.d.profile() : undefined,
           memory: settings.memoryEnabled ? this.d.memory.list().slice(0, 100) : [],
         });
         // На последнем шаге инструменты отключаются, чтобы цикл гарантированно завершился.

@@ -41,6 +41,12 @@ const api: JarvisApi = {
     onCaptureRequest: subscribe(IPC.evtCameraCapture),
     sendFrame: (requestId, frame) => invoke(IPC.cameraFrame, requestId, frame),
   },
+  profile: {
+    get: () => invoke(IPC.profileGet),
+    set: (section, text) => invoke(IPC.profileSet, section, text),
+    clear: () => invoke(IPC.profileClear),
+    importFile: () => invoke(IPC.profileImport),
+  },
   attachments: { get: (id) => invoke(IPC.attachmentGet, id) },
   conversations: {
     list: () => invoke(IPC.convList),

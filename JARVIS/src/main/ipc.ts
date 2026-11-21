@@ -1,3 +1,5 @@
+import { readFileSync, statSync } from 'node:fs';
+import { basename } from 'node:path';
 import { app, dialog, ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron';
 import { IPC } from '../shared/ipc';
 import type { ChatEvent, ConfirmRequest, MemoryKind, Settings } from '../shared/types';
@@ -85,6 +87,31 @@ export function registerIpc(opts: {
   handle(IPC.computerAddHost, (_e, h) => core.addBrowserHost(str(h, 'host', 120)));
   handle(IPC.computerRemoveHost, (_e, h) => core.removeBrowserHost(str(h, 'host', 120)));
   handle(IPC.attachmentGet, (_e, id) => core.getAttachment(int(id, 'id')));
+
+  handle(IPC.profileGet, () => core.getProfile());
+  handle(IPC.profileSet, (_e, section, text) => core.setProfileSection(str(section, 'section', 30), str(text, 'text', 5000)));
+  handle(IPC.profileClear, () => core.clearProfile());
+  handle(IPC.profileImport, async () => {
+    const test = process.env.JARVIS_E2E_PICK;
+    let path: string | null = null;
+    if (test && !app.isPackaged) path = JSON.parse(test).file ?? null;
+    else {
+      const w = getWindow();
+      const opts: Electron.OpenDialogOptions = {
+        title: 'Выберите текстовый файл с рассказом о себе',
+        properties: ['openFile'],
+        filters: [{ name: 'Текст', extensions: ['txt', 'md', 'json', 'csv'] }],
+      };
+      const r = w ? await dialog.showOpenDialog(w, opts) : await dialog.showOpenDialog(opts);
+      path = r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
+    }
+    if (!path) return null;
+    if (statSync(path).size > 2_000_000) throw new Error('Файл слишком большой (больше 2 МБ)');
+    const raw = readFileSync(path, 'utf8');
+    if (raw.includes('\u0000')) throw new Error('Это не текстовый файл');
+    const MAX = 18_000;
+    return { name: basename(path), text: raw.slice(0, MAX), truncated: raw.length > MAX };
+  });
 
   handle(IPC.convList, () => core.listConversations());
   handle(IPC.convCreate, (_e, title) => core.createConversation(title === undefined ? undefined : str(title, 'title', 200)));

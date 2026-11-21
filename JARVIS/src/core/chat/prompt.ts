@@ -6,6 +6,8 @@ export function buildSystemPrompt(opts: {
   memory: MemoryItem[];
   /** Разрешённые папки (пути не секретны и нужны модели, чтобы обращаться к файлам). */
   folders?: string[];
+  /** Досье пользователя (заполненные разделы). */
+  profile?: { title: string; body: string }[];
   now?: Date;
 }): string {
   const now = (opts.now ?? new Date()).toLocaleString('ru-RU', { dateStyle: 'full', timeStyle: 'short' });
@@ -31,6 +33,20 @@ export function buildSystemPrompt(opts: {
     'Никогда не раскрывай API-ключи, пароли и другие секреты.',
     UNTRUSTED_DATA_RULE,
   ];
+
+  if (opts.profile && opts.profile.length > 0) {
+    const text = opts.profile.map((p) => `### ${p.title}\n${p.body}`).join('\n\n');
+    parts.push(
+      'Досье пользователя (он сам рассказал это о себе и подтвердил сохранение). Используй естественно и к месту, не пересказывай без нужды и не упоминай чувствительное, если это не относится к делу. ' +
+        'Ты знаешь о пользователе ТОЛЬКО это и память ниже — не выдумывай факты о нём; если чего-то не знаешь, спроси.\n' +
+        text,
+    );
+  } else if (opts.profile) {
+    parts.push(
+      'Досье пользователя пока пусто. Если он хочет, чтобы ты узнал его лучше («давай знакомиться»), задавай по одному короткому вопросу (о нём, работе, близких, целях, распорядке, как с ним общаться), ' +
+        'потом одним вызовом profile_save сохрани то, что он рассказал. Не давай обещаний знать о нём то, чего он не говорил.',
+    );
+  }
 
   if (opts.settings.memoryEnabled && opts.memory.length > 0) {
     const text = opts.memory.map((m) => `#${m.id} [${m.kind}] ${m.content}`).join('\n');

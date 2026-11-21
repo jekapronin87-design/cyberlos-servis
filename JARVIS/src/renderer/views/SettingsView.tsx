@@ -118,6 +118,12 @@ export function SettingsView(props: {
           </div>
         </label>
         <label className="check">
+          <input type="checkbox" checked={s.profileEnabled} onChange={(e) => run(() => props.onUpdate({ profileEnabled: e.target.checked }), e.target.checked ? 'Досье используется в ответах' : 'Досье не используется')} />
+          <span>
+            Использовать <strong>досье</strong> о вас в ответах <span className="muted small">(раздел «Досье»; его текст уходит в запросы к ИИ)</span>
+          </span>
+        </label>
+        <label className="check">
           <input type="checkbox" checked={s.launchAtLogin} onChange={(e) => run(() => props.onUpdate({ launchAtLogin: e.target.checked }), e.target.checked ? 'JARVIS будет запускаться вместе с Windows' : 'Автозапуск выключен')} />
           <span>Запускать JARVIS вместе с Windows</span>
         </label>
@@ -188,12 +194,17 @@ export function SettingsView(props: {
             <button className="btn" onClick={async () => {
                 setMsg({ ok: true, text: 'Проверяю голос…' });
                 let failure = '';
-                await speak('Добрый день. Это мой голос. Все системы работают в штатном режиме.', s.ttsMode, { systemVoice: s.systemVoice, onError: (m) => (failure = m) });
+                await speak('Добрый день. Это мой голос. Все системы работают в штатном режиме.', s.ttsMode, { systemVoice: s.systemVoice, speed: s.ttsSpeed, onError: (m) => (failure = m) });
                 setMsg(failure ? { ok: false, text: failure } : { ok: true, text: 'Голос проигран. Если вы ничего не слышали, проверьте громкость и устройство вывода звука Windows.' });
               }}>
               ▶ Проверить голос
             </button>
           </div>
+        </label>
+        <label className="field">
+          <span>Скорость речи: ×{s.ttsSpeed.toFixed(2)} {s.ttsSpeed >= 1.1 && s.ttsSpeed <= 1.25 ? '(живо, рекомендуется)' : ''}</span>
+          <input type="range" min="0.8" max="1.5" step="0.05" value={s.ttsSpeed} onChange={(e) => void run(() => props.onUpdate({ ttsSpeed: Number(e.target.value) }), 'Скорость сохранена')} />
+          <small className="muted">Если голос кажется медленным — сдвиньте вправо и нажмите «▶ Проверить голос».</small>
         </label>
         <label className="field">
           <span>Манера речи (для облачного голоса)</span>

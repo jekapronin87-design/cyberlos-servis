@@ -9,9 +9,11 @@ import type {
   MemoryItem,
   MemoryKind,
   ComputerAccess,
+  ProfileSection,
   Role,
   Settings,
 } from '../shared/types';
+import { ProfileRepo, isSectionId, registerProfileTools } from './profile';
 import { ChatOrchestrator } from './chat/orchestrator';
 import { ToolExecutor } from './chat/executor';
 import { openDatabase, type Db } from './db/database';
@@ -74,6 +76,7 @@ export class JarvisCore {
   readonly providers: ProviderManager;
   readonly voice: VoiceService;
   readonly attachments: AttachmentRepo;
+  readonly profile: ProfileRepo;
   readonly computer: ComputerAccessRepo;
   readonly browser: BrowserController;
   readonly executor: ToolExecutor;
@@ -95,6 +98,7 @@ export class JarvisCore {
       fetchImpl: opts.fetchImpl,
     });
     this.attachments = new AttachmentRepo(this.db);
+    this.profile = new ProfileRepo(this.db);
     this.computer = new ComputerAccessRepo(this.db, { dataDir: opts.dataDir, home: opts.home });
     this.tools = registerBuiltinTools(new ToolRegistry(), this.memory);
     const host = opts.host ?? {};
@@ -109,6 +113,7 @@ export class JarvisCore {
     registerScreenTool(this.tools, host);
     registerCameraTool(this.tools, host, () => this.settings.get());
     this.attachments.purgeKind('camera'); // кадры камеры живут только до перезапуска
+    registerProfileTools(this.tools, this.profile);
     registerProjectTools(this.tools, this.computer);
     registerRunTools(this.tools, this.computer);
     registerGitTools(this.tools, this.computer);
@@ -168,6 +173,7 @@ export class JarvisCore {
       conversations: this.conversations,
       attachments: this.attachments,
       computer: () => this.computer.get(),
+      profile: () => this.profile.forPrompt(),
       memory: this.memory,
       settings: this.settings,
       tools: this.tools,
@@ -322,6 +328,22 @@ export class JarvisCore {
   }
   getAttachment(id: number): { mime: string; base64: string } | null {
     return this.attachments.get(id);
+  }
+
+  // ----- досье -----
+  getProfile(): ProfileSection[] {
+    return this.profile.list();
+  }
+  setProfileSection(section: string, text: string): ProfileSection[] {
+    if (!isSectionId(section)) throw new Error('Неизвестный раздел досье');
+    this.profile.set(section, text);
+    this.audit.record({ actor: 'user', action: 'profile.update', decision: 'info', details: { section, chars: text.length } });
+    return this.profile.list();
+  }
+  clearProfile(): ProfileSection[] {
+    this.profile.clear();
+    this.audit.record({ actor: 'user', action: 'profile.clear', risk: 'medium', decision: 'info' });
+    return this.profile.list();
   }
 
   // ----- память -----

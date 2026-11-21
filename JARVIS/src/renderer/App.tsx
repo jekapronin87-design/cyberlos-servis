@@ -4,17 +4,18 @@ import { DEFAULT_SETTINGS } from '../shared/types';
 import { stripUntrustedWrapper } from '../shared/text';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { HudView, type ActivityItem } from './hud/HudView';
-import { IconAudit, IconChat, IconHud, IconMemory, IconSettings } from './hud/Icons';
+import { IconAudit, IconChat, IconHud, IconMemory, IconProfile, IconSettings } from './hud/Icons';
 import type { OrbState } from './hud/Orb';
 import { AuditView } from './views/AuditView';
 import { ChatView } from './views/ChatView';
 import { MemoryView } from './views/MemoryView';
+import { ProfileView } from './views/ProfileView';
 import { SettingsView } from './views/SettingsView';
 import { cancelSpeech, getSpeechLevel, onSpeaking, SpeechSession } from './voice/speech';
 import { useCamera } from './voice/useCamera';
 import { useVoice } from './voice/useVoice';
 
-type View = 'hud' | 'chat' | 'memory' | 'audit' | 'settings';
+type View = 'hud' | 'chat' | 'profile' | 'memory' | 'audit' | 'settings';
 
 const cleanError = (e: unknown): string =>
   e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'Неизвестная ошибка';
@@ -204,6 +205,14 @@ export function App() {
     }
   };
 
+  /** Отправить сообщение на главном экране; если озвучка включена — ответ прозвучит голосом. */
+  const sendSpoken = async (text: string): Promise<void> => {
+    const st = settingsRef.current;
+    if (st.ttsMode !== 'off') session.current = new SpeechSession({ mode: st.ttsMode, systemVoice: st.systemVoice, speed: st.ttsSpeed, onError: setError });
+    setView('hud');
+    await send(text);
+  };
+
   const stop = useCallback((): void => {
     cancelSpeech();
     session.current = null;
@@ -234,7 +243,7 @@ export function App() {
     onCommand: (text) => {
       // Голосовая команда: отвечаем голосом, по мере того как ответ генерируется
       const st = settingsRef.current;
-      session.current = new SpeechSession({ mode: st.ttsMode, systemVoice: st.systemVoice, onError: setError });
+      session.current = new SpeechSession({ mode: st.ttsMode, systemVoice: st.systemVoice, speed: st.ttsSpeed, onError: setError });
       setView((v) => (v === 'settings' || v === 'audit' || v === 'memory' ? 'hud' : v));
       void send(text);
     },
@@ -255,7 +264,7 @@ export function App() {
     if (settings.autoListen && settings.micEnabled && settings.voiceMode === 'wake' && info.hasVoiceKey) {
       voice.toggle();
       if (settings.ttsMode !== 'off') {
-        const s = new SpeechSession({ mode: settings.ttsMode, systemVoice: settings.systemVoice, onError: setError });
+        const s = new SpeechSession({ mode: settings.ttsMode, systemVoice: settings.systemVoice, speed: settings.ttsSpeed, onError: setError });
         s.push(greeting(settings.userName));
         void s.end();
       }
@@ -279,6 +288,7 @@ export function App() {
   const nav = [
     ['hud', 'Джарвис', <IconHud key="h" />],
     ['chat', 'Чат', <IconChat key="c" />],
+    ['profile', 'Досье', <IconProfile key="p" />],
     ['memory', 'Память', <IconMemory key="m" />],
     ['audit', 'Журнал', <IconAudit key="a" />],
     ['settings', 'Настройки', <IconSettings key="s" />],
@@ -360,6 +370,15 @@ export function App() {
             </aside>
             <ChatView info={info} messages={messages} streaming={streaming} running={running} hasConversation={activeId !== null} onSend={(t) => void send(t)} onStop={stop} voice={voice} />
           </div>
+        )}
+        {view === 'profile' && (
+          <ProfileView
+            enabled={settings.profileEnabled}
+            onIntroduce={() => void sendSpoken('Давай познакомимся. Задавай мне по одному короткому вопросу — о моей работе, близких, целях, распорядке и о том, как со мной лучше общаться. Когда узнаешь достаточно, покажи, что собираешься сохранить в досье.')}
+            onImportedText={(name, text, truncated) =>
+              void sendSpoken(`Вот текст из файла «${name}»${truncated ? ' (показано начало)' : ''}. Выдели из него то, что стоит знать обо мне и моих делах, и предложи сохранить это в досье (разделы: обо мне, работа, близкие, цели, распорядок, как со мной общаться, чего не делать). Секреты и пароли не сохраняй.\n\n${text}`)
+            }
+          />
         )}
         {view === 'memory' && (
           <MemoryView

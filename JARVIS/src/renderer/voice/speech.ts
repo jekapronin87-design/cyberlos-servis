@@ -134,6 +134,24 @@ export function takeSentences(buffer: string, final: boolean): { sentences: stri
   return { sentences: out, rest };
 }
 
+/**
+ * Чтобы Джарвис начинал говорить раньше: если первое предложение длинное и ещё не закончилось,
+ * отдаём первую часть по запятой/двоеточию/тире (после ≥ 30 символов).
+ */
+export function takeEarlyChunk(buffer: string): { chunk: string; rest: string } | null {
+  if (buffer.length < 70 || /[.!?…]/.test(buffer.slice(0, 50))) return null;
+  const re = /[,;:—–]\s/g;
+  let cut = -1;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(buffer)) && m.index < buffer.length - 12) {
+    if (m.index >= 30) {
+      cut = m.index + 1;
+      break;
+    }
+  }
+  return cut > 0 ? { chunk: buffer.slice(0, cut).trim(), rest: buffer.slice(cut).trimStart() } : null;
+}
+
 export function cancelSpeech(): void {
   generation++;
   window.speechSynthesis?.cancel();
@@ -147,6 +165,8 @@ export function cancelSpeech(): void {
 
 export interface SpeechOptions {
   mode: TtsMode;
+  /** Скорость речи (0.7–1.8), 1 — без изменения. */
+  speed?: number;
   systemVoice?: string;
   onError?: (message: string) => void;
 }
@@ -156,6 +176,7 @@ export class SpeechSession {
   private buf = '';
   private gen: number;
   private chain: Promise<void> = Promise.resolve();
+  private emitted = false;
   private fetches: Promise<Blob | null>[] = [];
 
   constructor(private o: SpeechOptions) {
@@ -173,6 +194,14 @@ export class SpeechSession {
     const { sentences, rest } = takeSentences(this.buf, false);
     this.buf = rest;
     sentences.forEach((s) => this.enqueue(s));
+    // Первая реплика начинается как можно раньше — не дожидаясь конца длинного предложения
+    if (!this.emitted && sentences.length === 0) {
+      const early = takeEarlyChunk(this.buf);
+      if (early) {
+        this.buf = early.rest;
+        this.enqueue(early.chunk);
+      }
+    }
   }
 
   /** Дочитать остаток и дождаться конца воспроизведения. */
@@ -186,6 +215,7 @@ export class SpeechSession {
   }
 
   private enqueue(sentence: string): void {
+    this.emitted = true;
     const text = textForSpeech(sentence, 600);
     if (!text) return;
     setSpeaking(true);
@@ -218,6 +248,8 @@ export class SpeechSession {
     if (viaAnalyser) ctx.createMediaElementSource(audio).connect(an);
     document.body.appendChild(audio);
     activeAudio += viaAnalyser ? 1 : 0;
+    audio.playbackRate = Math.min(1.8, Math.max(0.7, this.o.speed ?? 1)); // живее, но голос не «пищит»: высота тона сохраняется
+    audio.preservesPitch = true;
     audio.ontimeupdate = touch;
     await new Promise<void>((resolve) => {
       // Сторож: длительность неизвестна заранее, поэтому ждём не дольше 90 с на предложение.
@@ -250,7 +282,7 @@ export class SpeechSession {
       u.lang = 'ru-RU';
       const v = pickVoice(voices, this.o.systemVoice ?? '');
       if (v) u.voice = v;
-      u.rate = 1.02;
+      u.rate = 1.0 * Math.min(1.8, Math.max(0.7, this.o.speed ?? 1));
       u.pitch = 0.82; // чуть ниже — солиднее
       u.onboundary = () => {
         pseudo = 0.7 + Math.random() * 0.3;

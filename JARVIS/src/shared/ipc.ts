@@ -1,6 +1,7 @@
 import type {
   AppInfo,
   ComputerAccess,
+  ProfileSection,
   AuditEntry,
   ChatEvent,
   ChatMessage,
@@ -30,6 +31,10 @@ export const IPC = {
   computerAddHost: 'computer:host:add',
   computerRemoveHost: 'computer:host:remove',
   attachmentGet: 'attachment:get',
+  profileGet: 'profile:get',
+  profileSet: 'profile:set',
+  profileClear: 'profile:clear',
+  profileImport: 'profile:import',
   convList: 'conv:list',
   convCreate: 'conv:create',
   convRename: 'conv:rename',
@@ -85,6 +90,13 @@ export interface JarvisApi {
     onCaptureRequest(cb: (requestId: string) => void): () => void;
     /** Ответ на запрос кадра; null — камера выключена или недоступна. */
     sendFrame(requestId: string, frame: { mime: string; base64: string; width: number; height: number } | null): Promise<void>;
+  };
+  profile: {
+    get(): Promise<ProfileSection[]>;
+    set(section: string, text: string): Promise<ProfileSection[]>;
+    clear(): Promise<ProfileSection[]>;
+    /** Окно выбора текстового файла (txt/md/json, до 20 000 символов) для импорта сведений о себе; null — отмена. */
+    importFile(): Promise<{ name: string; text: string; truncated: boolean } | null>;
   };
   attachments: {
     get(id: number): Promise<{ mime: string; base64: string } | null>;
