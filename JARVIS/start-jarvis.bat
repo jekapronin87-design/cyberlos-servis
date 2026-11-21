@@ -11,15 +11,13 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-if not exist node_modules (
-  echo First run: installing components. This takes a few minutes, please wait...
-  call npm install
-  if errorlevel 1 (
-    echo.
-    echo Installation failed. Take a screenshot of this window and send it to your assistant.
-    pause
-    exit /b 1
-  )
+echo Checking components, the first run takes a few minutes, later runs take seconds...
+call npm install --no-audit --no-fund --loglevel=error
+if errorlevel 1 (
+  echo.
+  echo Installation failed. Take a screenshot of this window and send it to your assistant.
+  pause
+  exit /b 1
 )
 call npm start
 if errorlevel 1 pause
