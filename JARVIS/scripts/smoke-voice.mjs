@@ -136,7 +136,12 @@ try {
   // 5. Голосовое «стоп»
   // Пока Джарвис говорит, он реагирует только на «стоп», поэтому дожидаемся конца его реплики
   await page.waitForFunction(() => !document.querySelector('audio[data-jv-tts]'), null, { timeout: 30000 });
-  await page.waitForTimeout(1500);
+  // После ответа открывается окно «продолжайте без слова Джарвис» (8 с) — ждём, пока оно закроется,
+  // и пока не закончится возможный запуск от случайной фразы внутри этого окна.
+  await page.waitForTimeout(800);
+  await page.waitForSelector('.typing:has-text("Слушаю вас")', { state: 'detached', timeout: 20000 });
+  await page.waitForSelector('button:has-text("Отправить")');
+  await page.waitForFunction(() => !document.querySelector('audio[data-jv-tts]'), null, { timeout: 30000 });
   transcripts = ['Джарвис, забудь 1', 'Стоп'];
   await page.waitForSelector('[role=alertdialog]', { timeout: 40000 });
   // голосом подтвердить нельзя — окно остаётся, пока «стоп» не закроет его
@@ -162,6 +167,11 @@ try {
   console.log('VOICE SMOKE OK. Скриншоты:', shots);
 } catch (e) {
   console.error('VOICE SMOKE FAILED:', e);
+  try {
+    const pg = await app.firstWindow();
+    console.error('--- отладка: остаток transcripts =', JSON.stringify(transcripts), 'stt-запросов =', seen.stt);
+    console.error('--- текст окна:', (await pg.evaluate(() => document.body.innerText)).replace(/\n+/g, ' | ').slice(0, 1500));
+  } catch {}
   try { await (await app.firstWindow()).screenshot({ path: join(shots, 'v-failure.png') }); } catch {}
   process.exitCode = 1;
 } finally {
