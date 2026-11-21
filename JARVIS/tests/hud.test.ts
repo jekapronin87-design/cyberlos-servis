@@ -114,3 +114,47 @@ describe('камера (инструмент camera_look)', () => {
     expect(makeCore().core.tools.get('camera_look')).toBeUndefined();
   });
 });
+
+import { isToolEnabled, moduleOfTool } from '../src/core/modules';
+
+describe('модули', () => {
+  it('инструменты распределены по модулям; ядро доступно всегда', () => {
+    expect(moduleOfTool('fs_read')).toBe('computer');
+    expect(moduleOfTool('camera_look')).toBe('computer');
+    expect(moduleOfTool('git_commit')).toBe('dev');
+    expect(moduleOfTool('delegate_task')).toBe('dev');
+    expect(moduleOfTool('crm_overview')).toBe('crm');
+    expect(moduleOfTool('kb_search')).toBe('mentor');
+    expect(moduleOfTool('schedule_create')).toBe('scheduler');
+    expect(moduleOfTool('remember')).toBeNull();
+    expect(moduleOfTool('profile_save')).toBeNull();
+    expect(isToolEnabled('crm_overview', ['crm'])).toBe(false);
+    expect(isToolEnabled('remember', ['crm', 'computer', 'dev'])).toBe(true);
+  });
+  it('отключённый модуль: инструменты не предлагаются модели и не выполняются; валидация настройки', async () => {
+    let offered: string[] = [];
+    let step = 0;
+    const p: ChatProvider = {
+      id: 'm', name: 'm',
+      async *stream(req: ProviderRequest): AsyncIterable<ProviderEvent> {
+        offered = req.tools.map((t) => t.name);
+        step++;
+        if (step === 1) yield { type: 'tool_use', id: 'x', name: 'fs_list_allowed', input: {} }; // «взломанная» модель зовёт отключённый инструмент
+        else yield { type: 'text', text: 'ок' };
+      },
+    };
+    const h = makeCore({ liveProvider: p });
+    h.secrets.set('anthropic.apiKey', 'sk-ant-test-key-1234567890');
+    h.core.updateSettings({ disabledModules: ['computer', 'crm'] });
+    const { id } = await chat(h, 'привет');
+    expect(offered).not.toContain('fs_read');
+    expect(offered).not.toContain('crm_overview');
+    expect(offered).toContain('remember');
+    expect(offered).toContain('kb_search');
+    const res = h.core.messages(id).find((m) => m.role === 'tool')!.content[0] as { content: string; denied?: boolean };
+    expect(res.content).toMatch(/модуль отключён/);
+    expect(res.denied).toBe(true);
+    expect(h.core.listAudit().some((a) => a.action === 'tool.module_disabled')).toBe(true);
+    expect(() => h.core.updateSettings({ disabledModules: ['hack'] })).toThrow(/модуль/);
+  });
+});

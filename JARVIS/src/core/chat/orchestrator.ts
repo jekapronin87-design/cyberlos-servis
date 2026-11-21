@@ -10,6 +10,7 @@ import { wrapUntrusted } from '../security/injection';
 import { decide } from '../security/policy';
 import type { ToolDefinition, ToolRegistry } from '../tools/registry';
 import { ToolExecutor, type ToolResultBlock, type ToolUseBlock } from './executor';
+import { isToolEnabled } from '../modules';
 import { buildSystemPrompt } from './prompt';
 
 export const MAX_USER_TEXT = 20_000;
@@ -50,7 +51,7 @@ export class ChatOrchestrator {
     emit: (e: ChatEvent) => void,
     signal: AbortSignal,
     runId: string = randomUUID(),
-    opts: { background?: boolean; maxSteps?: number } = {},
+    opts: { background?: boolean; maxSteps?: number; remoteDevice?: string } = {},
   ): Promise<void> {
     const finish = (status: 'done' | 'stopped' | 'error', error?: string): void =>
       emit({ type: 'run_finished', runId, conversationId, status, ...(error ? { error } : {}) });
@@ -94,7 +95,7 @@ export class ChatOrchestrator {
           memory: settings.memoryEnabled ? this.d.memory.list().slice(0, 100) : [],
         });
         // На последнем шаге инструменты отключаются, чтобы цикл гарантированно завершился.
-        const tools = step < maxSteps ? this.d.tools.specs() : [];
+        const tools = step < maxSteps ? this.d.tools.specs().filter((t) => isToolEnabled(t.name, settings.disabledModules)) : [];
 
         let assistantText = '';
         const toolUses: ToolUseBlock[] = [];
@@ -129,7 +130,7 @@ export class ChatOrchestrator {
 
         const results: ToolResultBlock[] = [];
         for (const use of toolUses) {
-          results.push(await this.exec.execute(use, { runId, conversationId, signal, actor: 'assistant', background: opts.background }));
+          results.push(await this.exec.execute(use, { runId, conversationId, signal, actor: 'assistant', background: opts.background, remoteDevice: opts.remoteDevice }));
         }
         const toolMsg = this.d.conversations.addMessage(conversationId, 'tool', results);
         emit({ type: 'message', runId, message: toolMsg });

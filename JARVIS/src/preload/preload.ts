@@ -68,6 +68,12 @@ const api: JarvisApi = {
     runs: (id) => invoke(IPC.jobsRuns, id),
     onResult: subscribe(IPC.evtJob),
   },
+  gateway: {
+    status: () => invoke(IPC.gatewayStatus),
+    pairCode: () => invoke(IPC.gatewayCode),
+    devices: () => invoke(IPC.gatewayDevices),
+    revoke: (id) => invoke(IPC.gatewayRevoke, id),
+  },
   crm: {
     get: () => invoke(IPC.crmGet),
     save: (cfg, password) => invoke(IPC.crmSave, cfg, password),

@@ -19,6 +19,8 @@ import { ProfileRepo, isSectionId, registerProfileTools } from './profile';
 import { MentorService, registerMentorTools } from './mentor/service';
 import { JobRepo, type Job, type JobInput } from './scheduler/jobs';
 import { Scheduler, type JobResultEvent } from './scheduler/runner';
+import { DeviceRepo, PairingCodes, type Device } from './gateway/devices';
+import { Gateway } from './gateway/server';
 import { CrmService, registerCrmTools, type CrmStatus, type CrmTestResult } from './crm/service';
 import { DEFAULT_SOURCE, downloadZip, extractUpdate, fetchLatest, installAndBuild, makeBackupDir, readInstalled, writeInstalled } from './update/updater';
 import { ChatOrchestrator } from './chat/orchestrator';
@@ -70,6 +72,8 @@ export interface CoreOptions {
   /** Подмена часов планировщика (тесты). */
   schedulerNow?: () => Date;
   schedulerTimeoutMs?: number;
+  /** Порт шлюза для телефона (по умолчанию 8787; 0 — любой свободный, для тестов). */
+  gatewayPort?: number;
   /** Подмена сети и времени для CRM (тесты). */
   crmFetch?: typeof fetch;
   crmNow?: () => Date;
@@ -102,6 +106,9 @@ export class JarvisCore {
   readonly mentor: MentorService;
   readonly jobs: JobRepo;
   readonly scheduler: Scheduler;
+  readonly devices: DeviceRepo;
+  readonly pairing: PairingCodes;
+  readonly gateway: Gateway;
   readonly computer: ComputerAccessRepo;
   readonly browser: BrowserController;
   readonly executor: ToolExecutor;
@@ -226,6 +233,19 @@ export class JarvisCore {
       now: opts.schedulerNow,
       timeoutMs: opts.schedulerTimeoutMs,
     });
+    this.devices = new DeviceRepo(this.db);
+    this.pairing = new PairingCodes();
+    this.gateway = new Gateway({
+      devices: this.devices,
+      codes: this.pairing,
+      audit: this.audit,
+      getSettings: () => this.settings.get(),
+      mode: () => this.providers.resolve(this.settings.get()).mode,
+      conversations: this.conversations,
+      startRemoteChat: (device, convId, text, emit) => this.startRemoteChat(device, convId, text, emit),
+      waitingForPc: () => this.confirm.pendingCount > 0,
+      port: opts.gatewayPort,
+    });
     this.tools.register<{ title: string; prompt: string; kind: string; time?: string; intervalMin?: number }>({
       name: 'schedule_create',
       description:
@@ -312,6 +332,10 @@ export class JarvisCore {
       decision: 'info',
       details: { keys: Object.keys(patch as object) },
     });
+    if (next.gatewayMode !== before.gatewayMode || next.disabledModules.join() !== before.disabledModules.join()) void this.applyGateway();
+    if (next.gatewayAllowActions !== before.gatewayAllowActions) {
+      this.audit.record({ actor: 'user', action: next.gatewayAllowActions ? 'gateway.actions_enabled' : 'gateway.actions_disabled', risk: 'high', decision: 'info' });
+    }
     if ((patch as Partial<Settings>).allowProductionWrites === true) {
       this.audit.record({ actor: 'user', action: 'security.production_writes_enabled', risk: 'high', decision: 'info' });
     }
@@ -367,6 +391,17 @@ export class JarvisCore {
       .run(conversationId, text, emit, ctrl.signal, handle)
       .finally(() => this.runs.delete(handle));
     return { runId: handle, done };
+  }
+
+  /** Запрос с телефона: тот же чат, но действует удалённая политика (высокий риск запрещён; подтверждения — только если разрешено в настройках). */
+  startRemoteChat(device: Device, conversationId: number, text: string, emit: (e: ChatEvent) => void): { runId: string; abort(): void; done: Promise<void> } {
+    const ctrl = new AbortController();
+    const handle = randomUUID();
+    this.runs.set(handle, ctrl);
+    const done = this.orchestrator
+      .run(conversationId, text, emit, ctrl.signal, handle, { remoteDevice: device.name })
+      .finally(() => this.runs.delete(handle));
+    return { runId: handle, abort: () => ctrl.abort(), done };
   }
 
   /** «Стоп»: прервать все запуски и отклонить ожидающие подтверждения. */
@@ -436,6 +471,30 @@ export class JarvisCore {
   removeKbDoc(id: number): void {
     this.mentor.kb.remove(id);
     this.audit.record({ actor: 'user', action: 'kb.delete', target: String(id), decision: 'info' });
+  }
+
+  // ----- доступ с телефона -----
+  gatewayStatus() {
+    return this.gateway.status();
+  }
+  /** Запустить/остановить шлюз по настройке (вызывается при старте и при смене режима). */
+  applyGateway() {
+    const s = this.settings.get();
+    const off = s.gatewayMode === 'off' || s.disabledModules.includes('gateway');
+    return this.gateway.apply(off ? 'off' : s.gatewayMode);
+  }
+  /** Код подключения телефона — показывается только в окне на компьютере. */
+  gatewayPairingCode(): { code: string; expiresAt: string } {
+    if (this.gateway.status().mode === 'off') throw new Error('Сначала включите доступ с телефона');
+    this.audit.record({ actor: 'user', action: 'gateway.pair_code_issued', decision: 'info' });
+    return this.pairing.issue();
+  }
+  listDevices() {
+    return this.devices.list();
+  }
+  revokeDevice(id: number): void {
+    this.devices.revoke(id);
+    this.audit.record({ actor: 'user', action: 'gateway.device_revoked', target: String(id), decision: 'info' });
   }
 
   // ----- расписание -----
@@ -571,6 +630,7 @@ export class JarvisCore {
   async close(): Promise<void> {
     this.scheduler.stop();
     this.stopAll();
+    await this.gateway.stop();
     await this.browser.close();
     this.db.close();
   }

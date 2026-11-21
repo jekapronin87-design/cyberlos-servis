@@ -70,11 +70,20 @@ export function validateSettingsPatch(patch: unknown): Partial<Settings> {
     if (typeof p.updateBranch !== 'string' || !/^[A-Za-z0-9._/-]{1,120}$/.test(p.updateBranch) || p.updateBranch.includes('..')) throw new Error('Некорректное имя ветки обновлений');
     out.updateBranch = p.updateBranch;
   }
+  if ('disabledModules' in p) {
+    const ids = ['computer', 'dev', 'crm', 'mentor', 'scheduler', 'telephony', 'gateway'];
+    if (!Array.isArray(p.disabledModules) || p.disabledModules.some((m) => !ids.includes(m as string))) throw new Error('Неизвестный модуль');
+    out.disabledModules = [...new Set(p.disabledModules as string[])] as Settings['disabledModules'];
+  }
+  if ('gatewayMode' in p) {
+    if (!['off', 'localhost', 'lan'].includes(p.gatewayMode as string)) throw new Error('Неизвестный режим доступа с телефона');
+    out.gatewayMode = p.gatewayMode as Settings['gatewayMode'];
+  }
   if ('ttsSpeed' in p) {
     if (typeof p.ttsSpeed !== 'number' || !Number.isFinite(p.ttsSpeed) || p.ttsSpeed < 0.7 || p.ttsSpeed > 1.8) throw new Error('Скорость речи: число от 0.7 до 1.8');
     out.ttsSpeed = Math.round(p.ttsSpeed * 100) / 100;
   }
-  for (const key of ['memoryEnabled', 'allowProductionWrites', 'micEnabled', 'cameraEnabled', 'autoListen', 'launchAtLogin', 'profileEnabled'] as const) {
+  for (const key of ['memoryEnabled', 'allowProductionWrites', 'micEnabled', 'cameraEnabled', 'autoListen', 'launchAtLogin', 'profileEnabled', 'gatewayAllowActions'] as const) {
     if (key in p) {
       if (typeof p[key] !== 'boolean') throw new Error(`Поле ${key} должно быть логическим`);
       out[key] = p[key] as boolean;

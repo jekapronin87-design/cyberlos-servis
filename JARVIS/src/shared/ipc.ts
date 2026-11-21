@@ -14,6 +14,8 @@ import type {
   JobInputDto,
   JobResultDto,
   CrmTestDto,
+  GatewayStatusDto,
+  GatewayDeviceDto,
   CrmDashboardDto,
   AuditEntry,
   ChatEvent,
@@ -65,6 +67,10 @@ export const IPC = {
   jobsRunNow: 'jobs:run-now',
   jobsRuns: 'jobs:runs',
   evtJob: 'evt:job',
+  gatewayStatus: 'gateway:status',
+  gatewayCode: 'gateway:code',
+  gatewayDevices: 'gateway:devices',
+  gatewayRevoke: 'gateway:revoke',
   crmGet: 'crm:get',
   crmSave: 'crm:save',
   crmDisconnect: 'crm:disconnect',
@@ -162,6 +168,13 @@ export interface JarvisApi {
     runs(id: number): Promise<{ startedAt: string; status: string; summary: string | null }[]>;
     /** Задача по расписанию завершилась (не приходит, если итог «всё спокойно»). */
     onResult(cb: (r: JobResultDto) => void): () => void;
+  };
+  gateway: {
+    status(): Promise<GatewayStatusDto>;
+    /** Одноразовый код подключения телефона (действует 5 минут). */
+    pairCode(): Promise<{ code: string; expiresAt: string }>;
+    devices(): Promise<GatewayDeviceDto[]>;
+    revoke(id: number): Promise<GatewayDeviceDto[]>;
   };
   crm: {
     get(): Promise<CrmStatusDto>;

@@ -4,6 +4,7 @@ import type { AuditLog } from '../security/audit';
 import type { ConfirmationBroker } from '../security/confirmation';
 import { wrapUntrusted } from '../security/injection';
 import { decide, RISK_ORDER } from '../security/policy';
+import { isToolEnabled } from '../modules';
 import type { ToolDefinition, ToolRegistry } from '../tools/registry';
 
 export const MAX_TOOL_RESULT_CHARS = 20_000;
@@ -50,6 +51,8 @@ export interface ExecContext {
   allowedTools?: ReadonlySet<string>;
   /** Фоновый запуск (по расписанию): пользователя рядом нет, поэтому всё, что требует подтверждения, отклоняется. */
   background?: boolean;
+  /** Запрос пришёл с телефона (название устройства): высокий риск запрещён, подтверждения — только если разрешено в настройках, и только на этом компьютере. */
+  remoteDevice?: string;
 }
 
 /**
@@ -88,6 +91,10 @@ export class ToolExecutor {
     }
 
     const settings = this.d.settings.get();
+    if (!isToolEnabled(tool.name, settings.disabledModules)) {
+      this.d.audit.record({ actor, action: 'tool.module_disabled', target: tool.name, decision: 'denied' });
+      return fail('Этот модуль отключён в настройках («Модули»).', true);
+    }
     const policy = decide({ ...tool, risk }, this.d.role, settings);
     const audit = (decision: 'allowed' | 'confirmed' | 'denied' | 'rejected' | 'error', extra: Record<string, unknown> = {}): void =>
       this.d.audit.record({
@@ -103,6 +110,16 @@ export class ToolExecutor {
       audit('denied');
       return fail(policy.reason, true);
     }
+    if (ctx.remoteDevice) {
+      if (RISK_ORDER.indexOf(risk) >= RISK_ORDER.indexOf('high')) {
+        audit('denied', { reason: 'remote_high_risk', device: ctx.remoteDevice });
+        return fail('С телефона такие действия недоступны (высокий риск). Выполните это на компьютере.', true);
+      }
+      if (policy.decision === 'confirm' && !settings.gatewayAllowActions) {
+        audit('denied', { reason: 'remote_actions_off', device: ctx.remoteDevice });
+        return fail('С телефона нельзя подтверждать действия: включите «Разрешить телефону запрашивать действия» в настройках на компьютере. Не выполнено.', true);
+      }
+    }
     if (policy.decision === 'confirm' && ctx.background) {
       audit('denied', { reason: 'background' });
       return fail('Это действие требует подтверждения пользователя и недоступно в фоновом режиме. Не выполнено.', true);
@@ -110,6 +127,7 @@ export class ToolExecutor {
     if (policy.decision === 'confirm') {
       let description = tool.describe(use.input);
       if (actor !== 'assistant') description = `[${actor.replace('agent:', 'агент: ')}] ${description}`;
+      if (ctx.remoteDevice) description = `[ЗАПРОС С ТЕЛЕФОНА «${ctx.remoteDevice}»] ${description}`;
       if (warning) description += `\n⚠ ${warning}`;
       const approved = await this.d.confirm.request(
         { runId: ctx.runId, toolName: tool.name, description, risk, input: use.input, reason: policy.reason },

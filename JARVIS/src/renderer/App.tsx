@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AppInfo, ChatMessage, ConfirmRequest, Conversation, MemoryItem, MemoryKind, Settings } from '../shared/types';
-import { DEFAULT_SETTINGS } from '../shared/types';
+import { DEFAULT_SETTINGS, type ModuleId } from '../shared/types';
 import { stripUntrustedWrapper } from '../shared/text';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { HudView, type ActivityItem } from './hud/HudView';
@@ -316,7 +316,8 @@ export function App() {
   }, []);
 
   const current = confirms[0];
-  const nav = [
+  const off = settings.disabledModules;
+  const navAll = [
     ['hud', 'Джарвис', <IconHud key="h" />],
     ['chat', 'Чат', <IconChat key="c" />],
     ['crm', 'CRM', <IconCrm key="r" />],
@@ -327,6 +328,8 @@ export function App() {
     ['audit', 'Журнал', <IconAudit key="a" />],
     ['settings', 'Настройки', <IconSettings key="s" />],
   ] as const;
+  const needs: Partial<Record<View, ModuleId>> = { crm: 'crm', mentor: 'mentor', jobs: 'scheduler' };
+  const nav = navAll.filter(([v]) => !(needs[v] && off.includes(needs[v]!)));
 
   return (
     <div className="app">

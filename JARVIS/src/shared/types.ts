@@ -9,6 +9,18 @@ export type RiskLevel = 'safe' | 'low' | 'medium' | 'high' | 'critical';
 /** Разделение данных: учебные и производственные. */
 export type DataDomain = 'local' | 'training' | 'production';
 
+/** Модули JARVIS: каждый можно отключить целиком (инструменты, вкладки). */
+export type ModuleId = 'computer' | 'dev' | 'crm' | 'mentor' | 'scheduler' | 'telephony' | 'gateway';
+export const MODULES: { id: ModuleId; title: string; description: string }[] = [
+  { id: 'computer', title: 'Управление компьютером', description: 'Файлы, программы, браузер, снимок экрана, камера' },
+  { id: 'dev', title: 'ИИ-программист', description: 'Проекты, правка кода, тесты, Git, субагенты' },
+  { id: 'crm', title: 'CRM', description: 'Чтение CRM, отчёты, аналитика' },
+  { id: 'mentor', title: 'ИИ-наставник', description: 'База знаний, уроки, кабинет руководителя' },
+  { id: 'scheduler', title: 'Задачи по расписанию', description: 'Фоновые поручения и уведомления' },
+  { id: 'telephony', title: 'Телефония', description: 'Голосовое обучение по телефону (с согласиями)' },
+  { id: 'gateway', title: 'Доступ с телефона', description: 'Управление JARVIS с мобильного' },
+];
+
 export type ProviderChoice = 'auto' | 'demo' | 'anthropic';
 export type ThemeChoice = 'dark' | 'light' | 'system';
 /** push — по нажатию на микрофон; wake — постоянное прослушивание слова «Джарвис». */
@@ -45,6 +57,12 @@ export interface Settings {
   profileEnabled: boolean;
   /** Ветка GitHub, из которой приложение берёт обновления. */
   updateBranch: string;
+  /** Отключённые модули (для установок в других компаниях или чтобы убрать лишнее). */
+  disabledModules: ModuleId[];
+  /** Разрешить телефону просить подтверждение действий на этом компьютере (иначе с телефона — только чтение/анализ). */
+  gatewayAllowActions: boolean;
+  /** Доступ с телефона: off — выключен; localhost — только этот компьютер (для проверки); lan — по домашней сети Wi‑Fi. */
+  gatewayMode: 'off' | 'localhost' | 'lan';
   /** Голос Windows для режима «system» ('' — подобрать лучший русский автоматически). */
   systemVoice: string;
   /** Главный выключатель камеры. Пока false — доступа к камере нет на уровне приложения. */
@@ -77,6 +95,9 @@ export const DEFAULT_SETTINGS: Settings = {
   ttsSpeed: 1.15,
   profileEnabled: true,
   updateBranch: 'claude/jarvis-personal-ai-assistant-wbsf6v',
+  disabledModules: [],
+  gatewayAllowActions: false,
+  gatewayMode: 'off',
   systemVoice: '',
   cameraEnabled: false,
   userName: '',
@@ -379,4 +400,22 @@ export interface EmployeeRowDto {
   lastActivity: string | null;
   recommendations: { courseId: string; lessonId: string; title: string; reason: string; count: number }[];
   issues: number;
+}
+
+// ---------- Доступ с телефона ----------
+
+export interface GatewayStatusDto {
+  mode: 'off' | 'localhost' | 'lan';
+  running: boolean;
+  port: number;
+  urls: string[];
+  error?: string;
+}
+
+export interface GatewayDeviceDto {
+  id: number;
+  name: string;
+  createdAt: string;
+  lastSeenAt: string | null;
+  revoked: boolean;
 }

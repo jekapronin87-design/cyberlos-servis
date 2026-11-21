@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import type { AppInfo, Settings } from '../../shared/types';
+import { MODULES, type AppInfo, type ModuleId, type Settings } from '../../shared/types';
 import { ComputerAccessCard } from '../components/ComputerAccessCard';
 import { CrmCard } from '../components/CrmCard';
+import { GatewayCard } from '../components/GatewayCard';
 import { UpdateCard } from '../components/UpdateCard';
 import { listSystemVoices, speak } from '../voice/speech';
 
@@ -308,9 +309,30 @@ export function SettingsView(props: {
         </label>
       </div>
 
+      <div className="card" id="modules-card">
+        <h2>Модули</h2>
+        <p className="muted small">Отключённый модуль полностью убирается: у ассистента пропадают его инструменты, а вкладки скрываются. Удобно, когда JARVIS ставится в другой компании или нужно убрать лишнее.</p>
+        {MODULES.map((m) => (
+          <label key={m.id} className="check">
+            <input
+              type="checkbox"
+              checked={!s.disabledModules.includes(m.id)}
+              onChange={(e) =>
+                void run(() => props.onUpdate({ disabledModules: e.target.checked ? s.disabledModules.filter((x: ModuleId) => x !== m.id) : [...s.disabledModules, m.id] }), 'Сохранено')
+              }
+            />
+            <span>
+              <strong>{m.title}</strong> <span className="muted small">— {m.description}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+
       <UpdateCard branch={s.updateBranch} onBranch={(b) => run(() => props.onUpdate({ updateBranch: b }), 'Ветка сохранена')} />
 
       <CrmCard />
+
+      {!s.disabledModules.includes('gateway') && <GatewayCard settings={s} onUpdate={async (p) => { await props.onUpdate(p); }} />}
 
       <ComputerAccessCard />
 

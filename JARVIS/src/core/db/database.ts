@@ -148,6 +148,18 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX idx_attempts ON mentor_attempts (email, course_id, lesson_id);
   `,
+  // 7: устройства для доступа с телефона
+  `
+  CREATE TABLE devices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    conversation_id INTEGER,
+    created_at TEXT NOT NULL,
+    last_seen_at TEXT,
+    revoked INTEGER NOT NULL DEFAULT 0
+  );
+  `,
 ];
 
 export function openDatabase(path: string): Db {

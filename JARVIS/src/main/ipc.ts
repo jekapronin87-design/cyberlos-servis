@@ -148,6 +148,13 @@ export function registerIpc(opts: {
     return { job: r.job, status: r.status, summary: r.summary, quiet: r.quiet };
   });
   handle(IPC.jobsRuns, (_e, id) => core.jobRuns(int(id, 'id')));
+  handle(IPC.gatewayStatus, () => core.gatewayStatus());
+  handle(IPC.gatewayCode, () => core.gatewayPairingCode());
+  handle(IPC.gatewayDevices, () => core.listDevices());
+  handle(IPC.gatewayRevoke, (_e, id) => {
+    core.revokeDevice(int(id, 'id'));
+    return core.listDevices();
+  });
   handle(IPC.crmGet, () => core.crmStatus());
   handle(IPC.crmSave, (_e, cfg, password) => {
     const c = cfg as { baseUrl?: unknown; environment?: unknown; email?: unknown; maskPii?: unknown; frontendUrl?: unknown };

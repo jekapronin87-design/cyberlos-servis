@@ -223,6 +223,7 @@ if (!app.requestSingleInstanceLock()) {
     });
     applyLoginItem(core.getSettings().launchAtLogin);
     core.startScheduler();
+    void core.applyGateway();
 
     createWindow();
     app.on('activate', () => {
