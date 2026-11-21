@@ -133,3 +133,13 @@ th { background: var(--panel-2); position: sticky; top: 0; }
 .dialog-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
 .link-btn { margin-right: auto; background: none; border-color: transparent; color: var(--muted); }
+
+.btn-mic { display: inline-flex; align-items: center; gap: 8px; min-width: 120px; justify-content: center; }
+.mic-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); transition: transform 60ms linear; }
+.mic-listening, .mic-hearing { border-color: var(--danger); }
+.mic-listening .mic-dot, .mic-hearing .mic-dot { background: var(--danger); }
+.mic-transcribing .mic-dot { background: var(--warn); }
+.mic-live { color: var(--danger); font-size: 12.5px; display: flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--danger); border-radius: 8px; }
+.mic-live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); animation: pulse 1.2s infinite; }
+@keyframes pulse { 50% { opacity: 0.3; } }
+.grow { flex: 1; min-width: 140px; }

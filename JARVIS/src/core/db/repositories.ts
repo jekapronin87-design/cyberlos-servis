@@ -44,13 +44,45 @@ export function validateSettingsPatch(patch: unknown): Partial<Settings> {
     if (p.confirmFrom !== 'low' && p.confirmFrom !== 'medium') throw new Error('Некорректный порог подтверждения');
     out.confirmFrom = p.confirmFrom;
   }
-  for (const key of ['memoryEnabled', 'allowProductionWrites'] as const) {
+  if ('voiceMode' in p) {
+    if (p.voiceMode !== 'push' && p.voiceMode !== 'wake') throw new Error('Неизвестный режим голоса');
+    out.voiceMode = p.voiceMode;
+  }
+  if ('ttsMode' in p) {
+    if (!['off', 'system', 'api'].includes(p.ttsMode as string)) throw new Error('Неизвестный режим озвучки');
+    out.ttsMode = p.ttsMode as Settings['ttsMode'];
+  }
+  if ('voiceBaseUrl' in p) out.voiceBaseUrl = validateVoiceBaseUrl(p.voiceBaseUrl);
+  for (const key of ['sttModel', 'ttsModel', 'ttsVoice'] as const) {
+    if (key in p) {
+      if (typeof p[key] !== 'string' || !/^[\w.:\-/]{1,100}$/.test(p[key] as string)) throw new Error(`Некорректное значение: ${key}`);
+      out[key] = p[key] as string;
+    }
+  }
+  for (const key of ['memoryEnabled', 'allowProductionWrites', 'micEnabled'] as const) {
     if (key in p) {
       if (typeof p[key] !== 'boolean') throw new Error(`Поле ${key} должно быть логическим`);
       out[key] = p[key] as boolean;
     }
   }
   return out;
+}
+
+/** Адрес API голоса: только https (или localhost для локальных серверов) — чтобы звук не ушёл по открытому каналу. */
+export function validateVoiceBaseUrl(v: unknown): string {
+  if (typeof v !== 'string' || v.length > 200) throw new Error('Некорректный адрес API голоса');
+  let u: URL;
+  try {
+    u = new URL(v.trim());
+  } catch {
+    throw new Error('Некорректный адрес API голоса');
+  }
+  const local = ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname);
+  if (u.protocol !== 'https:' && !(u.protocol === 'http:' && local)) {
+    throw new Error('Адрес API голоса должен начинаться с https:// (http:// — только для localhost)');
+  }
+  if (u.username || u.password) throw new Error('Адрес не должен содержать логин и пароль');
+  return u.toString().replace(/\/+$/, '');
 }
 
 export class SettingsRepo {

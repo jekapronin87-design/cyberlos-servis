@@ -80,9 +80,19 @@ function createWindow(): void {
 
 function hardenSession(): void {
   const ses = session.defaultSession;
-  // Микрофон/камера/экран будут разрешены явно в этапах 2–3. Сейчас — запрещено всё.
-  ses.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
-  ses.setPermissionCheckHandler(() => false);
+  // Разрешён только звук с микрофона для нашей страницы и только если микрофон включён в настройках.
+  // Камера, экран и всё остальное запрещены (экран — этап 3, с отдельным разрешением).
+  const micAllowed = (permission: string, details: { mediaTypes?: string[]; requestingUrl?: string }): boolean => {
+    if (permission !== 'media') return false;
+    if (!core?.getSettings().micEnabled) return false;
+    if (details.mediaTypes && details.mediaTypes.some((t) => t !== 'audio')) return false;
+    const url = details.requestingUrl ?? '';
+    return isDev ? url.startsWith(DEV_URL!) : url.startsWith('file://');
+  };
+  ses.setPermissionRequestHandler((_wc, perm, cb, details) => cb(micAllowed(perm, details as never)));
+  ses.setPermissionCheckHandler((_wc, perm, requestingOrigin, details) =>
+    micAllowed(perm, { mediaType: undefined, requestingUrl: (details as { requestingUrl?: string }).requestingUrl ?? requestingOrigin } as never),
+  );
   ses.webRequest.onHeadersReceived((details, cb) => {
     cb({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [csp()] } });
   });

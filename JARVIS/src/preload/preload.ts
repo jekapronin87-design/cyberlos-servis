@@ -22,6 +22,12 @@ const api: JarvisApi = {
     setApiKey: (key) => invoke(IPC.apiKeySet, key),
     clearApiKey: () => invoke(IPC.apiKeyClear),
   },
+  voice: {
+    setKey: (key) => invoke(IPC.voiceKeySet, key),
+    clearKey: () => invoke(IPC.voiceKeyClear),
+    transcribe: (audio, mime) => invoke(IPC.voiceTranscribe, audio, mime),
+    speak: (text) => invoke(IPC.voiceSpeak, text),
+  },
   conversations: {
     list: () => invoke(IPC.convList),
     create: (title) => invoke(IPC.convCreate, title),

@@ -40,6 +40,14 @@ export function registerIpc(opts: {
   handle(IPC.apiKeySet, (_e, key) => core.setApiKey(str(key, 'key', 400)));
   handle(IPC.apiKeyClear, () => core.clearApiKey());
 
+  handle(IPC.voiceKeySet, (_e, key) => core.setVoiceKey(str(key, 'key', 400)));
+  handle(IPC.voiceKeyClear, () => core.clearVoiceKey());
+  handle(IPC.voiceTranscribe, async (_e, audio, mime) => {
+    if (!(audio instanceof Uint8Array)) throw new Error('Некорректные аудиоданные');
+    return core.voice.transcribe(audio, str(mime, 'mime', 100));
+  });
+  handle(IPC.voiceSpeak, (_e, text) => core.voice.speak(str(text, 'text', 4000)));
+
   handle(IPC.convList, () => core.listConversations());
   handle(IPC.convCreate, (_e, title) => core.createConversation(title === undefined ? undefined : str(title, 'title', 200)));
   handle(IPC.convRename, (_e, id, title) => core.renameConversation(int(id, 'id'), str(title, 'title', 200)));

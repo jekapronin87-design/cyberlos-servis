@@ -18,6 +18,7 @@ import type { ChatProvider } from './providers/types';
 import { AuditLog } from './security/audit';
 import { ConfirmationBroker, type ConfirmationUi } from './security/confirmation';
 import { SECRET_ANTHROPIC_KEY, validateApiKey, type SecretStore } from './security/secrets';
+import { SECRET_VOICE_KEY, VoiceService } from './voice/service';
 import { registerBuiltinTools } from './tools/builtin';
 import { ToolRegistry } from './tools/registry';
 
@@ -32,6 +33,8 @@ export interface CoreOptions {
   env?: Record<string, string | undefined>;
   demoProvider?: ChatProvider;
   confirmTimeoutMs?: number;
+  /** Для тестов: подмена сетевого клиента голосовых API. */
+  fetchImpl?: typeof fetch;
 }
 
 /**
@@ -48,6 +51,7 @@ export class JarvisCore {
   readonly tools: ToolRegistry;
   readonly confirm: ConfirmationBroker;
   readonly providers: ProviderManager;
+  readonly voice: VoiceService;
   private orchestrator: ChatOrchestrator;
   private runs = new Map<string, AbortController>();
   private role: Role;
@@ -59,6 +63,12 @@ export class JarvisCore {
     this.conversations = new ConversationRepo(this.db);
     this.memory = new MemoryRepo(this.db);
     this.audit = new AuditLog(this.db);
+    this.voice = new VoiceService({
+      getSettings: () => this.settings.get(),
+      secrets: opts.secrets,
+      audit: this.audit,
+      fetchImpl: opts.fetchImpl,
+    });
     this.tools = registerBuiltinTools(new ToolRegistry(), this.memory);
     this.confirm = new ConfirmationBroker(opts.confirmUi, opts.confirmTimeoutMs);
     this.providers = new ProviderManager(opts.secrets, opts.env ?? process.env, opts.demoProvider);
@@ -86,6 +96,7 @@ export class JarvisCore {
       model: r.mode === 'live' ? s.model : 'demo',
       dataDir: this.opts.dataDir,
       hasApiKey: this.providers.apiKey() !== null,
+      hasVoiceKey: this.voice.hasKey(),
       secretsEncrypted: this.opts.secrets.encrypted,
       role: this.role,
     };
@@ -97,7 +108,11 @@ export class JarvisCore {
   }
 
   updateSettings(patch: unknown): Settings {
+    const before = this.settings.get();
     const next = this.settings.update(patch);
+    if (next.micEnabled !== before.micEnabled) {
+      this.audit.record({ actor: 'user', action: next.micEnabled ? 'voice.mic_enabled' : 'voice.mic_disabled', decision: 'info' });
+    }
     this.audit.record({
       actor: 'user',
       action: 'settings.update',
@@ -118,6 +133,16 @@ export class JarvisCore {
   clearApiKey(): void {
     this.opts.secrets.delete(SECRET_ANTHROPIC_KEY);
     this.audit.record({ actor: 'user', action: 'secrets.api_key_cleared', decision: 'info' });
+  }
+
+  setVoiceKey(key: string): void {
+    this.opts.secrets.set(SECRET_VOICE_KEY, validateApiKey(key));
+    this.audit.record({ actor: 'user', action: 'secrets.voice_key_set', decision: 'info' });
+  }
+
+  clearVoiceKey(): void {
+    this.opts.secrets.delete(SECRET_VOICE_KEY);
+    this.audit.record({ actor: 'user', action: 'secrets.voice_key_cleared', decision: 'info' });
   }
 
   // ----- диалоги -----

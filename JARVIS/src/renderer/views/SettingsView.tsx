@@ -7,12 +7,19 @@ export function SettingsView(props: {
   onUpdate: (patch: Partial<Settings>) => Promise<void>;
   onSetKey: (key: string) => Promise<void>;
   onClearKey: () => Promise<void>;
+  onSetVoiceKey: (key: string) => Promise<void>;
+  onClearVoiceKey: () => Promise<void>;
 }) {
   const { settings: s, info } = props;
   const [key, setKey] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [instr, setInstr] = useState(s.customInstructions);
   const [model, setModel] = useState(s.model);
+  const [vkey, setVkey] = useState('');
+  const [vurl, setVurl] = useState(s.voiceBaseUrl);
+  const [sttModel, setSttModel] = useState(s.sttModel);
+  const [ttsModel, setTtsModel] = useState(s.ttsModel);
+  const [ttsVoice, setTtsVoice] = useState(s.ttsVoice);
 
   const run = async (fn: () => Promise<void>, okText: string): Promise<void> => {
     try {
@@ -87,6 +94,88 @@ export function SettingsView(props: {
               : 'Шифрование ОС недоступно: ключ будет жить только до закрытия приложения и не сохраняется на диск.'}
           </small>
         </label>
+      </div>
+
+      <div className="card">
+        <h2>Голос</h2>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={s.micEnabled}
+            onChange={(e) => run(() => props.onUpdate({ micEnabled: e.target.checked }), e.target.checked ? 'Микрофон разрешён' : 'Микрофон выключен')}
+          />
+          <span>
+            <strong>Разрешить использование микрофона</strong> (главный выключатель; после запуска приложения прослушивание всегда выключено)
+          </span>
+        </label>
+        <label className="field">
+          <span>Режим микрофона</span>
+          <select value={s.voiceMode} onChange={(e) => run(() => props.onUpdate({ voiceMode: e.target.value as Settings['voiceMode'] }), 'Сохранено')}>
+            <option value="push">По кнопке: нажали «Микрофон», сказали фразу</option>
+            <option value="wake">Постоянно слушать слово «Джарвис» (каждая фраза отправляется на распознавание)</option>
+          </select>
+          <small className="muted">Голосом можно сказать «стоп», чтобы остановить задачу. Опасные действия голосом не подтверждаются — только кнопкой в окне.</small>
+        </label>
+        <label className="field">
+          <span>Озвучка ответов (на голосовые команды)</span>
+          <select value={s.ttsMode} onChange={(e) => run(() => props.onUpdate({ ttsMode: e.target.value as Settings['ttsMode'] }), 'Сохранено')}>
+            <option value="system">Голоса Windows (бесплатно, без ключа)</option>
+            <option value="api">Облачный синтез речи (качественнее, нужен ключ)</option>
+            <option value="off">Выключена</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>Ключ API распознавания/синтеза речи {info?.hasVoiceKey && <em className="ok">· задан</em>}</span>
+          <div className="row">
+            <input type="password" value={vkey} placeholder={info?.hasVoiceKey ? '•••••••• (введите новый, чтобы заменить)' : 'sk-…'} onChange={(e) => setVkey(e.target.value)} autoComplete="off" spellCheck={false} />
+            <button
+              className="btn btn-primary"
+              disabled={!vkey.trim()}
+              onClick={() =>
+                run(async () => {
+                  await props.onSetVoiceKey(vkey);
+                  setVkey('');
+                }, 'Ключ голоса сохранён')
+              }
+            >
+              Сохранить
+            </button>
+            <button className="btn" disabled={!info?.hasVoiceKey} onClick={() => run(props.onClearVoiceKey, 'Ключ голоса удалён')}>
+              Удалить
+            </button>
+          </div>
+          <small className="muted">Звук и текст отправляются на указанный ниже адрес. Ключ хранится так же, как ключ Claude, — зашифрованно.</small>
+        </label>
+        <label className="field">
+          <span>Адрес API (OpenAI-совместимый)</span>
+          <div className="row">
+            <input value={vurl} onChange={(e) => setVurl(e.target.value)} spellCheck={false} />
+            <button className="btn" disabled={vurl === s.voiceBaseUrl} onClick={() => run(() => props.onUpdate({ voiceBaseUrl: vurl }), 'Адрес сохранён')}>
+              Сохранить
+            </button>
+          </div>
+        </label>
+        <div className="row">
+          <label className="field grow">
+            <span>Модель распознавания</span>
+            <input value={sttModel} onChange={(e) => setSttModel(e.target.value)} spellCheck={false} />
+          </label>
+          <label className="field grow">
+            <span>Модель синтеза</span>
+            <input value={ttsModel} onChange={(e) => setTtsModel(e.target.value)} spellCheck={false} />
+          </label>
+          <label className="field grow">
+            <span>Голос</span>
+            <input value={ttsVoice} onChange={(e) => setTtsVoice(e.target.value)} spellCheck={false} />
+          </label>
+        </div>
+        <button
+          className="btn"
+          disabled={sttModel === s.sttModel && ttsModel === s.ttsModel && ttsVoice === s.ttsVoice}
+          onClick={() => run(() => props.onUpdate({ sttModel, ttsModel, ttsVoice }), 'Модели сохранены')}
+        >
+          Сохранить модели
+        </button>
       </div>
 
       <div className="card">

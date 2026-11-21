@@ -11,6 +11,10 @@ export type DataDomain = 'local' | 'training' | 'production';
 
 export type ProviderChoice = 'auto' | 'demo' | 'anthropic';
 export type ThemeChoice = 'dark' | 'light' | 'system';
+/** push — по нажатию на микрофон; wake — постоянное прослушивание слова «Джарвис». */
+export type VoiceMode = 'push' | 'wake';
+/** off — молчит; system — голоса Windows (без ключа); api — облачный синтез речи. */
+export type TtsMode = 'off' | 'system' | 'api';
 
 export interface Settings {
   provider: ProviderChoice;
@@ -24,6 +28,15 @@ export interface Settings {
   memoryEnabled: boolean;
   /** Разрешить изменение ПРОИЗВОДСТВЕННЫХ данных CRM (по умолчанию выключено навсегда до этапа 5). */
   allowProductionWrites: boolean;
+  /** Главный выключатель микрофона. Пока false — доступ к микрофону запрещён на уровне приложения. */
+  micEnabled: boolean;
+  voiceMode: VoiceMode;
+  ttsMode: TtsMode;
+  /** OpenAI-совместимый API распознавания/синтеза речи. */
+  voiceBaseUrl: string;
+  sttModel: string;
+  ttsModel: string;
+  ttsVoice: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -34,6 +47,13 @@ export const DEFAULT_SETTINGS: Settings = {
   confirmFrom: 'medium',
   memoryEnabled: true,
   allowProductionWrites: false,
+  micEnabled: false,
+  voiceMode: 'push',
+  ttsMode: 'system',
+  voiceBaseUrl: 'https://api.openai.com/v1',
+  sttModel: 'gpt-4o-mini-transcribe',
+  ttsModel: 'gpt-4o-mini-tts',
+  ttsVoice: 'alloy',
 };
 
 // ---------- Контент сообщений ----------
@@ -125,6 +145,8 @@ export interface AppInfo {
   model: string;
   dataDir: string;
   hasApiKey: boolean;
+  /** Задан ключ API для распознавания/синтеза речи. */
+  hasVoiceKey: boolean;
   /** Секреты шифруются средствами ОС (DPAPI/Keychain/libsecret). */
   secretsEncrypted: boolean;
   role: Role;

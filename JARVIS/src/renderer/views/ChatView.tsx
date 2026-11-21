@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AppInfo, ChatMessage } from '../../shared/types';
 import { MessageView } from '../components/MessageView';
+import type { VoiceControl } from '../voice/useVoice';
 
+const MIC_LABEL = { idle: 'Микрофон', listening: 'Слушаю…', hearing: 'Слышу…', transcribing: 'Распознаю…' } as const;
 const SUGGESTIONS = ['Привет, Джарвис', 'Который час?', 'Запомни: отвечай коротко и по делу', 'Что ты помнишь?'];
 
 export function ChatView(props: {
@@ -12,6 +14,7 @@ export function ChatView(props: {
   hasConversation: boolean;
   onSend: (text: string) => void;
   onStop: () => void;
+  voice: VoiceControl;
 }) {
   const [text, setText] = useState('');
   const bottom = useRef<HTMLDivElement>(null);
@@ -57,6 +60,7 @@ export function ChatView(props: {
             <p>{props.streaming}</p>
           </div>
         )}
+        {props.voice.awaiting && <div className="typing muted">Слушаю вас… (скажите команду)</div>}
         {props.running && !props.streaming && <div className="typing muted">Джарвис думает…</div>}
         <div ref={bottom} />
       </div>
@@ -67,8 +71,15 @@ export function ChatView(props: {
           submit();
         }}
       >
-        <button type="button" className="btn btn-icon" disabled title="Голосовой ввод появится на этапе 2" aria-label="Микрофон (недоступен)">
-          Микр.
+        <button
+          type="button"
+          className={`btn btn-mic mic-${props.voice.state}`}
+          onClick={props.voice.toggle}
+          aria-pressed={props.voice.state !== 'idle'}
+          title={props.voice.state === 'idle' ? 'Включить микрофон' : 'Выключить микрофон'}
+        >
+          <span className="mic-dot" style={{ transform: `scale(${1 + props.voice.level})` }} aria-hidden="true" />
+          {MIC_LABEL[props.voice.state]}
         </button>
         <textarea
           value={text}

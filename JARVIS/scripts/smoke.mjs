@@ -38,7 +38,7 @@ try {
     api: Object.keys(window.jarvis).sort().join(','),
   }));
   assert.equal(isolation.node, false, 'в рендерере не должно быть Node');
-  assert.equal(isolation.api, 'app,audit,chat,confirm,conversations,memory,secrets,settings');
+  assert.equal(isolation.api, 'app,audit,chat,confirm,conversations,memory,secrets,settings,voice');
   step('рендерер изолирован, API узкий');
 
   // 2. Демо-режим
@@ -89,10 +89,10 @@ try {
 
   // 7. Настройки, журнал
   await page.click('.nav-item:has-text("Настройки")');
-  await page.selectOption('select >> nth=1', 'light');
+  await page.selectOption('.field:has-text("Тема") select', 'light');
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'light');
   await page.screenshot({ path: join(shots, '4-settings.png') });
-  await page.selectOption('select >> nth=1', 'dark');
+  await page.selectOption('.field:has-text("Тема") select', 'dark');
   await page.fill('input[type=password]', 'коротко');
   await page.click('.card:has-text("API-ключ") button:has-text("Сохранить") >> nth=-1').catch(() => {});
   await page.click('.nav-item:has-text("Журнал")');

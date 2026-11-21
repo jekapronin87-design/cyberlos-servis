@@ -1,0 +1,123 @@
+import { describe, expect, it } from 'vitest';
+import { validateVoiceBaseUrl } from '../src/core/db/repositories';
+import { MAX_AUDIO_BYTES, OpenAiCompatibleStt, OpenAiCompatibleTts, SECRET_VOICE_KEY } from '../src/core/voice/service';
+import { isStopPhrase, isWakeWord, parseVoiceCommand, textForSpeech } from '../src/shared/voice';
+import { makeCore } from './helpers';
+
+describe('разбор голосовых команд', () => {
+  it('слово «Джарвис» и его искажения', () => {
+    for (const w of ['Джарвис', 'джарвис,', 'Жарвис', 'Джарвиз', 'Jarvis', 'ДЖАРВИС!']) expect(isWakeWord(w)).toBe(true);
+    for (const w of ['привет', 'дартвейдер', 'сервис', '']) expect(isWakeWord(w)).toBe(false);
+  });
+  it('команда после слова-обращения', () => {
+    expect(parseVoiceCommand('Джарвис, который час?', { requireWake: true })).toEqual({ kind: 'wake', text: 'который час?' });
+    expect(parseVoiceCommand('Джарвис', { requireWake: true })).toEqual({ kind: 'wake', text: '' });
+    expect(parseVoiceCommand('Эй, Джарвис, привет', { requireWake: true })).toEqual({ kind: 'ignore' });
+  });
+  it('чужой разговор без обращения игнорируется в режиме ожидания', () => {
+    expect(parseVoiceCommand('Купи хлеба и молока', { requireWake: true })).toEqual({ kind: 'ignore' });
+    expect(parseVoiceCommand('', { requireWake: true })).toEqual({ kind: 'ignore' });
+  });
+  it('в режиме по кнопке обращение не нужно', () => {
+    expect(parseVoiceCommand('Запомни мой email', { requireWake: false })).toEqual({ kind: 'wake', text: 'Запомни мой email' });
+  });
+  it('стоп работает с обращением и без', () => {
+    for (const t of ['Стоп', 'стоп!', 'Джарвис, стоп', 'остановись', 'Джарвис остановись', 'Отмена']) {
+      expect(isStopPhrase(t)).toBe(true);
+      expect(parseVoiceCommand(t, { requireWake: true })).toEqual({ kind: 'stop' });
+    }
+    expect(isStopPhrase('Джарвис, остановись на втором пункте и расскажи подробнее')).toBe(false);
+    expect(isStopPhrase('стоп кран это что')).toBe(false);
+  });
+  it('подготовка текста к озвучке', () => {
+    expect(textForSpeech('**Привет**\n\n```js\nalert(1)\n```\nготово')).toBe('Привет (фрагмент кода пропущен) готово');
+    expect(textForSpeech('<untrusted_data>секрет</untrusted_data>ок')).toBe('ок');
+    expect(textForSpeech('Слово. '.repeat(300), 300).length).toBeLessThan(310);
+  });
+});
+
+describe('адрес API голоса', () => {
+  it('только https или localhost', () => {
+    expect(validateVoiceBaseUrl('https://api.openai.com/v1/')).toBe('https://api.openai.com/v1');
+    expect(validateVoiceBaseUrl('http://localhost:8080/v1')).toBe('http://localhost:8080/v1');
+    expect(() => validateVoiceBaseUrl('http://evil.example.com/v1')).toThrow();
+    expect(() => validateVoiceBaseUrl('https://user:pw@api.example.com')).toThrow();
+    expect(() => validateVoiceBaseUrl('ftp://x')).toThrow();
+    expect(() => validateVoiceBaseUrl('не адрес')).toThrow();
+  });
+});
+
+const okFetch = (calls: { url: string; init: RequestInit }[], body: unknown, status = 200): typeof fetch =>
+  (async (url: string, init: RequestInit) => {
+    calls.push({ url, init });
+    return new Response(typeof body === 'string' ? body : JSON.stringify(body), { status });
+  }) as unknown as typeof fetch;
+
+describe('клиенты STT/TTS', () => {
+  it('STT: отправляет файл с ключом и возвращает текст', async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const stt = new OpenAiCompatibleStt({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm' }, okFetch(calls, { text: ' привет ' }));
+    expect(await stt.transcribe(new Uint8Array([1, 2, 3]), 'audio/webm')).toBe('привет');
+    expect(calls[0]!.url).toBe('https://x/v1/audio/transcriptions');
+    expect((calls[0]!.init.headers as Record<string, string>).Authorization).toBe('Bearer k');
+    expect(calls[0]!.init.body).toBeInstanceOf(FormData);
+  });
+  it('понятные ошибки API без утечки ключа', async () => {
+    const mk = (s: number) => new OpenAiCompatibleStt({ baseUrl: 'https://x', apiKey: 'sk-secret-key-value-1234', model: 'm' }, okFetch([], '{}', s));
+    await expect(mk(401).transcribe(new Uint8Array([1]), 'audio/webm')).rejects.toThrow(/Неверный ключ/);
+    await expect(mk(429).transcribe(new Uint8Array([1]), 'audio/webm')).rejects.toThrow(/лимит/);
+    await expect(mk(500).transcribe(new Uint8Array([1]), 'audio/webm')).rejects.not.toThrow(/sk-secret/);
+  });
+  it('TTS: возвращает аудио', async () => {
+    const tts = new OpenAiCompatibleTts({ baseUrl: 'https://x', apiKey: 'k', model: 'm', voice: 'v' }, okFetch([], 'AUDIO'));
+    const out = await tts.synthesize('привет');
+    expect(out.mime).toBe('audio/mpeg');
+    expect(out.data.byteLength).toBe(5);
+  });
+});
+
+describe('VoiceService в ядре', () => {
+  const audio = new Uint8Array([1, 2, 3, 4]);
+  it('главный выключатель микрофона блокирует распознавание', async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const h = makeCore({ fetchImpl: okFetch(calls, { text: 'привет' }) });
+    h.secrets.set(SECRET_VOICE_KEY, 'sk-voice-key-1234567890abc');
+    await expect(h.core.voice.transcribe(audio, 'audio/webm')).rejects.toThrow(/Микрофон выключен/);
+    expect(calls).toHaveLength(0); // аудио никуда не ушло
+    h.core.updateSettings({ micEnabled: true });
+    expect(await h.core.voice.transcribe(audio, 'audio/webm')).toBe('привет');
+    expect(calls).toHaveLength(1);
+  });
+  it('нужен ключ, проверяются размер и формат', async () => {
+    const h = makeCore({ fetchImpl: okFetch([], { text: 'x' }) });
+    h.core.updateSettings({ micEnabled: true });
+    await expect(h.core.voice.transcribe(audio, 'audio/webm')).rejects.toThrow(/ключ/);
+    h.core.setVoiceKey('sk-voice-key-1234567890abc');
+    expect(h.core.info().hasVoiceKey).toBe(true);
+    await expect(h.core.voice.transcribe(new Uint8Array(0), 'audio/webm')).rejects.toThrow(/Пустая/);
+    await expect(h.core.voice.transcribe(new Uint8Array(MAX_AUDIO_BYTES + 1), 'audio/webm')).rejects.toThrow(/длинная/);
+    await expect(h.core.voice.transcribe(audio, 'text/html')).rejects.toThrow(/формат/);
+    await expect(h.core.voice.transcribe('str' as never, 'audio/webm')).rejects.toThrow();
+  });
+  it('журнал фиксирует включение микрофона и распознавание, но не текст речи; ключ не светится', async () => {
+    const h = makeCore({ fetchImpl: okFetch([], { text: 'мой секретный разговор' }) });
+    h.core.setVoiceKey('sk-voice-key-1234567890abc');
+    h.core.updateSettings({ micEnabled: true });
+    await h.core.voice.transcribe(audio, 'audio/webm');
+    h.core.updateSettings({ micEnabled: false });
+    const log = JSON.stringify(h.core.listAudit());
+    expect(log).toContain('voice.mic_enabled');
+    expect(log).toContain('voice.mic_disabled');
+    expect(log).toContain('voice.transcribe');
+    expect(log).not.toContain('секретный разговор');
+    expect(log).not.toContain('sk-voice-key');
+  });
+  it('облачная озвучка работает только в режиме api', async () => {
+    const h = makeCore({ fetchImpl: okFetch([], 'AUDIO') });
+    h.core.setVoiceKey('sk-voice-key-1234567890abc');
+    await expect(h.core.voice.speak('привет')).rejects.toThrow(/выключена/);
+    h.core.updateSettings({ ttsMode: 'api' });
+    expect((await h.core.voice.speak('привет')).data.byteLength).toBe(5);
+    await expect(h.core.voice.speak('x'.repeat(4001))).rejects.toThrow(/длинный/);
+  });
+});

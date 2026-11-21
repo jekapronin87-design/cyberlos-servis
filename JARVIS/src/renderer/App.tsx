@@ -6,6 +6,9 @@ import { AuditView } from './views/AuditView';
 import { ChatView } from './views/ChatView';
 import { MemoryView } from './views/MemoryView';
 import { SettingsView } from './views/SettingsView';
+import { cancelSpeech, speak } from './voice/speech';
+import { useVoice } from './voice/useVoice';
+import { textForSpeech } from '../shared/voice';
 
 type View = 'chat' | 'memory' | 'audit' | 'settings';
 
@@ -31,6 +34,12 @@ export function App() {
   const [error, setError] = useState('');
   const activeRef = useRef<number | null>(null);
   activeRef.current = activeId;
+  const runningRef = useRef(false);
+  runningRef.current = running;
+  const speakNext = useRef(false);
+  const lastReply = useRef('');
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
 
   const refreshConvs = useCallback(async () => setConvs(await window.jarvis.conversations.list()), []);
   const refreshInfo = useCallback(async () => setInfo(await window.jarvis.app.info()), []);
@@ -58,6 +67,7 @@ export function App() {
       if (e.type === 'run_started') {
         setRunning(true);
         setError('');
+        lastReply.current = '';
       } else if (e.type === 'delta') {
         if (e.conversationId === activeRef.current) setStreaming((s) => s + e.text);
       } else if (e.type === 'message') {
@@ -66,11 +76,21 @@ export function App() {
           setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
           if (m.role === 'assistant') setStreaming('');
         }
+        if (m.role === 'assistant') {
+          const t = m.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
+          if (t.trim()) lastReply.current = t;
+        }
         if (m.role === 'tool') void refreshMemory();
       } else if (e.type === 'run_finished') {
         setRunning(false);
         setStreaming('');
         if (e.status === 'error' && e.error) setError(e.error);
+        // Отвечаем голосом только на команды, отданные голосом, и только если ответ завершён нормально.
+        if (speakNext.current && e.status === 'done' && lastReply.current) {
+          const mode = settingsRef.current.ttsMode;
+          void speak(textForSpeech(lastReply.current), mode).catch((err) => setError(cleanError(err)));
+        }
+        speakNext.current = false;
         void refreshConvs();
         void refreshMemory();
       }
@@ -127,9 +147,28 @@ export function App() {
     }
   };
 
-  const stop = (): void => {
+  const stop = useCallback((): void => {
+    cancelSpeech();
+    speakNext.current = false;
     void window.jarvis.chat.stop();
-  };
+  }, []);
+
+  const voice = useVoice({
+    settings,
+    isBusy: () => runningRef.current,
+    onCommand: (text) => {
+      speakNext.current = true;
+      setView('chat');
+      void send(text);
+    },
+    onStopCommand: stop,
+    onError: setError,
+    enableMic: async () => {
+      if (!window.confirm('Включить микрофон?\n\nФразы, которые вы произносите, будут отправляться выбранному сервису распознавания речи. Микрофон слушает только пока вы включили кнопку «Микрофон», и после запуска приложения всегда выключен.')) return false;
+      setSettings(await window.jarvis.settings.update({ micEnabled: true }));
+      return true;
+    },
+  });
 
   const answer = useCallback((id: string, approve: boolean): void => {
     setConfirms((q) => q.filter((r) => r.id !== id));
@@ -176,6 +215,14 @@ export function App() {
           ))}
           {convs.length === 0 && <li className="muted small pad">Пока пусто</li>}
         </ul>
+        {voice.state !== 'idle' && (
+          <div className="mic-live" role="status">
+            <span className="mic-live-dot" /> Микрофон включён
+            <button className="link" onClick={voice.stop}>
+              выкл.
+            </button>
+          </div>
+        )}
         <div className={`status ${info?.mode === 'live' ? 'status-live' : 'status-demo'}`}>
           <span className="dot" /> {info ? (info.mode === 'live' ? `Claude · ${info.model}` : 'Демо-режим') : '…'}
           <div className="muted small">v{info?.version}</div>
@@ -192,7 +239,7 @@ export function App() {
           </div>
         )}
         {view === 'chat' && (
-          <ChatView info={info} messages={messages} streaming={streaming} running={running} hasConversation={activeId !== null} onSend={(t) => void send(t)} onStop={stop} />
+          <ChatView info={info} messages={messages} streaming={streaming} running={running} hasConversation={activeId !== null} onSend={(t) => void send(t)} onStop={stop} voice={voice} />
         )}
         {view === 'memory' && (
           <MemoryView
@@ -214,6 +261,14 @@ export function App() {
             info={info}
             onUpdate={async (patch) => {
               setSettings(await window.jarvis.settings.update(patch));
+              await refreshInfo();
+            }}
+            onSetVoiceKey={async (k) => {
+              await window.jarvis.voice.setKey(k);
+              await refreshInfo();
+            }}
+            onClearVoiceKey={async () => {
+              await window.jarvis.voice.clearKey();
               await refreshInfo();
             }}
             onSetKey={async (k) => {

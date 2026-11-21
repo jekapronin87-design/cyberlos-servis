@@ -17,6 +17,10 @@ export const IPC = {
   settingsUpdate: 'settings:update',
   apiKeySet: 'secrets:api-key:set',
   apiKeyClear: 'secrets:api-key:clear',
+  voiceKeySet: 'voice:key:set',
+  voiceKeyClear: 'voice:key:clear',
+  voiceTranscribe: 'voice:transcribe',
+  voiceSpeak: 'voice:speak',
   convList: 'conv:list',
   convCreate: 'conv:create',
   convRename: 'conv:rename',
@@ -45,6 +49,14 @@ export interface JarvisApi {
   secrets: {
     setApiKey(key: string): Promise<void>;
     clearApiKey(): Promise<void>;
+  };
+  voice: {
+    setKey(key: string): Promise<void>;
+    clearKey(): Promise<void>;
+    /** Распознать речь (аудио уходит выбранному API). Работает только при включённом микрофоне. */
+    transcribe(audio: Uint8Array, mime: string): Promise<string>;
+    /** Облачный синтез речи (режим «api»). */
+    speak(text: string): Promise<{ mime: string; data: Uint8Array }>;
   };
   conversations: {
     list(): Promise<Conversation[]>;
