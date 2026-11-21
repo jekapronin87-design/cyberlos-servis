@@ -112,6 +112,10 @@ export class DemoProvider implements ChatProvider {
       yield call('git_status', { path: m[1]!.trim() });
       return;
     }
+    if (has('camera_look') && /посмотри на меня|что я (сейчас )?делаю|как я выгляжу/.test(lower)) {
+      yield call('camera_look', {});
+      return;
+    }
     if (has('screen_capture') && /^\s*сделай снимок экрана/.test(lower)) {
       yield call('screen_capture', {});
       return;

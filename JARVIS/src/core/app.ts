@@ -21,7 +21,7 @@ import { registerAppTools } from './computer/apps';
 import { BrowserController, registerBrowserTools, type BrowserOptions } from './computer/browser';
 import { registerFileTools } from './computer/files';
 import type { HostServices } from './computer/host';
-import { registerScreenTool } from './computer/screen';
+import { registerCameraTool, registerScreenTool } from './computer/screen';
 import { AgentRunner, ROLES, type AgentId } from './dev/agents';
 import { registerGitTools } from './dev/git';
 import { registerProjectTools } from './dev/projects';
@@ -107,6 +107,8 @@ export class JarvisCore {
     registerAppTools(this.tools, this.computer, host);
     registerBrowserTools(this.tools, this.browser);
     registerScreenTool(this.tools, host);
+    registerCameraTool(this.tools, host, () => this.settings.get());
+    this.attachments.purgeKind('camera'); // кадры камеры живут только до перезапуска
     registerProjectTools(this.tools, this.computer);
     registerRunTools(this.tools, this.computer);
     registerGitTools(this.tools, this.computer);

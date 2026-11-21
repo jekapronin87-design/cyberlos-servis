@@ -18,6 +18,8 @@ export interface VoiceControl {
   level: number;
   toggle(): void;
   stop(): void;
+  /** После ответа Джарвиса: несколько секунд принимать следующую фразу без слова «Джарвис». */
+  followUp(): void;
 }
 
 export function useVoice(p: {
@@ -64,7 +66,7 @@ export function useVoice(p: {
           if (!cmd.text) {
             if (wake) {
               setAwait(true);
-              if (cur.settings.ttsMode !== 'off') void speak('Слушаю.', cur.settings.ttsMode).catch(() => {});
+              if (cur.settings.ttsMode !== 'off') void speak('Слушаю.', cur.settings.ttsMode, { systemVoice: cur.settings.systemVoice }).catch(() => {});
             }
             return;
           }
@@ -125,5 +127,9 @@ export function useVoice(p: {
   useEffect(() => () => stop(), [stop]);
 
   const state: VoiceUiState = transcribing > 0 && listenState !== 'hearing' ? 'transcribing' : listenState;
-  return { state, awaiting, level, toggle, stop };
+  const followUp = useCallback(() => {
+    if (listener.current?.active && pRef.current.settings.voiceMode === 'wake') setAwait(true);
+  }, [setAwait]);
+
+  return { state, awaiting, level, toggle, stop, followUp };
 }

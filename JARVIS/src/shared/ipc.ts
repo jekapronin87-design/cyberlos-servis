@@ -44,6 +44,8 @@ export const IPC = {
   auditList: 'audit:list',
   auditVerify: 'audit:verify',
   // события main -> renderer
+  cameraFrame: 'camera:frame',
+  evtCameraCapture: 'evt:camera-capture',
   evtChat: 'evt:chat',
   evtConfirm: 'evt:confirm',
   evtConfirmClosed: 'evt:confirm-closed',
@@ -77,6 +79,12 @@ export interface JarvisApi {
     removeApp(name: string): Promise<ComputerAccess>;
     addBrowserHost(host: string): Promise<ComputerAccess>;
     removeBrowserHost(host: string): Promise<ComputerAccess>;
+  };
+  camera: {
+    /** Главный процесс просит снять кадр (по просьбе ассистента, если камера включена пользователем). */
+    onCaptureRequest(cb: (requestId: string) => void): () => void;
+    /** Ответ на запрос кадра; null — камера выключена или недоступна. */
+    sendFrame(requestId: string, frame: { mime: string; base64: string; width: number; height: number } | null): Promise<void>;
   };
   attachments: {
     get(id: number): Promise<{ mime: string; base64: string } | null>;

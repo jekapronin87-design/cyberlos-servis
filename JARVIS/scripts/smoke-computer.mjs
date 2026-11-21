@@ -36,6 +36,8 @@ try {
   const page = await app.firstWindow();
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.setViewportSize({ width: 1180, height: 820 });
+  await page.waitForSelector('.hud');
+  await page.click('.nav-item:has-text("Чат")');
   await page.waitForSelector('.welcome');
   const send = async (t) => {
     await page.waitForSelector('button:has-text("Отправить")');

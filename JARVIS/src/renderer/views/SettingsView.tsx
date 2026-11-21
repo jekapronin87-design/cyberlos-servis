@@ -1,6 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { AppInfo, Settings } from '../../shared/types';
 import { ComputerAccessCard } from '../components/ComputerAccessCard';
+import { listSystemVoices, speak } from '../voice/speech';
+
+const OPENAI_VOICES = ['onyx', 'ash', 'echo', 'fable', 'sage', 'verse', 'ballad', 'alloy', 'coral', 'nova', 'shimmer'];
 
 export function SettingsView(props: {
   settings: Settings;
@@ -21,6 +24,12 @@ export function SettingsView(props: {
   const [sttModel, setSttModel] = useState(s.sttModel);
   const [ttsModel, setTtsModel] = useState(s.ttsModel);
   const [ttsVoice, setTtsVoice] = useState(s.ttsVoice);
+  const [userName, setUserName] = useState(s.userName);
+  const [ttsInstr, setTtsInstr] = useState(s.ttsInstructions);
+  const [sysVoices, setSysVoices] = useState<{ name: string; lang: string }[]>([]);
+  useEffect(() => {
+    void listSystemVoices().then(setSysVoices);
+  }, []);
 
   const run = async (fn: () => Promise<void>, okText: string): Promise<void> => {
     try {
@@ -98,6 +107,47 @@ export function SettingsView(props: {
       </div>
 
       <div className="card">
+        <h2>Личность</h2>
+        <label className="field">
+          <span>Как к вам обращаться</span>
+          <div className="row">
+            <input value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="Например: Евгений" maxLength={40} />
+            <button className="btn" disabled={userName.trim() === s.userName} onClick={() => run(() => props.onUpdate({ userName: userName.trim() }), 'Имя сохранено')}>
+              Сохранить
+            </button>
+          </div>
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={s.launchAtLogin} onChange={(e) => run(() => props.onUpdate({ launchAtLogin: e.target.checked }), e.target.checked ? 'JARVIS будет запускаться вместе с Windows' : 'Автозапуск выключен')} />
+          <span>Запускать JARVIS вместе с Windows</span>
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={s.autoListen} onChange={(e) => run(() => props.onUpdate({ autoListen: e.target.checked }), e.target.checked ? 'При запуске Джарвис сразу начнёт слушать слово «Джарвис»' : 'Автопрослушивание выключено')} />
+          <span>
+            Сразу слушать слово «Джарвис» при запуске <span className="muted small">(нужны разрешённый микрофон, режим «Джарвис» и ключ голоса; он поприветствует вас голосом)</span>
+          </span>
+        </label>
+      </div>
+
+      <div className="card">
+        <h2>Камера</h2>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={s.cameraEnabled}
+            onChange={(e) => run(() => props.onUpdate({ cameraEnabled: e.target.checked }), e.target.checked ? 'Камера разрешена. Включайте её кнопкой «Камера» на главном экране' : 'Камера выключена')}
+          />
+          <span>
+            <strong>Разрешить использование камеры</strong> (главный выключатель)
+          </span>
+        </label>
+        <p className="muted small">
+          Джарвис видит вас, только когда вы включили кнопку «Камера» (виден индикатор и превью) и попросили посмотреть: «Джарвис, что я сейчас делаю?».
+          Кадр отправляется ИИ (Claude) один раз по запросу и хранится только до перезапуска приложения. Постоянного наблюдения нет.
+        </p>
+      </div>
+
+      <div className="card">
         <h2>Голос</h2>
         <label className="check">
           <input
@@ -120,10 +170,46 @@ export function SettingsView(props: {
         <label className="field">
           <span>Озвучка ответов (на голосовые команды)</span>
           <select value={s.ttsMode} onChange={(e) => run(() => props.onUpdate({ ttsMode: e.target.value as Settings['ttsMode'] }), 'Сохранено')}>
-            <option value="system">Голоса Windows (бесплатно, без ключа)</option>
-            <option value="api">Облачный синтез речи (качественнее, нужен ключ)</option>
+            <option value="api">Облачный синтез речи — естественный голос (нужен ключ, рекомендуется)</option>
+            <option value="system">Голоса Windows (бесплатно, звучат роботизированно)</option>
             <option value="off">Выключена</option>
           </select>
+        </label>
+        <label className="field">
+          <span>Голос Джарвиса (облачный)</span>
+          <div className="row">
+            <select value={OPENAI_VOICES.includes(s.ttsVoice) ? s.ttsVoice : 'onyx'} onChange={(e) => { setTtsVoice(e.target.value); void run(() => props.onUpdate({ ttsVoice: e.target.value }), 'Голос сохранён'); }}>
+              {OPENAI_VOICES.map((v) => (
+                <option key={v} value={v}>
+                  {v}{v === 'onyx' ? ' — глубокий мужской (рекомендуется)' : v === 'ash' || v === 'echo' || v === 'fable' || v === 'sage' ? ' — мужской' : ''}
+                </option>
+              ))}
+            </select>
+            <button className="btn" onClick={() => run(() => speak('Добрый день. Это мой голос. Все системы работают в штатном режиме.', s.ttsMode, { systemVoice: s.systemVoice }), 'Проверка голоса запущена')}>
+              ▶ Проверить голос
+            </button>
+          </div>
+        </label>
+        <label className="field">
+          <span>Манера речи (для облачного голоса)</span>
+          <textarea rows={2} value={ttsInstr} maxLength={500} onChange={(e) => setTtsInstr(e.target.value)} />
+          <div className="row">
+            <button className="btn" disabled={ttsInstr === s.ttsInstructions} onClick={() => run(() => props.onUpdate({ ttsInstructions: ttsInstr }), 'Манера речи сохранена')}>
+              Сохранить манеру
+            </button>
+          </div>
+        </label>
+        <label className="field">
+          <span>Голос Windows (если выбрана озвучка «голоса Windows»)</span>
+          <select value={s.systemVoice} onChange={(e) => run(() => props.onUpdate({ systemVoice: e.target.value }), 'Голос сохранён')}>
+            <option value="">Подобрать лучший русский автоматически</option>
+            {sysVoices.map((v) => (
+              <option key={v.name} value={v.name}>
+                {v.name}
+              </option>
+            ))}
+          </select>
+          {sysVoices.length === 0 && <small className="muted">Русские голоса Windows не найдены. Установите их: Параметры → Время и язык → Речь → Добавить голоса.</small>}
         </label>
         <label className="field">
           <span>Ключ API распознавания/синтеза речи {info?.hasVoiceKey && <em className="ok">· задан</em>}</span>

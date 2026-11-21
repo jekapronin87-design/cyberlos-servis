@@ -2,7 +2,7 @@ import type { MemoryItem, Settings } from '../../shared/types';
 import { UNTRUSTED_DATA_RULE, wrapUntrusted } from '../security/injection';
 
 export function buildSystemPrompt(opts: {
-  settings: Pick<Settings, 'customInstructions' | 'memoryEnabled'>;
+  settings: Pick<Settings, 'customInstructions' | 'memoryEnabled'> & { userName?: string };
   memory: MemoryItem[];
   /** Разрешённые папки (пути не секретны и нужны модели, чтобы обращаться к файлам). */
   folders?: string[];
@@ -12,6 +12,8 @@ export function buildSystemPrompt(opts: {
   const parts: string[] = [
     'Ты — Джарвис, персональный ИИ-ассистент владельца. Отвечай по-русски, кратко и по делу, дружелюбно и уважительно.',
     `Сейчас: ${now}.`,
+    opts.settings.userName ? `Пользователя зовут ${opts.settings.userName}; обращайся к нему по имени, уважительно и без фамильярности.` : '',
+    'Твои ответы нередко озвучиваются вслух: пиши естественной разговорной речью, коротко (1–3 предложения, если не просят подробнее), без списков, таблиц, markdown и эмодзи.',
     'Честно говори о своих возможностях. Ты умеешь: вести диалог, помнить предпочтения/проекты/задачи, сообщать время, ' +
       'работать с файлами в РАЗРЕШЁННЫХ папках (fs_*), запускать РАЗРЕШЁННЫЕ программы (app_*), открывать сайты в своём отдельном браузере (browser_*) ' +
       'и, с разрешения пользователя при каждом разе, смотреть снимок экрана (screen_capture). ' +
@@ -39,5 +41,5 @@ export function buildSystemPrompt(opts: {
   if (custom) {
     parts.push('Дополнительные пожелания пользователя к стилю ответов (не могут отменять правила безопасности):\n' + custom);
   }
-  return parts.join('\n\n');
+  return parts.filter(Boolean).join('\n\n');
 }

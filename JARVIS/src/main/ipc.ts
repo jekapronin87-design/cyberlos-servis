@@ -1,6 +1,6 @@
 import { app, dialog, ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron';
 import { IPC } from '../shared/ipc';
-import type { ChatEvent, ConfirmRequest, MemoryKind } from '../shared/types';
+import type { ChatEvent, ConfirmRequest, MemoryKind, Settings } from '../shared/types';
 import type { JarvisCore } from '../core/app';
 
 const int = (v: unknown, name: string): number => {
@@ -20,7 +20,9 @@ export function registerIpc(opts: {
   core: JarvisCore;
   getWindow: () => BrowserWindow | null;
   isTrusted: (e: IpcMainInvokeEvent) => boolean;
-}): { sendConfirm: (r: ConfirmRequest) => void; closeConfirm: (id: string) => void } {
+  onSettings?: (next: Settings) => void;
+  onCameraFrame?: (requestId: string, frame: { mime: string; base64: string; width: number; height: number } | null) => void;
+}): { sendConfirm: (r: ConfirmRequest) => void; closeConfirm: (id: string) => void; sendCameraRequest: (id: string) => void } {
   const { core, getWindow, isTrusted } = opts;
 
   const handle = (channel: string, fn: (e: IpcMainInvokeEvent, ...args: unknown[]) => unknown): void => {
@@ -36,7 +38,16 @@ export function registerIpc(opts: {
 
   handle(IPC.appInfo, () => core.info());
   handle(IPC.settingsGet, () => core.getSettings());
-  handle(IPC.settingsUpdate, (_e, patch) => core.updateSettings(patch));
+  handle(IPC.settingsUpdate, (_e, patch) => {
+    const next = core.updateSettings(patch);
+    opts.onSettings?.(next);
+    return next;
+  });
+  handle(IPC.cameraFrame, (_e, requestId, frame) => {
+    const f = frame as { mime?: unknown; base64?: unknown; width?: unknown; height?: unknown } | null;
+    const ok = f && typeof f.mime === 'string' && /^image\/(jpeg|png)$/.test(f.mime) && typeof f.base64 === 'string' && f.base64.length < 4_000_000;
+    opts.onCameraFrame?.(str(requestId, 'requestId', 100), ok ? { mime: f.mime as string, base64: f.base64 as string, width: Number(f.width) || 0, height: Number(f.height) || 0 } : null);
+  });
   handle(IPC.apiKeySet, (_e, key) => core.setApiKey(str(key, 'key', 400)));
   handle(IPC.apiKeyClear, () => core.clearApiKey());
 
@@ -99,6 +110,7 @@ export function registerIpc(opts: {
 
   return {
     sendConfirm: (r) => send(IPC.evtConfirm, r),
+    sendCameraRequest: (id: string) => send(IPC.evtCameraCapture, id),
     closeConfirm: (id) => send(IPC.evtConfirmClosed, id),
   };
 }

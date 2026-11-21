@@ -53,7 +53,7 @@ export class OpenAiCompatibleStt implements SpeechToText {
 /** Синтез речи через OpenAI-совместимый эндпоинт /audio/speech. */
 export class OpenAiCompatibleTts implements TextToSpeech {
   constructor(
-    private cfg: { baseUrl: string; apiKey: string; model: string; voice: string },
+    private cfg: { baseUrl: string; apiKey: string; model: string; voice: string; instructions?: string },
     private fetchImpl: Fetch = fetch,
   ) {}
 
@@ -61,7 +61,14 @@ export class OpenAiCompatibleTts implements TextToSpeech {
     const res = await this.fetchImpl(`${this.cfg.baseUrl}/audio/speech`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${this.cfg.apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: this.cfg.model, voice: this.cfg.voice, input: text, response_format: 'mp3' }),
+      body: JSON.stringify({
+        model: this.cfg.model,
+        voice: this.cfg.voice,
+        input: text,
+        response_format: 'mp3',
+        // Стиль речи поддерживает только gpt-4o-mini-tts
+        ...(this.cfg.instructions && /gpt-4o-mini-tts/.test(this.cfg.model) ? { instructions: this.cfg.instructions } : {}),
+      }),
       signal,
     });
     if (!res.ok) throw await apiError(res);
@@ -117,7 +124,7 @@ export class VoiceService {
     const t = text.trim();
     if (!t) throw new Error('Нечего озвучивать.');
     if (t.length > MAX_TTS_CHARS) throw new Error('Текст для озвучки слишком длинный.');
-    const tts = new OpenAiCompatibleTts({ baseUrl: s.voiceBaseUrl, apiKey: this.key(), model: s.ttsModel, voice: s.ttsVoice }, this.deps.fetchImpl);
+    const tts = new OpenAiCompatibleTts({ baseUrl: s.voiceBaseUrl, apiKey: this.key(), model: s.ttsModel, voice: s.ttsVoice, instructions: s.ttsInstructions }, this.deps.fetchImpl);
     const out = await tts.synthesize(t, signal);
     this.deps.audit.record({ actor: 'assistant', action: 'voice.speak', decision: 'info', details: { chars: t.length } });
     return out;

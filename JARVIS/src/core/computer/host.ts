@@ -10,5 +10,7 @@ export interface HostServices {
   /** Запустить программу из белого списка (без аргументов, без оболочки). */
   launchApp?(exePath: string): Promise<void>;
   /** Снимок экрана (основной монитор), JPEG в base64. */
+  /** Кадр с веб-камеры (делается в окне приложения; только если пользователь включил камеру). */
+  captureCamera?(): Promise<{ mime: string; base64: string; width: number; height: number }>;
   captureScreen?(): Promise<{ mime: string; base64: string; width: number; height: number }>;
 }

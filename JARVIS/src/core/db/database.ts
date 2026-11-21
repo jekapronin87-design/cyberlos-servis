@@ -70,6 +70,10 @@ const MIGRATIONS: string[] = [
     created_at TEXT NOT NULL
   );
   `,
+  // 3: тип вложения (снимок экрана / кадр камеры)
+  `
+  ALTER TABLE attachments ADD COLUMN kind TEXT NOT NULL DEFAULT 'screen';
+  `,
 ];
 
 export function openDatabase(path: string): Db {

@@ -29,6 +29,8 @@ try {
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   await page.setViewportSize({ width: 1180, height: 780 });
+  await page.waitForSelector('.hud'); // главный экран — HUD
+  await page.click('.nav-item:has-text("Чат")');
   await page.waitForSelector('.welcome');
   const step = (m) => console.log('  ✓', m);
 
@@ -38,7 +40,7 @@ try {
     api: Object.keys(window.jarvis).sort().join(','),
   }));
   assert.equal(isolation.node, false, 'в рендерере не должно быть Node');
-  assert.equal(isolation.api, 'app,attachments,audit,chat,computer,confirm,conversations,memory,secrets,settings,voice');
+  assert.equal(isolation.api, 'app,attachments,audit,camera,chat,computer,confirm,conversations,memory,secrets,settings,voice');
   step('рендерер изолирован, API узкий');
 
   // 2. Демо-режим
@@ -105,6 +107,8 @@ try {
   await app.close();
   const app2 = await electron.launch({ executablePath: electronPath, args, cwd: root, env: { ...process.env, JARVIS_DATA_DIR: dataDir, ANTHROPIC_API_KEY: '' } });
   const p2 = await app2.firstWindow();
+  await p2.waitForSelector('.hud');
+  await p2.click('.nav-item:has-text("Чат")');
   await p2.waitForSelector('.bubble-user');
   assert.ok((await p2.locator('.bubble-user').count()) >= 4);
   assert.equal(await p2.evaluate(() => document.documentElement.dataset.theme), 'dark');

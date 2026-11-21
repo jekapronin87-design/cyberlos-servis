@@ -65,6 +65,8 @@ try {
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('dialog', (d) => d.accept());
   await page.setViewportSize({ width: 1180, height: 780 });
+  await page.waitForSelector('.hud');
+  await page.click('.nav-item:has-text("Чат")');
   await page.waitForSelector('.welcome');
 
   await page.evaluate(async (base) => {
@@ -73,6 +75,7 @@ try {
   }, base);
 
   await page.reload();
+  await page.click('.nav-item:has-text("Чат")');
   await page.waitForSelector('.btn-mic');
 
   // 1. Микрофон по умолчанию заблокирован на уровне приложения
@@ -103,6 +106,7 @@ try {
   // 3. Режим «Джарвис»: чужие фразы игнорируются
   await page.evaluate(() => window.jarvis.settings.update({ voiceMode: 'wake', ttsMode: 'api' }));
   await page.reload();
+  await page.click('.nav-item:has-text("Чат")');
   await page.waitForSelector('.btn-mic');
   transcripts = ['Купи хлеба и молока', 'Джарвис, запомни: люблю зелёный чай', 'Привет всем'];
   const before = seen.stt;

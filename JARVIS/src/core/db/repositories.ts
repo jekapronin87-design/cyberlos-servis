@@ -59,7 +59,14 @@ export function validateSettingsPatch(patch: unknown): Partial<Settings> {
       out[key] = p[key] as string;
     }
   }
-  for (const key of ['memoryEnabled', 'allowProductionWrites', 'micEnabled'] as const) {
+  for (const [key, max] of [['ttsInstructions', 500], ['systemVoice', 120], ['userName', 40]] as const) {
+    if (key in p) {
+      // eslint-disable-next-line no-control-regex
+      if (typeof p[key] !== 'string' || (p[key] as string).length > max || /[\u0000-\u001f]/.test(p[key] as string)) throw new Error(`Поле ${key}: строка до ${max} символов без управляющих знаков`);
+      out[key] = (p[key] as string).trim();
+    }
+  }
+  for (const key of ['memoryEnabled', 'allowProductionWrites', 'micEnabled', 'cameraEnabled', 'autoListen', 'launchAtLogin'] as const) {
     if (key in p) {
       if (typeof p[key] !== 'boolean') throw new Error(`Поле ${key} должно быть логическим`);
       out[key] = p[key] as boolean;
@@ -264,16 +271,21 @@ export class MemoryRepo {
 export class AttachmentRepo {
   constructor(private db: Db) {}
 
-  add(mime: string, base64: string): number {
+  add(mime: string, base64: string, kind: 'screen' | 'camera' = 'screen'): number {
     const res = this.db
-      .prepare('INSERT INTO attachments (mime, data, created_at) VALUES (?, ?, ?)')
-      .run(mime, Buffer.from(base64, 'base64'), nowIso());
+      .prepare('INSERT INTO attachments (mime, data, kind, created_at) VALUES (?, ?, ?, ?)')
+      .run(mime, Buffer.from(base64, 'base64'), kind, nowIso());
     return Number(res.lastInsertRowid);
   }
 
   get(id: number): { mime: string; base64: string } | null {
     const r = this.db.prepare('SELECT mime, data FROM attachments WHERE id = ?').get(id) as { mime: string; data: Uint8Array } | undefined;
     return r ? { mime: r.mime, base64: Buffer.from(r.data).toString('base64') } : null;
+  }
+
+  /** Кадры с камеры хранятся только до перезапуска приложения — приватность. */
+  purgeKind(kind: 'screen' | 'camera'): void {
+    this.db.prepare('DELETE FROM attachments WHERE kind = ?').run(kind);
   }
 
   /** Удаляет вложения, на которые больше нет ссылок (после удаления диалога). */

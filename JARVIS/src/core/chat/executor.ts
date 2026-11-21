@@ -131,7 +131,7 @@ export class ToolExecutor {
         }
         output = wrapped;
       }
-      const imageIds = images.map((im) => this.d.attachments.add(im.mime, im.base64));
+      const imageIds = images.map((im) => this.d.attachments.add(im.mime, im.base64, im.kind));
       return { ...base, content: output, ...(imageIds.length ? { imageIds } : {}) };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

@@ -1,5 +1,6 @@
 import { app, BrowserWindow, desktopCapturer, safeStorage, screen, session, shell, type IpcMainInvokeEvent } from 'electron';
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { JarvisCore } from '../core/app';
 import { OsEncryptedSecretStore } from '../core/security/secrets';
@@ -9,6 +10,8 @@ const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 const isDev = !!DEV_URL && !app.isPackaged;
 
 app.setName('JARVIS');
+// Голос Джарвиса должен воспроизводиться без предварительного клика (приветствие, ответы на голосовые команды).
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 // Позволяет тестам и переносной установке указать каталог данных.
 if (process.env.JARVIS_DATA_DIR) app.setPath('userData', process.env.JARVIS_DATA_DIR);
 
@@ -38,6 +41,15 @@ function isTrustedSender(e: IpcMainInvokeEvent): boolean {
   const url = e.senderFrame?.url ?? '';
   if (isDev) return url.startsWith(DEV_URL!);
   return url.startsWith('file://') && decodeURIComponent(url).replace(/\\/g, '/').includes('/dist/renderer/index.html');
+}
+
+/** Автозапуск вместе с Windows (только если пользователь включил в настройках). */
+function applyLoginItem(enabled: boolean): void {
+  try {
+    app.setLoginItemSettings({ openAtLogin: enabled, path: process.execPath, args: app.isPackaged ? [] : [app.getAppPath()] });
+  } catch {
+    /* не поддерживается на этой ОС */
+  }
 }
 
 function createWindow(): void {
@@ -81,19 +93,28 @@ function createWindow(): void {
 
 function hardenSession(): void {
   const ses = session.defaultSession;
-  // Разрешён только звук с микрофона для нашей страницы и только если микрофон включён в настройках.
-  // Камера, экран и всё остальное запрещены (экран — этап 3, с отдельным разрешением).
-  const micAllowed = (permission: string, details: { mediaTypes?: string[]; requestingUrl?: string }): boolean => {
+  // Микрофон — только при включённом главном выключателе микрофона, камера — только при включённом выключателе камеры.
+  // Всё остальное (экран, геолокация, уведомления…) запрещено. Проверяется при каждом запросе.
+  const mediaAllowed = (permission: string, types: string[], url: string): boolean => {
     if (permission !== 'media') return false;
-    if (!core?.getSettings().micEnabled) return false;
-    if (details.mediaTypes && details.mediaTypes.some((t) => t !== 'audio')) return false;
-    const url = details.requestingUrl ?? '';
+    const st = core?.getSettings();
+    if (!st) return false;
+    const wanted = types.length ? types : ['audio'];
+    for (const t of wanted) {
+      if (t === 'audio' && !st.micEnabled) return false;
+      if (t === 'video' && !st.cameraEnabled) return false;
+      if (t !== 'audio' && t !== 'video') return false;
+    }
     return isDev ? url.startsWith(DEV_URL!) : url.startsWith('file://');
   };
-  ses.setPermissionRequestHandler((_wc, perm, cb, details) => cb(micAllowed(perm, details as never)));
-  ses.setPermissionCheckHandler((_wc, perm, requestingOrigin, details) =>
-    micAllowed(perm, { mediaType: undefined, requestingUrl: (details as { requestingUrl?: string }).requestingUrl ?? requestingOrigin } as never),
-  );
+  ses.setPermissionRequestHandler((_wc, perm, cb, details) => {
+    const d = details as { mediaTypes?: string[]; requestingUrl?: string };
+    cb(mediaAllowed(perm, d.mediaTypes ?? [], d.requestingUrl ?? ''));
+  });
+  ses.setPermissionCheckHandler((_wc, perm, requestingOrigin, details) => {
+    const d = details as { mediaType?: string; requestingUrl?: string };
+    return mediaAllowed(perm, d.mediaType && d.mediaType !== 'unknown' ? [d.mediaType] : [], d.requestingUrl ?? requestingOrigin);
+  });
   ses.webRequest.onHeadersReceived((details, cb) => {
     cb({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [csp()] } });
   });
@@ -115,6 +136,8 @@ if (!app.requestSingleInstanceLock()) {
     const secrets = new OsEncryptedSecretStore(safeStorage, join(dataDir, 'secrets.bin.json'));
 
     let ipc: ReturnType<typeof registerIpc> | null = null;
+    // Запросы кадров с камеры: ассистент (ядро) просит окно снять кадр; окно отвечает, только если пользователь включил камеру.
+    const cameraWaiters = new Map<string, (f: { mime: string; base64: string; width: number; height: number } | null) => void>();
     core = new JarvisCore({
       dbPath: join(dataDir, 'jarvis.db'),
       dataDir,
@@ -127,6 +150,22 @@ if (!app.requestSingleInstanceLock()) {
           ? { executablePath: process.env.JARVIS_BROWSER_PATH, headless: true, extraArgs: ['--no-sandbox', '--disable-gpu'] }
           : undefined,
       host: {
+        captureCamera: () =>
+          new Promise((resolve, reject) => {
+            if (!ipc || !win) return reject(new Error('Окно JARVIS недоступно'));
+            const id = randomUUID();
+            const timer = setTimeout(() => {
+              cameraWaiters.delete(id);
+              reject(new Error('Камера не ответила. Включите кнопку «Камера» в окне JARVIS.'));
+            }, 8000);
+            cameraWaiters.set(id, (f) => {
+              clearTimeout(timer);
+              cameraWaiters.delete(id);
+              if (f) resolve(f);
+              else reject(new Error('Камера выключена. Попросите пользователя нажать кнопку «Камера» в окне JARVIS.'));
+            });
+            ipc.sendCameraRequest(id);
+          }),
         trashItem: (p) => shell.trashItem(p),
         openPath: (p) => shell.openPath(p),
         launchApp: (exe) =>
@@ -155,7 +194,14 @@ if (!app.requestSingleInstanceLock()) {
         close: (id) => ipc?.closeConfirm(id),
       },
     });
-    ipc = registerIpc({ core, getWindow: () => win, isTrusted: isTrustedSender });
+    ipc = registerIpc({
+      core,
+      getWindow: () => win,
+      isTrusted: isTrustedSender,
+      onCameraFrame: (id, frame) => cameraWaiters.get(id)?.(frame),
+      onSettings: (st) => applyLoginItem(st.launchAtLogin),
+    });
+    applyLoginItem(core.getSettings().launchAtLogin);
 
     createWindow();
     app.on('activate', () => {

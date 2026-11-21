@@ -37,6 +37,18 @@ export interface Settings {
   sttModel: string;
   ttsModel: string;
   ttsVoice: string;
+  /** Стиль голоса для облачного синтеза (поддерживает gpt-4o-mini-tts). */
+  ttsInstructions: string;
+  /** Голос Windows для режима «system» ('' — подобрать лучший русский автоматически). */
+  systemVoice: string;
+  /** Главный выключатель камеры. Пока false — доступа к камере нет на уровне приложения. */
+  cameraEnabled: boolean;
+  /** Как обращаться к пользователю. */
+  userName: string;
+  /** Включать прослушивание слова «Джарвис» сразу при запуске (нужны micEnabled и режим wake). */
+  autoListen: boolean;
+  /** Запускать JARVIS при входе в Windows. */
+  launchAtLogin: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -53,7 +65,14 @@ export const DEFAULT_SETTINGS: Settings = {
   voiceBaseUrl: 'https://api.openai.com/v1',
   sttModel: 'gpt-4o-mini-transcribe',
   ttsModel: 'gpt-4o-mini-tts',
-  ttsVoice: 'alloy',
+  ttsVoice: 'onyx',
+  ttsInstructions:
+    'Говори по-русски как Джарвис — спокойный, уверенный, вежливый ИИ-дворецкий: низкий ровный тембр, лёгкая сдержанная ирония, чёткая дикция, без театральности и без спешки.',
+  systemVoice: '',
+  cameraEnabled: false,
+  userName: '',
+  autoListen: false,
+  launchAtLogin: false,
 };
 
 // ---------- Контент сообщений ----------

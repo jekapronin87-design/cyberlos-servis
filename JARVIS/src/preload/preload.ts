@@ -37,6 +37,10 @@ const api: JarvisApi = {
     addBrowserHost: (host) => invoke(IPC.computerAddHost, host),
     removeBrowserHost: (host) => invoke(IPC.computerRemoveHost, host),
   },
+  camera: {
+    onCaptureRequest: subscribe(IPC.evtCameraCapture),
+    sendFrame: (requestId, frame) => invoke(IPC.cameraFrame, requestId, frame),
+  },
   attachments: { get: (id) => invoke(IPC.attachmentGet, id) },
   conversations: {
     list: () => invoke(IPC.convList),
