@@ -2,6 +2,8 @@ import type {
   AppInfo,
   ComputerAccess,
   ProfileSection,
+  UpdateProgress,
+  UpdateStatus,
   AuditEntry,
   ChatEvent,
   ChatMessage,
@@ -31,6 +33,10 @@ export const IPC = {
   computerAddHost: 'computer:host:add',
   computerRemoveHost: 'computer:host:remove',
   attachmentGet: 'attachment:get',
+  updateCheck: 'update:check',
+  updateApply: 'update:apply',
+  updateRestart: 'update:restart',
+  evtUpdate: 'evt:update',
   profileGet: 'profile:get',
   profileSet: 'profile:set',
   profileClear: 'profile:clear',
@@ -90,6 +96,13 @@ export interface JarvisApi {
     onCaptureRequest(cb: (requestId: string) => void): () => void;
     /** Ответ на запрос кадра; null — камера выключена или недоступна. */
     sendFrame(requestId: string, frame: { mime: string; base64: string; width: number; height: number } | null): Promise<void>;
+  };
+  update: {
+    check(): Promise<UpdateStatus>;
+    /** Скачать и установить обновление (по кнопке). После успеха вызовите restart(). */
+    apply(): Promise<{ sha: string; files: number }>;
+    restart(): Promise<void>;
+    onProgress(cb: (p: UpdateProgress) => void): () => void;
   };
   profile: {
     get(): Promise<ProfileSection[]>;

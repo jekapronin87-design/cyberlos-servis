@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { AppInfo, Settings } from '../../shared/types';
 import { ComputerAccessCard } from '../components/ComputerAccessCard';
+import { UpdateCard } from '../components/UpdateCard';
 import { listSystemVoices, speak } from '../voice/speech';
 
 const OPENAI_VOICES = ['onyx', 'ash', 'echo', 'fable', 'sage', 'verse', 'ballad', 'alloy', 'coral', 'nova', 'shimmer'];
@@ -305,6 +306,8 @@ export function SettingsView(props: {
           </div>
         </label>
       </div>
+
+      <UpdateCard branch={s.updateBranch} onBranch={(b) => run(() => props.onUpdate({ updateBranch: b }), 'Ветка сохранена')} />
 
       <ComputerAccessCard />
 

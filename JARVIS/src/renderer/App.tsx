@@ -57,6 +57,7 @@ export function App() {
   const [replyText, setReplyText] = useState('');
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [speaking, setSpeaking] = useState(false);
+  const [updateAvail, setUpdateAvail] = useState<string | null>(null);
   const activeRef = useRef<number | null>(null);
   activeRef.current = activeId;
   const runningRef = useRef(false);
@@ -71,6 +72,16 @@ export function App() {
   const refreshMemory = useCallback(async () => setMemory(await window.jarvis.memory.list()), []);
 
   useEffect(() => onSpeaking(setSpeaking), []);
+
+  // Тихая проверка обновлений при запуске: баннер только если точно известно, что версия устарела
+  useEffect(() => {
+    void window.jarvis.update
+      .check()
+      .then((u) => {
+        if (u.canUpdate && u.upToDate === false && u.latest) setUpdateAvail(u.latest.message || u.latest.sha.slice(0, 7));
+      })
+      .catch(() => {});
+  }, []);
 
   // Начальная загрузка
   useEffect(() => {
@@ -321,6 +332,14 @@ export function App() {
             {error}
             <button className="link" onClick={() => setError('')}>
               Закрыть
+            </button>
+          </div>
+        )}
+        {updateAvail && view !== 'settings' && (
+          <div className="banner banner-demo" role="status">
+            Доступно обновление JARVIS: {updateAvail}
+            <button className="link" onClick={() => setView('settings')}>
+              Открыть настройки обновления
             </button>
           </div>
         )}

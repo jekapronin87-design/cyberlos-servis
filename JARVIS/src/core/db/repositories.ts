@@ -66,6 +66,10 @@ export function validateSettingsPatch(patch: unknown): Partial<Settings> {
       out[key] = (p[key] as string).trim();
     }
   }
+  if ('updateBranch' in p) {
+    if (typeof p.updateBranch !== 'string' || !/^[A-Za-z0-9._/-]{1,120}$/.test(p.updateBranch) || p.updateBranch.includes('..')) throw new Error('Некорректное имя ветки обновлений');
+    out.updateBranch = p.updateBranch;
+  }
   if ('ttsSpeed' in p) {
     if (typeof p.ttsSpeed !== 'number' || !Number.isFinite(p.ttsSpeed) || p.ttsSpeed < 0.7 || p.ttsSpeed > 1.8) throw new Error('Скорость речи: число от 0.7 до 1.8');
     out.ttsSpeed = Math.round(p.ttsSpeed * 100) / 100;

@@ -12,8 +12,11 @@ import type {
   ProfileSection,
   Role,
   Settings,
+  UpdateProgress,
+  UpdateStatus,
 } from '../shared/types';
 import { ProfileRepo, isSectionId, registerProfileTools } from './profile';
+import { DEFAULT_SOURCE, downloadZip, extractUpdate, fetchLatest, installAndBuild, makeBackupDir, readInstalled, writeInstalled } from './update/updater';
 import { ChatOrchestrator } from './chat/orchestrator';
 import { ToolExecutor } from './chat/executor';
 import { openDatabase, type Db } from './db/database';
@@ -56,6 +59,12 @@ export interface CoreOptions {
   /** Для тестов: настройки браузера ассистента (путь к Chromium, headless). */
   browser?: Partial<BrowserOptions>;
   home?: string;
+  /** Каталог приложения (папка с package.json), если самообновление разрешено. */
+  installDir?: string;
+  /** Подмена сети для обновлений (тесты). */
+  updateFetch?: typeof fetch;
+  /** Для тестов: пропустить npm install/build. */
+  skipBuild?: boolean;
   /** Для тестов: подмена сетевого клиента голосовых API. */
   fetchImpl?: typeof fetch;
 }
@@ -328,6 +337,53 @@ export class JarvisCore {
   }
   getAttachment(id: number): { mime: string; base64: string } | null {
     return this.attachments.get(id);
+  }
+
+  // ----- обновление приложения -----
+  private updating = false;
+
+  async checkUpdate(): Promise<UpdateStatus> {
+    const branch = this.settings.get().updateBranch;
+    const installed = readInstalled(this.opts.dataDir);
+    if (!this.opts.installDir) {
+      return { canUpdate: false, reason: 'Обновление по кнопке доступно, когда JARVIS запущен из папки (start-jarvis.bat), а не из установщика.', installedSha: installed?.sha ?? null, latest: null, upToDate: null, branch };
+    }
+    const latest = await fetchLatest({ ...DEFAULT_SOURCE, branch }, this.opts.updateFetch);
+    return { canUpdate: true, installedSha: installed?.sha ?? null, latest, upToDate: installed ? installed.sha === latest.sha : null, branch };
+  }
+
+  /** Скачивает и применяет обновление. После успеха нужен перезапуск. Вызывается только по кнопке пользователя. */
+  async applyUpdate(progress: (p: UpdateProgress) => void): Promise<{ sha: string; files: number }> {
+    if (!this.opts.installDir) throw new Error('Самообновление недоступно в этой установке');
+    if (this.updating) throw new Error('Обновление уже выполняется');
+    this.updating = true;
+    const ctrl = new AbortController();
+    try {
+      const branch = this.settings.get().updateBranch;
+      const src = { ...DEFAULT_SOURCE, branch };
+      progress({ step: 'check', message: 'Проверяю последнюю версию…' });
+      const latest = await fetchLatest(src, this.opts.updateFetch);
+      progress({ step: 'download', message: 'Скачиваю обновление…' });
+      const zip = await downloadZip(src, latest.sha, this.opts.updateFetch);
+      progress({ step: 'extract', message: 'Устанавливаю файлы…' });
+      const before = readInstalled(this.opts.dataDir);
+      const backup = makeBackupDir(this.opts.dataDir, before?.sha ?? null);
+      const r = extractUpdate(zip, this.opts.installDir, src, backup);
+      if (!this.opts.skipBuild) {
+        progress({ step: 'install', message: r.packageJsonChanged ? 'Устанавливаю новые компоненты и собираю приложение (несколько минут)…' : 'Собираю приложение…' });
+        await installAndBuild(this.opts.installDir, r.packageJsonChanged, ctrl.signal);
+      }
+      writeInstalled(this.opts.dataDir, latest.sha);
+      this.audit.record({ actor: 'user', action: 'update.applied', risk: 'high', decision: 'info', details: { from: before?.sha ?? null, to: latest.sha, files: r.written.length, branch } });
+      progress({ step: 'done', message: `Готово: обновлено файлов — ${r.written.length}. Перезапустите JARVIS.` });
+      return { sha: latest.sha, files: r.written.length };
+    } catch (e) {
+      progress({ step: 'error', message: e instanceof Error ? e.message : 'Ошибка обновления' });
+      this.audit.record({ actor: 'system', action: 'update.failed', decision: 'error' });
+      throw e;
+    } finally {
+      this.updating = false;
+    }
   }
 
   // ----- досье -----

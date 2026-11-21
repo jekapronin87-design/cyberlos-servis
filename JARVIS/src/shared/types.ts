@@ -43,6 +43,8 @@ export interface Settings {
   ttsSpeed: number;
   /** Использовать досье о пользователе в ответах. */
   profileEnabled: boolean;
+  /** Ветка GitHub, из которой приложение берёт обновления. */
+  updateBranch: string;
   /** Голос Windows для режима «system» ('' — подобрать лучший русский автоматически). */
   systemVoice: string;
   /** Главный выключатель камеры. Пока false — доступа к камере нет на уровне приложения. */
@@ -74,6 +76,7 @@ export const DEFAULT_SETTINGS: Settings = {
     'Говори по-русски как Джарвис — уверенный, остроумный, вежливый ИИ-дворецкий. Темп живой, как в обычной беседе двух занятых людей: без растягивания слов и без долгих пауз между фразами. Интонация выразительная и тёплая, с лёгкой сдержанной иронией; низкий ровный тембр, чёткая дикция.',
   ttsSpeed: 1.15,
   profileEnabled: true,
+  updateBranch: 'claude/jarvis-personal-ai-assistant-wbsf6v',
   systemVoice: '',
   cameraEnabled: false,
   userName: '',
@@ -218,3 +221,21 @@ export const PROFILE_SECTIONS: { id: ProfileSectionId; title: string; hint: stri
   { id: 'style', title: 'Как со мной общаться', hint: 'Тон, длина ответов, обращение, юмор, что объяснять подробно, а что кратко.' },
   { id: 'avoid', title: 'Чего не делать', hint: 'О чём не напоминать и не говорить, что раздражает, какие решения нельзя принимать без вас.' },
 ];
+
+// ---------- Обновление приложения ----------
+
+export interface UpdateStatus {
+  /** Самообновление возможно (не упакованная установка из папки). */
+  canUpdate: boolean;
+  reason?: string;
+  installedSha: string | null;
+  latest: { sha: string; message: string; date: string } | null;
+  /** null — неизвестно (первое обновление: текущая версия не отслеживалась). */
+  upToDate: boolean | null;
+  branch: string;
+}
+
+export interface UpdateProgress {
+  step: 'check' | 'download' | 'extract' | 'install' | 'done' | 'error';
+  message: string;
+}

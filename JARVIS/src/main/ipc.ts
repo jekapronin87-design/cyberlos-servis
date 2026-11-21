@@ -23,6 +23,7 @@ export function registerIpc(opts: {
   getWindow: () => BrowserWindow | null;
   isTrusted: (e: IpcMainInvokeEvent) => boolean;
   onSettings?: (next: Settings) => void;
+  onRestart?: () => void;
   onCameraFrame?: (requestId: string, frame: { mime: string; base64: string; width: number; height: number } | null) => void;
 }): { sendConfirm: (r: ConfirmRequest) => void; closeConfirm: (id: string) => void; sendCameraRequest: (id: string) => void } {
   const { core, getWindow, isTrusted } = opts;
@@ -88,6 +89,11 @@ export function registerIpc(opts: {
   handle(IPC.computerRemoveHost, (_e, h) => core.removeBrowserHost(str(h, 'host', 120)));
   handle(IPC.attachmentGet, (_e, id) => core.getAttachment(int(id, 'id')));
 
+  handle(IPC.updateCheck, () => core.checkUpdate());
+  handle(IPC.updateApply, () => core.applyUpdate((p) => send(IPC.evtUpdate, p)));
+  handle(IPC.updateRestart, () => {
+    opts.onRestart?.();
+  });
   handle(IPC.profileGet, () => core.getProfile());
   handle(IPC.profileSet, (_e, section, text) => core.setProfileSection(str(section, 'section', 30), str(text, 'text', 5000)));
   handle(IPC.profileClear, () => core.clearProfile());

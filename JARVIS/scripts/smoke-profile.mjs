@@ -57,6 +57,7 @@ try {
   // 5. Скорость речи в настройках и выключатель досье
   await page.click('.nav-item:has-text("Настройки")');
   await page.waitForSelector('text=Скорость речи');
+  await page.waitForSelector('#update-card button:has-text("Проверить обновления")');
   assert.match(await page.textContent('.field:has-text("Скорость речи")'), /×1\.15/);
   await page.screenshot({ path: join(shots, 'p2-settings.png') });
   step('скорость речи по умолчанию ×1.15, настройка на месте');

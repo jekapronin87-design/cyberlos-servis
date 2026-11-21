@@ -142,6 +142,7 @@ if (!app.requestSingleInstanceLock()) {
     core = new JarvisCore({
       dbPath: join(dataDir, 'jarvis.db'),
       dataDir,
+      installDir: app.isPackaged ? undefined : app.getAppPath(),
       version: app.getVersion(),
       platform: process.platform,
       secrets,
@@ -201,6 +202,15 @@ if (!app.requestSingleInstanceLock()) {
       isTrusted: isTrustedSender,
       onCameraFrame: (id, frame) => cameraWaiters.get(id)?.(frame),
       onSettings: (st) => applyLoginItem(st.launchAtLogin),
+      onRestart: () => {
+        const c = core;
+        core = null;
+        // Сначала аккуратно закрываем браузер ассистента и БД, затем перезапуск
+        void (c ? c.close() : Promise.resolve()).finally(() => {
+          app.relaunch();
+          app.exit(0);
+        });
+      },
     });
     applyLoginItem(core.getSettings().launchAtLogin);
 
