@@ -22,6 +22,7 @@ export interface OrchestratorDeps {
   attachments: AttachmentRepo;
   computer: () => ComputerAccess;
   profile: () => { title: string; body: string }[];
+  crm: () => { environment: 'test' | 'production'; maskPii: boolean } | null;
   memory: MemoryRepo;
   settings: SettingsRepo;
   tools: ToolRegistry;
@@ -87,6 +88,7 @@ export class ChatOrchestrator {
           settings,
           folders: this.d.computer().folders,
           profile: settings.profileEnabled ? this.d.profile() : undefined,
+          crm: this.d.crm() ?? undefined,
           memory: settings.memoryEnabled ? this.d.memory.list().slice(0, 100) : [],
         });
         // На последнем шаге инструменты отключаются, чтобы цикл гарантированно завершился.

@@ -89,6 +89,17 @@ export function registerIpc(opts: {
   handle(IPC.computerRemoveHost, (_e, h) => core.removeBrowserHost(str(h, 'host', 120)));
   handle(IPC.attachmentGet, (_e, id) => core.getAttachment(int(id, 'id')));
 
+  handle(IPC.crmGet, () => core.crmStatus());
+  handle(IPC.crmSave, (_e, cfg, password) => {
+    const c = cfg as { baseUrl?: unknown; environment?: unknown; email?: unknown; maskPii?: unknown };
+    return core.crmSave(
+      { baseUrl: str(c.baseUrl, 'baseUrl', 200), environment: c.environment === 'production' ? 'production' : 'test', email: str(c.email, 'email', 200), maskPii: c.maskPii !== false },
+      password === undefined || password === null ? undefined : str(password, 'password', 300),
+    );
+  });
+  handle(IPC.crmDisconnect, () => core.crmDisconnect());
+  handle(IPC.crmTest, () => core.crmTest());
+  handle(IPC.crmDashboard, () => core.crmDashboard());
   handle(IPC.updateCheck, () => core.checkUpdate());
   handle(IPC.updateApply, () => core.applyUpdate((p) => send(IPC.evtUpdate, p)));
   handle(IPC.updateRestart, () => {

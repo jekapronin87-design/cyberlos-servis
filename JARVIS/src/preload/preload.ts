@@ -41,6 +41,13 @@ const api: JarvisApi = {
     onCaptureRequest: subscribe(IPC.evtCameraCapture),
     sendFrame: (requestId, frame) => invoke(IPC.cameraFrame, requestId, frame),
   },
+  crm: {
+    get: () => invoke(IPC.crmGet),
+    save: (cfg, password) => invoke(IPC.crmSave, cfg, password),
+    disconnect: () => invoke(IPC.crmDisconnect),
+    test: () => invoke(IPC.crmTest),
+    dashboard: () => invoke(IPC.crmDashboard),
+  },
   update: {
     check: () => invoke(IPC.updateCheck),
     apply: () => invoke(IPC.updateApply),

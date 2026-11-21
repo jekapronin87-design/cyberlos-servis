@@ -4,6 +4,9 @@ import type {
   ProfileSection,
   UpdateProgress,
   UpdateStatus,
+  CrmStatusDto,
+  CrmTestDto,
+  CrmDashboardDto,
   AuditEntry,
   ChatEvent,
   ChatMessage,
@@ -33,6 +36,11 @@ export const IPC = {
   computerAddHost: 'computer:host:add',
   computerRemoveHost: 'computer:host:remove',
   attachmentGet: 'attachment:get',
+  crmGet: 'crm:get',
+  crmSave: 'crm:save',
+  crmDisconnect: 'crm:disconnect',
+  crmTest: 'crm:test',
+  crmDashboard: 'crm:dashboard',
   updateCheck: 'update:check',
   updateApply: 'update:apply',
   updateRestart: 'update:restart',
@@ -96,6 +104,13 @@ export interface JarvisApi {
     onCaptureRequest(cb: (requestId: string) => void): () => void;
     /** Ответ на запрос кадра; null — камера выключена или недоступна. */
     sendFrame(requestId: string, frame: { mime: string; base64: string; width: number; height: number } | null): Promise<void>;
+  };
+  crm: {
+    get(): Promise<CrmStatusDto>;
+    save(cfg: { baseUrl: string; environment: 'test' | 'production'; email: string; maskPii: boolean }, password?: string): Promise<CrmStatusDto>;
+    disconnect(): Promise<CrmStatusDto>;
+    test(): Promise<CrmTestDto>;
+    dashboard(): Promise<CrmDashboardDto>;
   };
   update: {
     check(): Promise<UpdateStatus>;

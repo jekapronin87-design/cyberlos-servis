@@ -13,3 +13,4 @@ export const IconCam = () => I(<><rect x="3" y="6" width="13" height="12" rx="2"
 export const IconStop = () => I(<rect x="6" y="6" width="12" height="12" rx="2" />);
 export const IconSend = () => I(<path d="M4 12l16-8-6 16-3-7z" />);
 export const IconProfile = () => I(<><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" /></>);
+export const IconCrm = () => I(<><path d="M4 20V9l8-5 8 5v11" /><path d="M9 20v-6h6v6" /></>);

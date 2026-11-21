@@ -16,6 +16,7 @@ import type {
   UpdateStatus,
 } from '../shared/types';
 import { ProfileRepo, isSectionId, registerProfileTools } from './profile';
+import { CrmService, registerCrmTools, type CrmStatus, type CrmTestResult } from './crm/service';
 import { DEFAULT_SOURCE, downloadZip, extractUpdate, fetchLatest, installAndBuild, makeBackupDir, readInstalled, writeInstalled } from './update/updater';
 import { ChatOrchestrator } from './chat/orchestrator';
 import { ToolExecutor } from './chat/executor';
@@ -61,6 +62,9 @@ export interface CoreOptions {
   home?: string;
   /** Каталог приложения (папка с package.json), если самообновление разрешено. */
   installDir?: string;
+  /** Подмена сети и времени для CRM (тесты). */
+  crmFetch?: typeof fetch;
+  crmNow?: () => Date;
   /** Подмена сети для обновлений (тесты). */
   updateFetch?: typeof fetch;
   /** Для тестов: пропустить npm install/build. */
@@ -86,6 +90,7 @@ export class JarvisCore {
   readonly voice: VoiceService;
   readonly attachments: AttachmentRepo;
   readonly profile: ProfileRepo;
+  readonly crm: CrmService;
   readonly computer: ComputerAccessRepo;
   readonly browser: BrowserController;
   readonly executor: ToolExecutor;
@@ -108,6 +113,7 @@ export class JarvisCore {
     });
     this.attachments = new AttachmentRepo(this.db);
     this.profile = new ProfileRepo(this.db);
+    this.crm = new CrmService(this.db, opts.secrets, this.audit, opts.crmFetch, opts.crmNow);
     this.computer = new ComputerAccessRepo(this.db, { dataDir: opts.dataDir, home: opts.home });
     this.tools = registerBuiltinTools(new ToolRegistry(), this.memory);
     const host = opts.host ?? {};
@@ -123,6 +129,7 @@ export class JarvisCore {
     registerCameraTool(this.tools, host, () => this.settings.get());
     this.attachments.purgeKind('camera'); // кадры камеры живут только до перезапуска
     registerProfileTools(this.tools, this.profile);
+    registerCrmTools(this.tools, this.crm);
     registerProjectTools(this.tools, this.computer);
     registerRunTools(this.tools, this.computer);
     registerGitTools(this.tools, this.computer);
@@ -183,6 +190,7 @@ export class JarvisCore {
       attachments: this.attachments,
       computer: () => this.computer.get(),
       profile: () => this.profile.forPrompt(),
+      crm: () => (this.crm.client.configured() ? { environment: this.crm.status().environment, maskPii: this.crm.maskPii() } : null),
       memory: this.memory,
       settings: this.settings,
       tools: this.tools,
@@ -337,6 +345,25 @@ export class JarvisCore {
   }
   getAttachment(id: number): { mime: string; base64: string } | null {
     return this.attachments.get(id);
+  }
+
+  // ----- CRM «Сайберлос» (только чтение) -----
+  crmStatus(): CrmStatus {
+    return this.crm.status();
+  }
+  crmSave(cfg: { baseUrl: string; environment: 'test' | 'production'; email: string; maskPii: boolean }, password?: string): CrmStatus {
+    this.crm.save(cfg, password);
+    return this.crm.status();
+  }
+  crmDisconnect(): CrmStatus {
+    this.crm.disconnect();
+    return this.crm.status();
+  }
+  crmTest(): Promise<CrmTestResult> {
+    return this.crm.test();
+  }
+  crmDashboard() {
+    return this.crm.dashboard();
   }
 
   // ----- обновление приложения -----

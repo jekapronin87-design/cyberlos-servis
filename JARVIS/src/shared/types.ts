@@ -239,3 +239,45 @@ export interface UpdateProgress {
   step: 'check' | 'download' | 'extract' | 'install' | 'done' | 'error';
   message: string;
 }
+
+// ---------- CRM (только чтение) ----------
+
+export interface CrmStatusDto {
+  configured: boolean;
+  baseUrl: string;
+  environment: 'test' | 'production';
+  email: string;
+  hasPassword: boolean;
+  maskPii: boolean;
+}
+
+export interface CrmTestDto {
+  ok: boolean;
+  error?: string;
+  user?: { email: string; role: string; roleName: string | null };
+  missingRead: string[];
+  writeLike: string[];
+  fullAdmin: boolean;
+  readOnlySafe: boolean;
+}
+
+export interface CrmDashboardDto {
+  overview: {
+    pipelines: { name: string; slug: string; open: number; won: number; lost: number; byStage: { name: string; open: number; breaches: number }[] }[];
+    newLast24h: number;
+    unassignedOpen: number;
+    stuck: number;
+    tasksOpen: number;
+    tasksOverdue: number;
+    productionOpen: number;
+    productionOverdue: number;
+    awaitingPrepayment: number;
+    lowStock: number;
+  };
+  managers: { name: string; role: string; openDeals: number; stuckDeals: number; tasksOpen: number; tasksOverdue: number; doneOnTime: number; doneLate: number }[];
+  issues: { kind: string; dealId: string; title: string; pipeline: string; stage: string; who: string[]; detail: string }[];
+  needs: { employee: string; total: number; topics: { topic: string; kind: string; count: number }[] }[];
+  missing: string[];
+  truncated: boolean;
+  at: string;
+}

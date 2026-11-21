@@ -4,10 +4,11 @@ import { DEFAULT_SETTINGS } from '../shared/types';
 import { stripUntrustedWrapper } from '../shared/text';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { HudView, type ActivityItem } from './hud/HudView';
-import { IconAudit, IconChat, IconHud, IconMemory, IconProfile, IconSettings } from './hud/Icons';
+import { IconAudit, IconChat, IconCrm, IconHud, IconMemory, IconProfile, IconSettings } from './hud/Icons';
 import type { OrbState } from './hud/Orb';
 import { AuditView } from './views/AuditView';
 import { ChatView } from './views/ChatView';
+import { CrmView } from './views/CrmView';
 import { MemoryView } from './views/MemoryView';
 import { ProfileView } from './views/ProfileView';
 import { SettingsView } from './views/SettingsView';
@@ -15,7 +16,7 @@ import { cancelSpeech, getSpeechLevel, onSpeaking, SpeechSession } from './voice
 import { useCamera } from './voice/useCamera';
 import { useVoice } from './voice/useVoice';
 
-type View = 'hud' | 'chat' | 'profile' | 'memory' | 'audit' | 'settings';
+type View = 'hud' | 'chat' | 'crm' | 'profile' | 'memory' | 'audit' | 'settings';
 
 const cleanError = (e: unknown): string =>
   e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'Неизвестная ошибка';
@@ -299,6 +300,7 @@ export function App() {
   const nav = [
     ['hud', 'Джарвис', <IconHud key="h" />],
     ['chat', 'Чат', <IconChat key="c" />],
+    ['crm', 'CRM', <IconCrm key="r" />],
     ['profile', 'Досье', <IconProfile key="p" />],
     ['memory', 'Память', <IconMemory key="m" />],
     ['audit', 'Журнал', <IconAudit key="a" />],
@@ -390,6 +392,7 @@ export function App() {
             <ChatView info={info} messages={messages} streaming={streaming} running={running} hasConversation={activeId !== null} onSend={(t) => void send(t)} onStop={stop} voice={voice} />
           </div>
         )}
+        {view === 'crm' && <CrmView onAsk={(t) => void sendSpoken(t)} onOpenSettings={() => setView('settings')} />}
         {view === 'profile' && (
           <ProfileView
             enabled={settings.profileEnabled}

@@ -223,3 +223,10 @@ th { background: var(--panel-solid); position: sticky; top: 0; font-family: var(
 .hud-wakehint { color: rgba(var(--h), 0.9); background: rgba(var(--h), 0.08); border: 1px solid rgba(var(--h), 0.25); }
 .hud-note-info { color: #d8f0ff; background: rgba(var(--h), 0.14); border: 1px solid rgba(var(--h), 0.4); }
 .hud-note-warn { color: var(--warn); background: rgba(255, 200, 87, 0.1); border: 1px solid rgba(255, 200, 87, 0.45); }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 16px 0; }
+.tile { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.tile-v { font: 600 26px var(--font-hud); color: var(--accent); }
+.tile-l { font-size: 12px; color: var(--muted); }
+.tile-bad { border-color: var(--warn); } .tile-bad .tile-v { color: var(--warn); }
+.tag-bad { border-color: var(--warn); color: var(--warn); }
