@@ -1,7 +1,8 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-echo ===== JARVIS =====
+title JARVIS launcher
+echo ================== JARVIS ==================
 where node >nul 2>nul
 if errorlevel 1 (
   echo.
@@ -11,13 +12,24 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-echo Checking components, the first run takes a few minutes, later runs take seconds...
-call npm install --no-audit --no-fund --loglevel=error
+for /f "delims=" %%v in ('node -v') do echo Node.js version: %%v
+echo.
+echo [1/2] Installing components.
+echo       First run or after an update: 3-7 minutes. DO NOT CLOSE THIS WINDOW.
+echo       Later runs: a few seconds. Lines below may stay quiet for a while - this is normal.
+echo.
+call npm install --no-audit --no-fund --loglevel=notice --foreground-scripts
 if errorlevel 1 (
   echo.
   echo Installation failed. Take a screenshot of this window and send it to your assistant.
   pause
   exit /b 1
 )
+echo.
+echo [2/2] Starting JARVIS. The window will open in about 10-20 seconds...
 call npm start
-if errorlevel 1 pause
+if errorlevel 1 (
+  echo.
+  echo JARVIS stopped with an error. Take a screenshot of this window and send it to your assistant.
+  pause
+)
