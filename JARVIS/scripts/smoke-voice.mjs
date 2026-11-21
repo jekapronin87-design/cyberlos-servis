@@ -44,7 +44,7 @@ const server = createServer((req, res) => {
     if (req.url?.endsWith('/audio/transcriptions')) {
       seen.stt++;
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ text: transcripts.shift() ?? 'Купи хлеба' }));
+      res.end(JSON.stringify({ text: transcripts.shift() ?? '' })); // фразы кончились — слышна тишина
     } else if (req.url?.endsWith('/audio/speech')) {
       seen.tts++;
       res.setHeader('content-type', 'audio/mpeg');
