@@ -1,9 +1,25 @@
 @echo off
-chcp 65001 >nul
+setlocal
 cd /d "%~dp0"
-where node >nul 2>nul || (echo Node.js не найден. Установите LTS с https://nodejs.org и запустите снова. & pause & exit /b 1)
+echo ===== JARVIS =====
+where node >nul 2>nul
+if errorlevel 1 (
+  echo.
+  echo Node.js was not found. Install the LTS version from https://nodejs.org
+  echo then RESTART the computer and run this file again.
+  echo.
+  pause
+  exit /b 1
+)
 if not exist node_modules (
-  echo Первая установка зависимостей, это займёт несколько минут...
-  call npm install || (echo Ошибка установки & pause & exit /b 1)
+  echo First run: installing components. This takes a few minutes, please wait...
+  call npm install
+  if errorlevel 1 (
+    echo.
+    echo Installation failed. Take a screenshot of this window and send it to your assistant.
+    pause
+    exit /b 1
+  )
 )
 call npm start
+if errorlevel 1 pause
