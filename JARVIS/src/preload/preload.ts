@@ -1,0 +1,53 @@
+import { contextBridge, ipcRenderer } from 'electron';
+import { IPC, type JarvisApi } from '../shared/ipc';
+
+// Единственный мост между интерфейсом и системой. Узкий, типизированный, без доступа к Node.
+const invoke = <T>(channel: string, ...args: unknown[]): Promise<T> => ipcRenderer.invoke(channel, ...args) as Promise<T>;
+
+const subscribe =
+  <T>(channel: string) =>
+  (cb: (payload: T) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: T): void => cb(payload);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  };
+
+const api: JarvisApi = {
+  app: { info: () => invoke(IPC.appInfo) },
+  settings: {
+    get: () => invoke(IPC.settingsGet),
+    update: (patch) => invoke(IPC.settingsUpdate, patch),
+  },
+  secrets: {
+    setApiKey: (key) => invoke(IPC.apiKeySet, key),
+    clearApiKey: () => invoke(IPC.apiKeyClear),
+  },
+  conversations: {
+    list: () => invoke(IPC.convList),
+    create: (title) => invoke(IPC.convCreate, title),
+    rename: (id, title) => invoke(IPC.convRename, id, title),
+    remove: (id) => invoke(IPC.convDelete, id),
+    messages: (id) => invoke(IPC.convMessages, id),
+  },
+  chat: {
+    send: (conversationId, text) => invoke(IPC.chatSend, conversationId, text),
+    stop: () => invoke(IPC.chatStop),
+    onEvent: subscribe(IPC.evtChat),
+  },
+  confirm: {
+    respond: (id, approve) => invoke(IPC.confirmRespond, id, approve),
+    onRequest: subscribe(IPC.evtConfirm),
+    onClosed: subscribe(IPC.evtConfirmClosed),
+  },
+  memory: {
+    list: () => invoke(IPC.memoryList),
+    add: (kind, content) => invoke(IPC.memoryAdd, kind, content),
+    remove: (id) => invoke(IPC.memoryDelete, id),
+  },
+  audit: {
+    list: (limit) => invoke(IPC.auditList, limit),
+    verify: () => invoke(IPC.auditVerify),
+  },
+};
+
+contextBridge.exposeInMainWorld('jarvis', api);
