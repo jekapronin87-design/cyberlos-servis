@@ -196,6 +196,47 @@ export class BrowserController {
     return this.snapshot();
   }
 
+  /**
+   * Подсвечивает элемент на странице (для учебных подсказок): пульсирующая рамка и подпись. Ничего не нажимает и не вводит.
+   * Элемент ищется по CSS-селектору или по видимому тексту (кнопка, ссылка, пункт меню).
+   */
+  async highlight(target: { text?: string; selector?: string }, hint: string): Promise<boolean> {
+    const page = await this.ensure();
+    return page.evaluate<boolean>(`((target, hint) => {
+      document.querySelectorAll('[data-jv-hl]').forEach((n) => n.remove());
+      let el = null;
+      if (target.selector) { try { el = document.querySelector(target.selector); } catch (e) { el = null; } }
+      if (!el && target.text) {
+        const want = target.text.toLowerCase().trim();
+        const cands = [...document.querySelectorAll('a, button, [role=button], [role=tab], [role=menuitem], input[type=submit], summary, li, h1, h2, h3, label, span, div')];
+        let best = null; let bestLen = 1e9;
+        for (const c of cands) {
+          const r = c.getBoundingClientRect();
+          if (r.width < 2 || r.height < 2) continue;
+          const t = (c.innerText || c.value || c.getAttribute('aria-label') || '').toLowerCase().replace(/\s+/g, ' ').trim();
+          if (t && t.includes(want) && t.length < bestLen) { best = c; bestLen = t.length; }
+        }
+        el = best;
+      }
+      if (!el) return false;
+      el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+      const r = el.getBoundingClientRect();
+      const box = document.createElement('div');
+      box.setAttribute('data-jv-hl', '1');
+      box.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;border:3px solid #4cc2ff;border-radius:8px;box-shadow:0 0 0 4px rgba(76,194,255,.35),0 0 24px #4cc2ff;left:' + (r.left - 6) + 'px;top:' + (r.top - 6) + 'px;width:' + (r.width + 12) + 'px;height:' + (r.height + 12) + 'px;animation:jvpulse 1.1s ease-in-out infinite';
+      const tip = document.createElement('div');
+      tip.setAttribute('data-jv-hl', '1');
+      tip.textContent = hint;
+      tip.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;background:#0b1530;color:#e8f3ff;border:1px solid #4cc2ff;border-radius:8px;padding:8px 12px;font:14px system-ui;max-width:280px;left:' + Math.max(8, Math.min(window.innerWidth - 300, r.left)) + 'px;top:' + (r.bottom + 14 < window.innerHeight - 60 ? r.bottom + 14 : Math.max(8, r.top - 56)) + 'px';
+      const st = document.createElement('style');
+      st.setAttribute('data-jv-hl', '1');
+      st.textContent = '@keyframes jvpulse{50%{box-shadow:0 0 0 10px rgba(76,194,255,.15),0 0 32px #4cc2ff}}';
+      document.body.append(st, box, tip);
+      setTimeout(() => document.querySelectorAll('[data-jv-hl]').forEach((n) => n.remove()), 30000);
+      return true;
+    })(${JSON.stringify(target)}, ${JSON.stringify(hint.slice(0, 200))})`);
+  }
+
   async close(): Promise<void> {
     const c = this.ctx;
     this.ctx = null;
@@ -266,6 +307,22 @@ export function registerBrowserTools(registry: ToolRegistry, ctrl: BrowserContro
     },
     describe: (i) => `Ввести «${String(i.text).slice(0, 80)}» в ${ctrl.elementLabel(Number(i.id))} на сайте ${ctrl.currentHost()}${i.submit ? ' и нажать Enter' : ''}`,
     execute: async (i) => formatSnapshot(await ctrl.type(i.id, i.text, i.submit === true)),
+  });
+
+  registry.register<{ text?: string; selector?: string; hint: string }>({
+    name: 'lesson_show',
+    description:
+      'Учебная подсказка: подсвечивает на открытой странице (в браузере ассистента) кнопку/раздел по видимому тексту или CSS-селектору и показывает подпись. Ничего не нажимает. Сначала открой нужный сайт через browser_open.',
+    risk: 'low',
+    mutates: false,
+    domain: 'local',
+    inputSchema: {
+      type: 'object',
+      properties: { text: { type: 'string', description: 'Видимый текст кнопки/ссылки' }, selector: { type: 'string' }, hint: { type: 'string', description: 'Подпись-подсказка сотруднику' } },
+      required: ['hint'],
+    },
+    describe: (i) => `Подсветить «${i.text ?? i.selector}» на странице`,
+    execute: async (i) => ((await ctrl.highlight({ text: i.text, selector: i.selector }, String(i.hint))) ? 'Элемент подсвечен.' : 'Элемент на странице не найден. Проверьте, что нужная страница открыта (browser_read покажет доступные элементы).'),
   });
 
   registry.register({

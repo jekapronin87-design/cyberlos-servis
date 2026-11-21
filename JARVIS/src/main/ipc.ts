@@ -89,6 +89,44 @@ export function registerIpc(opts: {
   handle(IPC.computerRemoveHost, (_e, h) => core.removeBrowserHost(str(h, 'host', 120)));
   handle(IPC.attachmentGet, (_e, id) => core.getAttachment(int(id, 'id')));
 
+  handle(IPC.kbList, () => core.mentor.kb.list());
+  handle(IPC.kbSave, (_e, doc) => {
+    const d = doc as Record<string, unknown>;
+    return core.saveKbDoc({
+      id: d.id === undefined || d.id === null ? undefined : int(d.id, 'id'),
+      title: str(d.title, 'title', 300),
+      category: str(d.category, 'category', 30),
+      body: str(d.body, 'body', 70_000),
+      source: d.source === undefined ? '' : str(d.source, 'source', 300),
+    });
+  });
+  handle(IPC.kbApprove, (_e, id, approved) => core.approveKbDoc(int(id, 'id'), approved === true));
+  handle(IPC.kbRemove, (_e, id) => core.removeKbDoc(int(id, 'id')));
+  handle(IPC.kbImport, async () => {
+    const test = process.env.JARVIS_E2E_PICK;
+    let path: string | null = null;
+    if (test && !app.isPackaged) path = JSON.parse(test).kbFile ?? null;
+    else {
+      const w = getWindow();
+      const o: Electron.OpenDialogOptions = { title: 'Выберите текстовый документ для базы знаний', properties: ['openFile'], filters: [{ name: 'Текст', extensions: ['txt', 'md', 'csv'] }] };
+      const r = w ? await dialog.showOpenDialog(w, o) : await dialog.showOpenDialog(o);
+      path = r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
+    }
+    if (!path) return null;
+    if (statSync(path).size > 1_000_000) throw new Error('Файл слишком большой (больше 1 МБ)');
+    const raw = readFileSync(path, 'utf8');
+    if (raw.includes('\u0000')) throw new Error('Это не текстовый файл');
+    return { name: basename(path).replace(/\.[^.]+$/, ''), text: raw.slice(0, 60_000) };
+  });
+  handle(IPC.mentorCourses, () => core.mentor.courses());
+  handle(IPC.mentorLesson, (_e, email, c, l) => core.mentor.lesson(str(email, 'email', 200), str(c, 'course', 50), str(l, 'lesson', 50)));
+  handle(IPC.mentorAnswer, (_e, email, c, l, idx, choice) => core.mentor.answer(str(email, 'email', 200), str(c, 'course', 50), str(l, 'lesson', 50), int(idx, 'step'), int(choice, 'choice')));
+  handle(IPC.mentorVerify, (_e, email, c, l, idx, self) => core.mentor.verifyTask(str(email, 'email', 200), str(c, 'course', 50), str(l, 'lesson', 50), int(idx, 'step'), self === true));
+  handle(IPC.mentorShow, (_e, c, l, idx) => core.mentor.show(str(c, 'course', 50), str(l, 'lesson', 50), int(idx, 'step')));
+  handle(IPC.mentorAssign, (_e, email, name, c, due) => core.mentor.assign(str(email, 'email', 200), str(name, 'name', 100), str(c, 'course', 50), due ? str(due, 'due', 40) : null));
+  handle(IPC.mentorUnassign, (_e, email, c) => core.mentor.unassign(str(email, 'email', 200), str(c, 'course', 50)));
+  handle(IPC.mentorAssignments, (_e, email) => core.mentor.assignmentsFor(str(email, 'email', 200)));
+  handle(IPC.mentorCabinet, () => core.mentor.cabinet());
   handle(IPC.jobsList, () => core.listJobs());
   handle(IPC.jobsCreate, (_e, input) => {
     const i = input as Record<string, unknown>;
@@ -112,9 +150,9 @@ export function registerIpc(opts: {
   handle(IPC.jobsRuns, (_e, id) => core.jobRuns(int(id, 'id')));
   handle(IPC.crmGet, () => core.crmStatus());
   handle(IPC.crmSave, (_e, cfg, password) => {
-    const c = cfg as { baseUrl?: unknown; environment?: unknown; email?: unknown; maskPii?: unknown };
+    const c = cfg as { baseUrl?: unknown; environment?: unknown; email?: unknown; maskPii?: unknown; frontendUrl?: unknown };
     return core.crmSave(
-      { baseUrl: str(c.baseUrl, 'baseUrl', 200), environment: c.environment === 'production' ? 'production' : 'test', email: str(c.email, 'email', 200), maskPii: c.maskPii !== false },
+      { baseUrl: str(c.baseUrl, 'baseUrl', 200), environment: c.environment === 'production' ? 'production' : 'test', email: str(c.email, 'email', 200), maskPii: c.maskPii !== false, frontendUrl: c.frontendUrl ? str(c.frontendUrl, 'frontendUrl', 200) : '' },
       password === undefined || password === null ? undefined : str(password, 'password', 300),
     );
   });

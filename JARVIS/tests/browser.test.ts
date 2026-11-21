@@ -125,13 +125,28 @@ describe.skipIf(!hasChrome)('браузер ассистента (настоящ
     }
   }, 40000);
 
+  it('подсветка для учебных подсказок: по тексту и по селектору, ничего не нажимает', async () => {
+    const b = make([`127.0.0.1:${port}`]);
+    try {
+      await b.open(`http://127.0.0.1:${port}/`);
+      expect(await b.highlight({ text: 'Отправить' }, 'Нажмите здесь')).toBe(true);
+      const snap = await b.snapshot();
+      expect(snap.text).toContain('пусто'); // клика не было
+      expect(await b.highlight({ selector: '#go' }, 'Кнопка')).toBe(true);
+      expect(await b.highlight({ text: 'Несуществующая кнопка' }, 'нет')).toBe(false);
+      expect(await b.highlight({ selector: '###' }, 'плохой селектор')).toBe(false);
+    } finally {
+      await b.close();
+    }
+  }, 40000);
+
   it('инструменты зарегистрированы с нужными рисками и защитой внешних данных', async () => {
     const reg = new ToolRegistry();
     const b = make([`127.0.0.1:${port}`]);
     registerBrowserTools(reg, b);
     try {
       const risks = Object.fromEntries(reg.list().map((t) => [t.name, t.risk]));
-      expect(risks).toEqual({ browser_open: 'medium', browser_read: 'low', browser_click: 'medium', browser_type: 'medium', browser_close: 'low' });
+      expect(risks).toEqual({ browser_open: 'medium', browser_read: 'low', browser_click: 'medium', browser_type: 'medium', lesson_show: 'low', browser_close: 'low' });
       expect(reg.get('browser_open')!.external).toBe(true);
       const out = await reg.get('browser_open')!.execute({ url: `http://127.0.0.1:${port}/` }, { conversationId: 1, runId: 'r', signal: new AbortController().signal });
       expect(String(out)).toContain('[1]');

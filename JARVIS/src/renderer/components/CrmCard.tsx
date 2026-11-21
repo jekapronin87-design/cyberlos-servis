@@ -11,6 +11,7 @@ export function CrmCard() {
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
   const [mask, setMask] = useState(true);
+  const [front, setFront] = useState('');
   const [test, setTest] = useState<CrmTestDto | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -22,6 +23,7 @@ export function CrmCard() {
       setEnv(s.environment);
       setEmail(s.email);
       setMask(s.maskPii);
+      setFront(s.frontendUrl);
     });
   }, []);
 
@@ -29,7 +31,7 @@ export function CrmCard() {
     setBusy(true);
     setMsg(null);
     try {
-      const s = await window.jarvis.crm.save({ baseUrl: url, environment: env, email, maskPii: mask }, pw || undefined);
+      const s = await window.jarvis.crm.save({ baseUrl: url, environment: env, email, maskPii: mask, frontendUrl: front }, pw || undefined);
       setSt(s);
       setPw('');
       setMsg({ ok: true, text: 'Сохранено. Нажмите «Проверить подключение».' });
@@ -52,6 +54,11 @@ export function CrmCard() {
         <span>Адрес CRM</span>
         <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://api.ваш-домен.ru" spellCheck={false} />
         <small className="muted">Адрес <strong>бэкенда</strong> CRM (API), не сайта. Для проверки на своём компьютере: http://localhost:4000</small>
+      </label>
+      <label className="field">
+        <span>Адрес сайта CRM (необязательно — для подсказок в уроках)</span>
+        <input value={front} onChange={(e) => setFront(e.target.value)} placeholder="https://crm.ваш-домен.ru" spellCheck={false} />
+        <small className="muted">Куда открывать браузер, чтобы подсветить кнопки в учебных заданиях. Если это адрес вашего компьютера или локальной сети, добавьте его ниже в «Внутренние адреса для браузера».</small>
       </label>
       <label className="field">
         <span>Окружение</span>

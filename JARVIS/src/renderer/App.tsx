@@ -4,12 +4,13 @@ import { DEFAULT_SETTINGS } from '../shared/types';
 import { stripUntrustedWrapper } from '../shared/text';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { HudView, type ActivityItem } from './hud/HudView';
-import { IconAudit, IconChat, IconCrm, IconHud, IconJobs, IconMemory, IconProfile, IconSettings } from './hud/Icons';
+import { IconAudit, IconChat, IconCrm, IconHud, IconJobs, IconMentor, IconMemory, IconProfile, IconSettings } from './hud/Icons';
 import type { OrbState } from './hud/Orb';
 import { AuditView } from './views/AuditView';
 import { ChatView } from './views/ChatView';
 import { CrmView } from './views/CrmView';
 import { JobsView } from './views/JobsView';
+import { MentorView } from './views/MentorView';
 import { MemoryView } from './views/MemoryView';
 import { ProfileView } from './views/ProfileView';
 import { SettingsView } from './views/SettingsView';
@@ -17,7 +18,7 @@ import { cancelSpeech, getSpeechLevel, onSpeaking, SpeechSession } from './voice
 import { useCamera } from './voice/useCamera';
 import { useVoice } from './voice/useVoice';
 
-type View = 'hud' | 'chat' | 'crm' | 'jobs' | 'profile' | 'memory' | 'audit' | 'settings';
+type View = 'hud' | 'chat' | 'crm' | 'mentor' | 'jobs' | 'profile' | 'memory' | 'audit' | 'settings';
 
 const cleanError = (e: unknown): string =>
   e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'Неизвестная ошибка';
@@ -319,6 +320,7 @@ export function App() {
     ['hud', 'Джарвис', <IconHud key="h" />],
     ['chat', 'Чат', <IconChat key="c" />],
     ['crm', 'CRM', <IconCrm key="r" />],
+    ['mentor', 'Наставник', <IconMentor key="n" />],
     ['jobs', 'Задачи', <IconJobs key="j" />],
     ['profile', 'Досье', <IconProfile key="p" />],
     ['memory', 'Память', <IconMemory key="m" />],
@@ -422,6 +424,7 @@ export function App() {
             <ChatView info={info} messages={messages} streaming={streaming} running={running} hasConversation={activeId !== null} onSend={(t) => void send(t)} onStop={stop} voice={voice} />
           </div>
         )}
+        {view === 'mentor' && <MentorView onAsk={(t) => void sendSpoken(t)} />}
         {view === 'jobs' && <JobsView onOpenConversation={(id) => void openConversation(id)} />}
         {view === 'crm' && <CrmView onAsk={(t) => void sendSpoken(t)} onOpenSettings={() => setView('settings')} />}
         {view === 'profile' && (

@@ -16,6 +16,7 @@ import type {
   UpdateStatus,
 } from '../shared/types';
 import { ProfileRepo, isSectionId, registerProfileTools } from './profile';
+import { MentorService, registerMentorTools } from './mentor/service';
 import { JobRepo, type Job, type JobInput } from './scheduler/jobs';
 import { Scheduler, type JobResultEvent } from './scheduler/runner';
 import { CrmService, registerCrmTools, type CrmStatus, type CrmTestResult } from './crm/service';
@@ -98,6 +99,7 @@ export class JarvisCore {
   readonly attachments: AttachmentRepo;
   readonly profile: ProfileRepo;
   readonly crm: CrmService;
+  readonly mentor: MentorService;
   readonly jobs: JobRepo;
   readonly scheduler: Scheduler;
   readonly computer: ComputerAccessRepo;
@@ -139,6 +141,8 @@ export class JarvisCore {
     this.attachments.purgeKind('camera'); // кадры камеры живут только до перезапуска
     registerProfileTools(this.tools, this.profile);
     registerCrmTools(this.tools, this.crm);
+    this.mentor = new MentorService(this.db, this.crm, this.audit, this.browser);
+    registerMentorTools(this.tools, this.mentor);
     registerProjectTools(this.tools, this.computer);
     registerRunTools(this.tools, this.computer);
     registerGitTools(this.tools, this.computer);
@@ -418,6 +422,22 @@ export class JarvisCore {
     return this.attachments.get(id);
   }
 
+  // ----- база знаний и наставник -----
+  saveKbDoc(doc: { id?: number; title: string; category: string; body: string; source?: string }) {
+    const d = this.mentor.kb.save(doc);
+    this.audit.record({ actor: 'user', action: 'kb.save', target: String(d.id), decision: 'info', details: { title: d.title, version: d.version } });
+    return d;
+  }
+  approveKbDoc(id: number, approved: boolean) {
+    const d = this.mentor.kb.setApproved(id, approved);
+    this.audit.record({ actor: 'user', action: approved ? 'kb.approve' : 'kb.unapprove', target: String(id), risk: 'medium', decision: 'info', details: { title: d.title, version: d.version } });
+    return d;
+  }
+  removeKbDoc(id: number): void {
+    this.mentor.kb.remove(id);
+    this.audit.record({ actor: 'user', action: 'kb.delete', target: String(id), decision: 'info' });
+  }
+
   // ----- расписание -----
   startScheduler(): void {
     this.scheduler.start();
@@ -448,7 +468,7 @@ export class JarvisCore {
   crmStatus(): CrmStatus {
     return this.crm.status();
   }
-  crmSave(cfg: { baseUrl: string; environment: 'test' | 'production'; email: string; maskPii: boolean }, password?: string): CrmStatus {
+  crmSave(cfg: { baseUrl: string; environment: 'test' | 'production'; email: string; maskPii: boolean; frontendUrl?: string }, password?: string): CrmStatus {
     this.crm.save(cfg, password);
     return this.crm.status();
   }

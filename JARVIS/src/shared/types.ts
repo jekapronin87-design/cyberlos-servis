@@ -249,6 +249,7 @@ export interface CrmStatusDto {
   email: string;
   hasPassword: boolean;
   maskPii: boolean;
+  frontendUrl: string;
 }
 
 export interface CrmTestDto {
@@ -318,4 +319,64 @@ export interface JobResultDto {
   status: JobDto['lastStatus'];
   summary: string;
   quiet: boolean;
+}
+
+// ---------- ИИ-наставник ----------
+
+export interface KbDocDto {
+  id: number;
+  title: string;
+  category: 'crm_guide' | 'regulation' | 'sales_script' | 'material' | 'faq';
+  body: string;
+  source: string;
+  status: 'draft' | 'approved';
+  version: number;
+  builtin: boolean;
+  approvedAt: string | null;
+  updatedAt: string;
+}
+
+export interface LessonProgressDto {
+  total: number;
+  done: number;
+  completed: boolean;
+  score: number | null;
+}
+
+export interface LessonStepDto {
+  kind: 'explain' | 'quiz' | 'task';
+  text?: string;
+  question?: string;
+  options?: string[];
+  kb?: { title: string; version: number } | null;
+  verify?: 'self' | 'crm_training_deal';
+  canShow?: boolean;
+  done: boolean;
+}
+
+export interface LessonDto {
+  courseId: string;
+  id: string;
+  title: string;
+  goal: string;
+  steps: LessonStepDto[];
+  progress: LessonProgressDto;
+}
+
+export interface CourseDto {
+  id: string;
+  title: string;
+  description: string;
+  roles: string[];
+  lessons: { id: string; title: string; goal: string }[];
+}
+
+export interface EmployeeRowDto {
+  email: string;
+  name: string;
+  role: string;
+  assignments: { courseId: string; title: string; dueAt: string | null; done: number; total: number; score: number | null }[];
+  lastActivity: string | null;
+  recommendations: { courseId: string; lessonId: string; title: string; reason: string; count: number }[];
+  issues: number;
 }

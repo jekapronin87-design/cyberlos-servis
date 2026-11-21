@@ -111,6 +111,43 @@ const MIGRATIONS: string[] = [
     summary TEXT
   );
   `,
+  // 6: ИИ-наставник — база знаний, назначения и результаты обучения
+  `
+  CREATE TABLE kb_documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    category TEXT NOT NULL,
+    body TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','approved')),
+    version INTEGER NOT NULL DEFAULT 1,
+    builtin INTEGER NOT NULL DEFAULT 0,
+    approved_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE mentor_assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    name TEXT,
+    course_id TEXT NOT NULL,
+    due_at TEXT,
+    assigned_at TEXT NOT NULL,
+    UNIQUE (email, course_id)
+  );
+  CREATE TABLE mentor_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    course_id TEXT NOT NULL,
+    lesson_id TEXT NOT NULL,
+    step_idx INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    correct INTEGER NOT NULL,
+    detail TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_attempts ON mentor_attempts (email, course_id, lesson_id);
+  `,
 ];
 
 export function openDatabase(path: string): Db {

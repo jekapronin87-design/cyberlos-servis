@@ -17,6 +17,8 @@ export interface CrmStatus {
   email: string;
   hasPassword: boolean;
   maskPii: boolean;
+  /** Адрес сайта (фронтенда) CRM — для подсказок в уроках. */
+  frontendUrl: string;
 }
 
 export interface CrmTestResult {
@@ -75,10 +77,11 @@ export class CrmService {
       email: this.read('email', ''),
       hasPassword: this.secrets.has(SECRET_CRM_PASSWORD),
       maskPii: this.read('maskPii', true),
+      frontendUrl: this.read('frontendUrl', ''),
     };
   }
 
-  save(cfg: { baseUrl: string; environment: 'test' | 'production'; email: string; maskPii: boolean }, password?: string): void {
+  save(cfg: { baseUrl: string; environment: 'test' | 'production'; email: string; maskPii: boolean; frontendUrl?: string }, password?: string): void {
     const baseUrl = validateCrmBaseUrl(cfg.baseUrl);
     if (cfg.environment !== 'test' && cfg.environment !== 'production') throw new Error('Окружение: test или production');
     const email = String(cfg.email).trim();
@@ -87,6 +90,7 @@ export class CrmService {
     this.write('environment', cfg.environment);
     this.write('email', email);
     this.write('maskPii', cfg.maskPii !== false);
+    this.write('frontendUrl', cfg.frontendUrl ? validateCrmBaseUrl(cfg.frontendUrl) : '');
     if (password !== undefined && password !== '') {
       if (password.length > 300) throw new Error('Слишком длинный пароль');
       this.secrets.set(SECRET_CRM_PASSWORD, password);

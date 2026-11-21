@@ -6,6 +6,11 @@ import type {
   UpdateStatus,
   CrmStatusDto,
   JobDto,
+  KbDocDto,
+  LessonDto,
+  LessonProgressDto,
+  CourseDto,
+  EmployeeRowDto,
   JobInputDto,
   JobResultDto,
   CrmTestDto,
@@ -39,6 +44,20 @@ export const IPC = {
   computerAddHost: 'computer:host:add',
   computerRemoveHost: 'computer:host:remove',
   attachmentGet: 'attachment:get',
+  kbList: 'kb:list',
+  kbSave: 'kb:save',
+  kbApprove: 'kb:approve',
+  kbRemove: 'kb:remove',
+  kbImport: 'kb:import',
+  mentorCourses: 'mentor:courses',
+  mentorLesson: 'mentor:lesson',
+  mentorAnswer: 'mentor:answer',
+  mentorVerify: 'mentor:verify',
+  mentorShow: 'mentor:show',
+  mentorAssign: 'mentor:assign',
+  mentorUnassign: 'mentor:unassign',
+  mentorAssignments: 'mentor:assignments',
+  mentorCabinet: 'mentor:cabinet',
   jobsList: 'jobs:list',
   jobsCreate: 'jobs:create',
   jobsToggle: 'jobs:toggle',
@@ -115,6 +134,25 @@ export interface JarvisApi {
     /** Ответ на запрос кадра; null — камера выключена или недоступна. */
     sendFrame(requestId: string, frame: { mime: string; base64: string; width: number; height: number } | null): Promise<void>;
   };
+  kb: {
+    list(): Promise<KbDocDto[]>;
+    save(doc: { id?: number; title: string; category: string; body: string; source?: string }): Promise<KbDocDto>;
+    approve(id: number, approved: boolean): Promise<KbDocDto>;
+    remove(id: number): Promise<void>;
+    /** Выбор текстового файла (txt/md) → текст для нового черновика. */
+    importFile(): Promise<{ name: string; text: string } | null>;
+  };
+  mentor: {
+    courses(): Promise<CourseDto[]>;
+    lesson(email: string, courseId: string, lessonId: string): Promise<LessonDto>;
+    answer(email: string, courseId: string, lessonId: string, stepIdx: number, choice: number): Promise<{ correct: boolean; explain: string; correctIndex: number; progress: LessonProgressDto }>;
+    verify(email: string, courseId: string, lessonId: string, stepIdx: number, selfConfirmed: boolean): Promise<{ ok: boolean; message: string; progress: LessonProgressDto }>;
+    show(courseId: string, lessonId: string, stepIdx: number): Promise<string>;
+    assign(email: string, name: string, courseId: string, dueAt?: string | null): Promise<void>;
+    unassign(email: string, courseId: string): Promise<void>;
+    assignments(email: string): Promise<{ courseId: string; dueAt: string | null }[]>;
+    cabinet(): Promise<{ employees: EmployeeRowDto[]; crmConnected: boolean; note: string }>;
+  };
   jobs: {
     list(): Promise<JobDto[]>;
     create(input: JobInputDto): Promise<JobDto>;
@@ -127,7 +165,7 @@ export interface JarvisApi {
   };
   crm: {
     get(): Promise<CrmStatusDto>;
-    save(cfg: { baseUrl: string; environment: 'test' | 'production'; email: string; maskPii: boolean }, password?: string): Promise<CrmStatusDto>;
+    save(cfg: { baseUrl: string; environment: 'test' | 'production'; email: string; maskPii: boolean; frontendUrl?: string }, password?: string): Promise<CrmStatusDto>;
     disconnect(): Promise<CrmStatusDto>;
     test(): Promise<CrmTestDto>;
     dashboard(): Promise<CrmDashboardDto>;
