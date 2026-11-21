@@ -92,9 +92,11 @@ try {
   // 7. Настройки, журнал
   await page.click('.nav-item:has-text("Настройки")');
   await page.selectOption('.field:has-text("Тема") select', 'light');
-  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'light');
+  // тема применяется после ответа основного процесса — ждём, а не проверяем мгновенно
+  await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
   await page.screenshot({ path: join(shots, '4-settings.png') });
   await page.selectOption('.field:has-text("Тема") select', 'dark');
+  await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark'); // сохранено до перезапуска
   await page.fill('input[type=password]', 'коротко');
   await page.click('.card:has-text("API-ключ") button:has-text("Сохранить") >> nth=-1').catch(() => {});
   await page.click('.nav-item:has-text("Журнал")');
