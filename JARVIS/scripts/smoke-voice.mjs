@@ -124,7 +124,19 @@ try {
   assert.ok(seen.tts >= 1, 'ответ на голосовую команду должен озвучиваться через API');
   step('ответ на голосовую команду озвучен (запрос синтеза речи ушёл)');
 
+  // 4б. Звук действительно воспроизводится окном (раньше его молча блокировал CSP: нет media-src blob:)
+  const played = await page.evaluate(async () => {
+    const r = await window.jarvis.voice.speak('проверка');
+    const a = new Audio(URL.createObjectURL(new Blob([r.data], { type: r.mime })));
+    return await new Promise((res) => { a.onerror = () => res('error'); a.onplaying = () => res('playing'); a.play().catch((e) => res('rejected:' + e.name)); setTimeout(() => res('timeout'), 4000); });
+  });
+  assert.equal(played, 'playing', 'озвучка не воспроизводится: ' + played);
+  step('аудио ответа реально воспроизводится в окне (CSP разрешает blob:)');
+
   // 5. Голосовое «стоп»
+  // Пока Джарвис говорит, он реагирует только на «стоп», поэтому дожидаемся конца его реплики
+  await page.waitForFunction(() => !document.querySelector('audio[data-jv-tts]'), null, { timeout: 30000 });
+  await page.waitForTimeout(1500);
   transcripts = ['Джарвис, забудь 1', 'Стоп'];
   await page.waitForSelector('[role=alertdialog]', { timeout: 40000 });
   // голосом подтвердить нельзя — окно остаётся, пока «стоп» не закроет его

@@ -28,6 +28,7 @@ function csp(): string {
     `script-src ${script}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
+    "media-src 'self' blob:", // звук ответов Джарвиса (blob:) и превью камеры
     `connect-src ${connect}`,
     "object-src 'none'",
     "base-uri 'none'",

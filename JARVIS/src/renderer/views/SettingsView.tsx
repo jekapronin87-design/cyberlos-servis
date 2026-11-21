@@ -185,7 +185,12 @@ export function SettingsView(props: {
                 </option>
               ))}
             </select>
-            <button className="btn" onClick={() => run(() => speak('Добрый день. Это мой голос. Все системы работают в штатном режиме.', s.ttsMode, { systemVoice: s.systemVoice }), 'Проверка голоса запущена')}>
+            <button className="btn" onClick={async () => {
+                setMsg({ ok: true, text: 'Проверяю голос…' });
+                let failure = '';
+                await speak('Добрый день. Это мой голос. Все системы работают в штатном режиме.', s.ttsMode, { systemVoice: s.systemVoice, onError: (m) => (failure = m) });
+                setMsg(failure ? { ok: false, text: failure } : { ok: true, text: 'Голос проигран. Если вы ничего не слышали, проверьте громкость и устройство вывода звука Windows.' });
+              }}>
               ▶ Проверить голос
             </button>
           </div>

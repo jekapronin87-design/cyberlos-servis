@@ -191,9 +191,16 @@ export class SpeechSession {
     document.body.appendChild(audio);
     activeAudio++;
     await new Promise<void>((resolve) => {
-      const done = (): void => resolve();
-      audio.onended = audio.onerror = done;
-      void audio.play().catch(done);
+      audio.onended = () => resolve();
+      // Сбой воспроизведения нельзя глотать молча: пользователь должен видеть причину.
+      audio.onerror = () => {
+        if (this.alive) this.o.onError?.('Не удалось воспроизвести звук озвучки. Проверьте устройство вывода звука и повторите.');
+        resolve();
+      };
+      audio.play().catch((e: unknown) => {
+        if (this.alive) this.o.onError?.(`Звук не воспроизводится: ${e instanceof Error ? e.name : 'ошибка'}. Проверьте устройство вывода звука.`);
+        resolve();
+      });
     });
     activeAudio = Math.max(0, activeAudio - 1);
     audio.remove();
