@@ -28,6 +28,16 @@ const api: JarvisApi = {
     transcribe: (audio, mime) => invoke(IPC.voiceTranscribe, audio, mime),
     speak: (text) => invoke(IPC.voiceSpeak, text),
   },
+  computer: {
+    get: () => invoke(IPC.computerGet),
+    addFolder: () => invoke(IPC.computerAddFolder),
+    removeFolder: (path) => invoke(IPC.computerRemoveFolder, path),
+    addApp: () => invoke(IPC.computerAddApp),
+    removeApp: (name) => invoke(IPC.computerRemoveApp, name),
+    addBrowserHost: (host) => invoke(IPC.computerAddHost, host),
+    removeBrowserHost: (host) => invoke(IPC.computerRemoveHost, host),
+  },
+  attachments: { get: (id) => invoke(IPC.attachmentGet, id) },
   conversations: {
     list: () => invoke(IPC.convList),
     create: (title) => invoke(IPC.convCreate, title),

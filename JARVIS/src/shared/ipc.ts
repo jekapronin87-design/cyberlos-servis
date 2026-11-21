@@ -1,5 +1,6 @@
 import type {
   AppInfo,
+  ComputerAccess,
   AuditEntry,
   ChatEvent,
   ChatMessage,
@@ -21,6 +22,14 @@ export const IPC = {
   voiceKeyClear: 'voice:key:clear',
   voiceTranscribe: 'voice:transcribe',
   voiceSpeak: 'voice:speak',
+  computerGet: 'computer:get',
+  computerAddFolder: 'computer:folder:add',
+  computerRemoveFolder: 'computer:folder:remove',
+  computerAddApp: 'computer:app:add',
+  computerRemoveApp: 'computer:app:remove',
+  computerAddHost: 'computer:host:add',
+  computerRemoveHost: 'computer:host:remove',
+  attachmentGet: 'attachment:get',
   convList: 'conv:list',
   convCreate: 'conv:create',
   convRename: 'conv:rename',
@@ -57,6 +66,20 @@ export interface JarvisApi {
     transcribe(audio: Uint8Array, mime: string): Promise<string>;
     /** Облачный синтез речи (режим «api»). */
     speak(text: string): Promise<{ mime: string; data: Uint8Array }>;
+  };
+  computer: {
+    get(): Promise<ComputerAccess>;
+    /** Открывает окно выбора папки Windows; null — пользователь отменил. */
+    addFolder(): Promise<ComputerAccess | null>;
+    removeFolder(path: string): Promise<ComputerAccess>;
+    /** Открывает окно выбора программы (.exe); null — отмена. */
+    addApp(): Promise<ComputerAccess | null>;
+    removeApp(name: string): Promise<ComputerAccess>;
+    addBrowserHost(host: string): Promise<ComputerAccess>;
+    removeBrowserHost(host: string): Promise<ComputerAccess>;
+  };
+  attachments: {
+    get(id: number): Promise<{ mime: string; base64: string } | null>;
   };
   conversations: {
     list(): Promise<Conversation[]>;

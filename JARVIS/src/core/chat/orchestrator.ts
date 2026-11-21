@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { ChatEvent, ChatMessage, ContentBlock, Role } from '../../shared/types';
-import type { ConversationRepo, MemoryRepo, SettingsRepo } from '../db/repositories';
+import type { ChatEvent, ChatMessage, ComputerAccess, ContentBlock, Role } from '../../shared/types';
+import type { AttachmentRepo, ConversationRepo, MemoryRepo, SettingsRepo } from '../db/repositories';
 import { describeApiError } from '../providers/anthropic';
 import type { ProviderManager } from '../providers/manager';
 import type { ProviderMessage } from '../providers/types';
@@ -12,12 +12,14 @@ import type { ToolDefinition, ToolRegistry } from '../tools/registry';
 import { buildSystemPrompt } from './prompt';
 
 export const MAX_USER_TEXT = 20_000;
-const MAX_TOOL_STEPS = 8;
+const MAX_TOOL_STEPS = 12;
 const MAX_HISTORY_MESSAGES = 60;
 const MAX_TOOL_RESULT_CHARS = 20_000;
 
 export interface OrchestratorDeps {
   conversations: ConversationRepo;
+  attachments: AttachmentRepo;
+  computer: () => ComputerAccess;
   memory: MemoryRepo;
   settings: SettingsRepo;
   tools: ToolRegistry;
@@ -98,6 +100,7 @@ export class ChatOrchestrator {
         const history = this.buildHistory(conversationId);
         const system = buildSystemPrompt({
           settings,
+          folders: this.d.computer().folders,
           memory: settings.memoryEnabled ? this.d.memory.list().slice(0, 100) : [],
         });
         // На последнем шаге инструменты отключаются, чтобы цикл гарантированно завершился.
@@ -167,7 +170,18 @@ export class ChatOrchestrator {
     while (msgs.length && !(msgs[0]!.role === 'user' && msgs[0]!.content.some((b) => b.type === 'text'))) {
       msgs = msgs.slice(1);
     }
-    return msgs.map((m) => ({ role: m.role, content: m.content }));
+    // Изображения (снимки экрана) отправляем модели только из последнего результата инструментов:
+    // экономит токены и не оставляет личные данные в контексте дольше нужного.
+    const lastTool = [...msgs].reverse().find((m) => m.role === 'tool');
+    return msgs.map((m) => ({
+      role: m.role,
+      content: m.content.map((b) => {
+        if (b.type !== 'tool_result' || !b.imageIds?.length) return b;
+        if (m !== lastTool) return { ...b, content: b.content + '\n[снимок экрана удалён из контекста]', imageIds: undefined };
+        const images = b.imageIds.map((id) => this.d.attachments.get(id)).filter((x): x is { mime: string; base64: string } => x !== null);
+        return { ...b, images };
+      }),
+    }));
   }
 
   private async executeTool(
@@ -229,7 +243,9 @@ export class ChatOrchestrator {
 
     if (signal.aborted) return fail('Запуск остановлен.', true);
     try {
-      let output = String(await tool.execute(use.input, { conversationId, signal }));
+      const raw = await tool.execute(use.input, { conversationId, signal });
+      const images = typeof raw === 'string' ? [] : (raw.images ?? []);
+      let output = typeof raw === 'string' ? raw : raw.text;
       if (output.length > MAX_TOOL_RESULT_CHARS) output = output.slice(0, MAX_TOOL_RESULT_CHARS) + '\n…[обрезано]';
       if (tool.external) {
         const { wrapped, scan } = wrapUntrusted(`tool:${tool.name}`, output);
@@ -244,7 +260,8 @@ export class ChatOrchestrator {
         }
         output = wrapped;
       }
-      return { ...base, content: output };
+      const imageIds = images.map((im) => this.d.attachments.add(im.mime, im.base64));
+      return { ...base, content: output, ...(imageIds.length ? { imageIds } : {}) };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       audit('error', { error: message });

@@ -1,5 +1,19 @@
+import { useEffect, useState } from 'react';
+import { stripUntrustedWrapper } from '../../shared/text';
 import type { ChatMessage } from '../../shared/types';
 import { prettyInput } from '../format';
+
+function Attachment({ id }: { id: number }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void window.jarvis.attachments.get(id).then((a) => alive && a && setSrc(`data:${a.mime};base64,${a.base64}`));
+    return () => {
+      alive = false;
+    };
+  }, [id]);
+  return src ? <img className="shot" src={src} alt="Снимок экрана, отправленный ассистенту" /> : <span className="muted small">загрузка снимка…</span>;
+}
 
 export function MessageView({ message }: { message: ChatMessage }) {
   if (message.role === 'tool') {
@@ -12,7 +26,8 @@ export function MessageView({ message }: { message: ChatMessage }) {
                 <span>{b.denied ? 'Отклонено' : b.isError ? 'Ошибка' : 'Результат'}</span>
                 <code>{b.name}</code>
               </div>
-              <pre>{b.content}</pre>
+              <pre>{stripUntrustedWrapper(b.content)}</pre>
+              {b.imageIds?.map((id) => <Attachment key={id} id={id} />)}
             </div>
           ) : null,
         )}

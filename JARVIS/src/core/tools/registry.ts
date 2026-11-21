@@ -1,6 +1,12 @@
 import type { DataDomain, RiskLevel } from '../../shared/types';
 import type { ToolPolicyInfo } from '../security/policy';
 
+/** Результат инструмента: текст и, при необходимости, изображения (base64). */
+export interface ToolOutput {
+  text: string;
+  images?: { mime: string; base64: string }[];
+}
+
 export interface ToolContext {
   conversationId: number;
   signal: AbortSignal;
@@ -19,7 +25,7 @@ export interface ToolDefinition<I extends Record<string, unknown> = Record<strin
   describe(input: I): string;
   /** Результат содержит внешние данные и должен пройти защиту от инъекций. */
   external?: boolean;
-  execute(input: I, ctx: ToolContext): Promise<string> | string;
+  execute(input: I, ctx: ToolContext): Promise<string | ToolOutput> | string | ToolOutput;
 }
 
 export interface ToolSpec {

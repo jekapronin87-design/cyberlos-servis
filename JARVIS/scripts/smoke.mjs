@@ -38,7 +38,7 @@ try {
     api: Object.keys(window.jarvis).sort().join(','),
   }));
   assert.equal(isolation.node, false, 'в рендерере не должно быть Node');
-  assert.equal(isolation.api, 'app,audit,chat,confirm,conversations,memory,secrets,settings,voice');
+  assert.equal(isolation.api, 'app,attachments,audit,chat,computer,confirm,conversations,memory,secrets,settings,voice');
   step('рендерер изолирован, API узкий');
 
   // 2. Демо-режим

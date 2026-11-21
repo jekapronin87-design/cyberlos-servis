@@ -61,6 +61,15 @@ const MIGRATIONS: string[] = [
   CREATE TRIGGER audit_no_delete BEFORE DELETE ON audit_log
     BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
   `,
+  // 2: вложения (снимки экрана) — отдельно от сообщений
+  `
+  CREATE TABLE attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    mime TEXT NOT NULL,
+    data BLOB NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  `,
 ];
 
 export function openDatabase(path: string): Db {

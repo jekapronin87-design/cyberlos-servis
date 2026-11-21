@@ -1,4 +1,4 @@
-import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron';
+import { app, dialog, ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron';
 import { IPC } from '../shared/ipc';
 import type { ChatEvent, ConfirmRequest, MemoryKind } from '../shared/types';
 import type { JarvisCore } from '../core/app';
@@ -47,6 +47,33 @@ export function registerIpc(opts: {
     return core.voice.transcribe(audio, str(mime, 'mime', 100));
   });
   handle(IPC.voiceSpeak, (_e, text) => core.voice.speak(str(text, 'text', 4000)));
+
+  // Доступ к компьютеру: пути выбирает только пользователь в окне Windows.
+  const pick = async (kind: 'folder' | 'app'): Promise<string | null> => {
+    const test = process.env.JARVIS_E2E_PICK; // только для автотестов неупакованной сборки
+    if (test && !app.isPackaged) return JSON.parse(test)[kind] ?? null;
+    const w = getWindow();
+    const opts: Electron.OpenDialogOptions =
+      kind === 'folder'
+        ? { title: 'Выберите папку, с которой ассистенту можно работать', properties: ['openDirectory'] }
+        : { title: 'Выберите программу, которую ассистенту можно запускать', properties: ['openFile'], filters: [{ name: 'Программы', extensions: ['exe'] }] };
+    const r = w ? await dialog.showOpenDialog(w, opts) : await dialog.showOpenDialog(opts);
+    return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
+  };
+  handle(IPC.computerGet, () => core.getComputerAccess());
+  handle(IPC.computerAddFolder, async () => {
+    const p = await pick('folder');
+    return p ? core.addAllowedFolder(p) : null;
+  });
+  handle(IPC.computerRemoveFolder, (_e, p) => core.removeAllowedFolder(str(p, 'path', 1000)));
+  handle(IPC.computerAddApp, async () => {
+    const p = await pick('app');
+    return p ? core.addAllowedApp(p) : null;
+  });
+  handle(IPC.computerRemoveApp, (_e, n) => core.removeAllowedApp(str(n, 'name', 100)));
+  handle(IPC.computerAddHost, (_e, h) => core.addBrowserHost(str(h, 'host', 120)));
+  handle(IPC.computerRemoveHost, (_e, h) => core.removeBrowserHost(str(h, 'host', 120)));
+  handle(IPC.attachmentGet, (_e, id) => core.getAttachment(int(id, 'id')));
 
   handle(IPC.convList, () => core.listConversations());
   handle(IPC.convCreate, (_e, title) => core.createConversation(title === undefined ? undefined : str(title, 'title', 200)));

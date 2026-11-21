@@ -1,4 +1,5 @@
 import type { ContentBlock } from '../../shared/types';
+import { stripUntrustedWrapper } from '../../shared/text';
 import type { ChatProvider, ProviderEvent, ProviderMessage, ProviderRequest } from './types';
 
 const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
@@ -20,7 +21,8 @@ const HELP =
   '• «Который час?» — вызов безопасного инструмента;\n' +
   '• «Запомни: я предпочитаю короткие ответы» — запись в память;\n' +
   '• «Что ты помнишь?» — чтение памяти;\n' +
-  '• «Забудь 1» — удаление записи (потребуется ваше подтверждение);\n\n' +
+  '• «Забудь 1» — удаление записи (потребуется ваше подтверждение);\n' +
+  '• «Покажи папки», «Покажи файлы <путь>», «Прочитай файл <путь>», «Создай файл <путь> с текстом <текст>», «Открой сайт <адрес>» — работа с компьютером (после того как вы разрешите папки в настройках);\n\n' +
   'Чтобы подключить настоящий ИИ, откройте «Настройки» и введите API-ключ Anthropic.';
 
 /**
@@ -40,7 +42,7 @@ export class DemoProvider implements ChatProvider {
     if (last?.role === 'tool') {
       const results = last.content.filter((b) => b.type === 'tool_result');
       const text = results
-        .map((r) => (r.type === 'tool_result' ? r.content : ''))
+        .map((r) => (r.type === 'tool_result' ? stripUntrustedWrapper(r.content) : ''))
         .join('\n');
       yield* this.say(text || 'Готово.', signal);
       return;
@@ -51,6 +53,40 @@ export class DemoProvider implements ChatProvider {
     const has = (name: string): boolean => req.tools.some((t) => t.name === name);
 
     let m: RegExpMatchArray | null;
+    const call = (name: string, input: Record<string, unknown>): ProviderEvent => ({ type: 'tool_use', id: 'demo_' + Date.now(), name, input });
+    // Команды демонстрации инструментов этапа 3 (в демо-режиме модели нет — понимаем только эти шаблоны).
+    if (has('fs_list_allowed') && /^\s*покажи (мои )?(разрешённые )?папки/.test(lower)) {
+      yield call('fs_list_allowed', {});
+      return;
+    }
+    if (has('fs_list') && (m = text.match(/^\s*покажи файлы(?: в)?\s+(.+)$/is))) {
+      yield call('fs_list', { path: m[1]!.trim() });
+      return;
+    }
+    if (has('fs_read') && (m = text.match(/^\s*прочитай файл\s+(.+)$/is))) {
+      yield call('fs_read', { path: m[1]!.trim() });
+      return;
+    }
+    if (has('fs_write') && (m = text.match(/^\s*создай файл\s+(.+?)\s+с текстом\s+(.+)$/is))) {
+      yield call('fs_write', { path: m[1]!.trim(), content: m[2]!.trim() });
+      return;
+    }
+    if (has('fs_delete') && (m = text.match(/^\s*удали файл\s+(.+)$/is))) {
+      yield call('fs_delete', { path: m[1]!.trim() });
+      return;
+    }
+    if (has('app_open') && (m = text.match(/^\s*открой программу\s+(.+)$/is))) {
+      yield call('app_open', { name: m[1]!.trim() });
+      return;
+    }
+    if (has('browser_open') && (m = text.match(/^\s*открой сайт\s+(\S+)/is))) {
+      yield call('browser_open', { url: m[1]!.trim() });
+      return;
+    }
+    if (has('screen_capture') && /^\s*сделай снимок экрана/.test(lower)) {
+      yield call('screen_capture', {});
+      return;
+    }
     if (has('remember') && (m = text.match(/^\s*запомни[:,\s]+(.+)$/is))) {
       yield* this.say('Сохраняю.\n', signal);
       yield { type: 'tool_use', id: 'demo_' + Date.now(), name: 'remember', input: { kind: 'preference', content: m[1]!.trim() } };

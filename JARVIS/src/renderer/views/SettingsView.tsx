@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { AppInfo, Settings } from '../../shared/types';
+import { ComputerAccessCard } from '../components/ComputerAccessCard';
 
 export function SettingsView(props: {
   settings: Settings;
@@ -202,6 +203,8 @@ export function SettingsView(props: {
           </div>
         </label>
       </div>
+
+      <ComputerAccessCard />
 
       <div className="card">
         <h2>Безопасность</h2>

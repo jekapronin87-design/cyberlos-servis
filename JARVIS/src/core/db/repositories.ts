@@ -258,3 +258,37 @@ export class MemoryRepo {
     return Number(this.db.prepare('DELETE FROM memory WHERE id = ?').run(id).changes) > 0;
   }
 }
+
+// ---------------- Вложения (снимки экрана) ----------------
+
+export class AttachmentRepo {
+  constructor(private db: Db) {}
+
+  add(mime: string, base64: string): number {
+    const res = this.db
+      .prepare('INSERT INTO attachments (mime, data, created_at) VALUES (?, ?, ?)')
+      .run(mime, Buffer.from(base64, 'base64'), nowIso());
+    return Number(res.lastInsertRowid);
+  }
+
+  get(id: number): { mime: string; base64: string } | null {
+    const r = this.db.prepare('SELECT mime, data FROM attachments WHERE id = ?').get(id) as { mime: string; data: Uint8Array } | undefined;
+    return r ? { mime: r.mime, base64: Buffer.from(r.data).toString('base64') } : null;
+  }
+
+  /** Удаляет вложения, на которые больше нет ссылок (после удаления диалога). */
+  purgeOrphans(): void {
+    const used = new Set<number>();
+    const rows = this.db.prepare("SELECT content FROM messages WHERE role = 'tool'").all() as { content: string }[];
+    for (const r of rows) {
+      try {
+        for (const b of JSON.parse(r.content) as { imageIds?: number[] }[]) for (const id of b.imageIds ?? []) used.add(id);
+      } catch {
+        /* пропуск */
+      }
+    }
+    const all = this.db.prepare('SELECT id FROM attachments').all() as { id: number }[];
+    const del = this.db.prepare('DELETE FROM attachments WHERE id = ?');
+    for (const a of all) if (!used.has(a.id)) del.run(a.id);
+  }
+}

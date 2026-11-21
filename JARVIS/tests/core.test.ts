@@ -160,7 +160,7 @@ describe('«Стоп» и безопасность', () => {
     const h = makeCore({ demoProvider: loop });
     const { events } = await chat(h, 'зациклись');
     expect(events.at(-1)).toMatchObject({ status: 'done' });
-    expect(calls).toBeLessThanOrEqual(9);
+    expect(calls).toBe(13); // 12 шагов с инструментами + финальный без них
   });
 
   it('производственные записи запрещены политикой, даже если инструмент зарегистрирован', async () => {

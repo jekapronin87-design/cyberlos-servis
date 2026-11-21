@@ -30,7 +30,18 @@ export function toAnthropicMessages(messages: ProviderMessage[]): ApiMessage[] {
       for (const b of m.content) {
         if (b.type === 'text' && b.text.trim()) blocks.push({ type: 'text', text: b.text });
         else if (b.type === 'tool_result') {
-          blocks.push({ type: 'tool_result', tool_use_id: b.toolUseId, content: b.content, is_error: b.isError || b.denied });
+          const content: string | Anthropic.ToolResultBlockParam['content'] = b.images?.length
+            ? [
+                { type: 'text', text: b.content },
+                ...b.images.map(
+                  (im): Anthropic.ImageBlockParam => ({
+                    type: 'image',
+                    source: { type: 'base64', media_type: im.mime as 'image/jpeg' | 'image/png', data: im.base64 },
+                  }),
+                ),
+              ]
+            : b.content;
+          blocks.push({ type: 'tool_result', tool_use_id: b.toolUseId, content, is_error: b.isError || b.denied });
         }
       }
       push('user', blocks);

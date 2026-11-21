@@ -1,4 +1,5 @@
-import { app, BrowserWindow, safeStorage, session, shell, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, desktopCapturer, safeStorage, screen, session, shell, type IpcMainInvokeEvent } from 'electron';
+import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { JarvisCore } from '../core/app';
 import { OsEncryptedSecretStore } from '../core/security/secrets';
@@ -120,6 +121,35 @@ if (!app.requestSingleInstanceLock()) {
       version: app.getVersion(),
       platform: process.platform,
       secrets,
+      // Только для автотестов неупакованной сборки: свой Chromium без окна.
+      browser:
+        !app.isPackaged && process.env.JARVIS_BROWSER_PATH
+          ? { executablePath: process.env.JARVIS_BROWSER_PATH, headless: true, extraArgs: ['--no-sandbox', '--disable-gpu'] }
+          : undefined,
+      host: {
+        trashItem: (p) => shell.trashItem(p),
+        openPath: (p) => shell.openPath(p),
+        launchApp: (exe) =>
+          new Promise<void>((resolve, reject) => {
+            // Без оболочки и без аргументов; процесс отвязан от JARVIS.
+            const child = spawn(exe, [], { detached: true, stdio: 'ignore', shell: false });
+            child.once('error', reject);
+            child.once('spawn', () => {
+              child.unref();
+              resolve();
+            });
+          }),
+        captureScreen: async () => {
+          const d = screen.getPrimaryDisplay();
+          const w = Math.min(1600, d.size.width);
+          const h = Math.round((w / d.size.width) * d.size.height);
+          const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: w, height: h } });
+          const src = sources.find((s) => s.display_id === String(d.id)) ?? sources[0];
+          if (!src || src.thumbnail.isEmpty()) throw new Error('Не удалось сделать снимок экрана');
+          const size = src.thumbnail.getSize();
+          return { mime: 'image/jpeg', base64: src.thumbnail.toJPEG(70).toString('base64'), width: size.width, height: size.height };
+        },
+      },
       confirmUi: {
         show: (r) => ipc?.sendConfirm(r),
         close: (id) => ipc?.closeConfirm(id),
@@ -133,9 +163,14 @@ if (!app.requestSingleInstanceLock()) {
     });
   });
 
-  app.on('before-quit', () => {
-    core?.close();
+  let closing = false;
+  app.on('before-quit', (e) => {
+    if (closing || !core) return;
+    e.preventDefault(); // дождаться закрытия браузера ассистента и БД
+    closing = true;
+    const c = core;
     core = null;
+    void c.close().finally(() => app.quit());
   });
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();

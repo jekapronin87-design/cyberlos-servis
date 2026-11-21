@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import type {
   AppInfo,
   AuditEntry,
@@ -7,12 +8,19 @@ import type {
   Conversation,
   MemoryItem,
   MemoryKind,
+  ComputerAccess,
   Role,
   Settings,
 } from '../shared/types';
 import { ChatOrchestrator } from './chat/orchestrator';
 import { openDatabase, type Db } from './db/database';
-import { ConversationRepo, MemoryRepo, SettingsRepo } from './db/repositories';
+import { AttachmentRepo, ConversationRepo, MemoryRepo, SettingsRepo } from './db/repositories';
+import { ComputerAccessRepo } from './computer/access';
+import { registerAppTools } from './computer/apps';
+import { BrowserController, registerBrowserTools, type BrowserOptions } from './computer/browser';
+import { registerFileTools } from './computer/files';
+import type { HostServices } from './computer/host';
+import { registerScreenTool } from './computer/screen';
 import { ProviderManager } from './providers/manager';
 import type { ChatProvider } from './providers/types';
 import { AuditLog } from './security/audit';
@@ -33,6 +41,11 @@ export interface CoreOptions {
   env?: Record<string, string | undefined>;
   demoProvider?: ChatProvider;
   confirmTimeoutMs?: number;
+  /** Службы ОС (корзина, запуск программ, снимок экрана). Без них соответствующие инструменты не регистрируются. */
+  host?: HostServices;
+  /** Для тестов: настройки браузера ассистента (путь к Chromium, headless). */
+  browser?: Partial<BrowserOptions>;
+  home?: string;
   /** Для тестов: подмена сетевого клиента голосовых API. */
   fetchImpl?: typeof fetch;
 }
@@ -52,6 +65,9 @@ export class JarvisCore {
   readonly confirm: ConfirmationBroker;
   readonly providers: ProviderManager;
   readonly voice: VoiceService;
+  readonly attachments: AttachmentRepo;
+  readonly computer: ComputerAccessRepo;
+  readonly browser: BrowserController;
   private orchestrator: ChatOrchestrator;
   private runs = new Map<string, AbortController>();
   private role: Role;
@@ -69,11 +85,25 @@ export class JarvisCore {
       audit: this.audit,
       fetchImpl: opts.fetchImpl,
     });
+    this.attachments = new AttachmentRepo(this.db);
+    this.computer = new ComputerAccessRepo(this.db, { dataDir: opts.dataDir, home: opts.home });
     this.tools = registerBuiltinTools(new ToolRegistry(), this.memory);
+    const host = opts.host ?? {};
+    this.browser = new BrowserController({
+      userDataDir: join(opts.dataDir, 'browser-profile'),
+      getAccess: () => this.computer.get(),
+      ...opts.browser,
+    });
+    registerFileTools(this.tools, this.computer, host);
+    registerAppTools(this.tools, this.computer, host);
+    registerBrowserTools(this.tools, this.browser);
+    registerScreenTool(this.tools, host);
     this.confirm = new ConfirmationBroker(opts.confirmUi, opts.confirmTimeoutMs);
     this.providers = new ProviderManager(opts.secrets, opts.env ?? process.env, opts.demoProvider);
     this.orchestrator = new ChatOrchestrator({
       conversations: this.conversations,
+      attachments: this.attachments,
+      computer: () => this.computer.get(),
       memory: this.memory,
       settings: this.settings,
       tools: this.tools,
@@ -157,6 +187,7 @@ export class JarvisCore {
   }
   deleteConversation(id: number): void {
     this.conversations.remove(id);
+    this.attachments.purgeOrphans();
     this.audit.record({ actor: 'user', action: 'conversation.delete', decision: 'info', details: { id } });
   }
   messages(id: number): ChatMessage[] {
@@ -188,6 +219,45 @@ export class JarvisCore {
     return this.runs.size;
   }
 
+  // ----- доступ к компьютеру (этап 3) -----
+  getComputerAccess(): ComputerAccess {
+    return this.computer.get();
+  }
+  /** Путь выбран пользователем в окне Windows (вызывает только главный процесс). */
+  addAllowedFolder(path: string): ComputerAccess {
+    this.computer.addFolder(path);
+    this.audit.record({ actor: 'user', action: 'computer.folder_added', risk: 'high', decision: 'info', details: { path } });
+    return this.computer.get();
+  }
+  removeAllowedFolder(path: string): ComputerAccess {
+    this.computer.removeFolder(path);
+    this.audit.record({ actor: 'user', action: 'computer.folder_removed', decision: 'info', details: { path } });
+    return this.computer.get();
+  }
+  addAllowedApp(path: string): ComputerAccess {
+    this.computer.addApp(path);
+    this.audit.record({ actor: 'user', action: 'computer.app_added', risk: 'high', decision: 'info', details: { path } });
+    return this.computer.get();
+  }
+  removeAllowedApp(name: string): ComputerAccess {
+    this.computer.removeApp(name);
+    this.audit.record({ actor: 'user', action: 'computer.app_removed', decision: 'info', details: { name } });
+    return this.computer.get();
+  }
+  addBrowserHost(host: string): ComputerAccess {
+    this.computer.addBrowserHost(host);
+    this.audit.record({ actor: 'user', action: 'computer.browser_host_added', risk: 'medium', decision: 'info', details: { host } });
+    return this.computer.get();
+  }
+  removeBrowserHost(host: string): ComputerAccess {
+    this.computer.removeBrowserHost(host);
+    this.audit.record({ actor: 'user', action: 'computer.browser_host_removed', decision: 'info', details: { host } });
+    return this.computer.get();
+  }
+  getAttachment(id: number): { mime: string; base64: string } | null {
+    return this.attachments.get(id);
+  }
+
   // ----- память -----
   listMemory(): MemoryItem[] {
     return this.memory.list();
@@ -210,8 +280,9 @@ export class JarvisCore {
     return this.audit.verify();
   }
 
-  close(): void {
+  async close(): Promise<void> {
     this.stopAll();
+    await this.browser.close();
     this.db.close();
   }
 }

@@ -69,6 +69,10 @@ export type ContentBlock =
       isError?: boolean;
       /** Результат был отклонён политикой или пользователем. */
       denied?: boolean;
+      /** Вложения (снимки экрана) — хранятся отдельно, в БД только ссылки. */
+      imageIds?: number[];
+      /** Только в памяти при отправке модели: подгруженные изображения. */
+      images?: { mime: string; base64: string }[];
     };
 
 export type MessageRole = 'user' | 'assistant' | 'tool';
@@ -150,4 +154,20 @@ export interface AppInfo {
   /** Секреты шифруются средствами ОС (DPAPI/Keychain/libsecret). */
   secretsEncrypted: boolean;
   role: Role;
+}
+
+// ---------- Доступ к компьютеру (этап 3) ----------
+
+export interface AllowedApp {
+  name: string;
+  path: string;
+  builtin?: boolean;
+}
+
+export interface ComputerAccess {
+  /** Папки, с которыми ассистенту разрешено работать. Добавляет только пользователь через окно выбора. */
+  folders: string[];
+  apps: AllowedApp[];
+  /** Дополнительные «внутренние» адреса (localhost, тестовый CRM), которые браузеру ассистента можно открывать. */
+  browserHosts: string[];
 }
