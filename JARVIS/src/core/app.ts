@@ -21,6 +21,7 @@ import { JobRepo, type Job, type JobInput } from './scheduler/jobs';
 import { Scheduler, type JobResultEvent } from './scheduler/runner';
 import { DeviceRepo, PairingCodes, type Device } from './gateway/devices';
 import { Gateway } from './gateway/server';
+import { TelephonyService } from './telephony/service';
 import { CrmService, registerCrmTools, type CrmStatus, type CrmTestResult } from './crm/service';
 import { DEFAULT_SOURCE, downloadZip, extractUpdate, fetchLatest, installAndBuild, makeBackupDir, readInstalled, writeInstalled } from './update/updater';
 import { ChatOrchestrator } from './chat/orchestrator';
@@ -72,6 +73,9 @@ export interface CoreOptions {
   /** Подмена часов планировщика (тесты). */
   schedulerNow?: () => Date;
   schedulerTimeoutMs?: number;
+  /** Подмена часов и ожидания ответа в телефонии (тесты). */
+  telephonyNow?: () => Date;
+  telephonyHearTimeoutMs?: number;
   /** Порт шлюза для телефона (по умолчанию 8787; 0 — любой свободный, для тестов). */
   gatewayPort?: number;
   /** Подмена сети и времени для CRM (тесты). */
@@ -106,6 +110,7 @@ export class JarvisCore {
   readonly mentor: MentorService;
   readonly jobs: JobRepo;
   readonly scheduler: Scheduler;
+  readonly telephony: TelephonyService;
   readonly devices: DeviceRepo;
   readonly pairing: PairingCodes;
   readonly gateway: Gateway;
@@ -150,6 +155,8 @@ export class JarvisCore {
     registerCrmTools(this.tools, this.crm);
     this.mentor = new MentorService(this.db, this.crm, this.audit, this.browser);
     registerMentorTools(this.tools, this.mentor);
+    this.telephony = new TelephonyService(this.db, this.settings, this.audit, this.mentor, opts.telephonyNow, opts.telephonyHearTimeoutMs);
+    this.telephony.registerTools(this.tools);
     registerProjectTools(this.tools, this.computer);
     registerRunTools(this.tools, this.computer);
     registerGitTools(this.tools, this.computer);
@@ -497,6 +504,48 @@ export class JarvisCore {
     this.audit.record({ actor: 'user', action: 'gateway.device_revoked', target: String(id), decision: 'info' });
   }
 
+  // ----- телефония (каркас) -----
+  private telephonyOn(): TelephonyService {
+    if (this.settings.get().disabledModules.includes('telephony')) throw new Error('Модуль «Телефония» отключён в настройках.');
+    return this.telephony;
+  }
+  telephonyStatus() {
+    return this.telephonyOn().status();
+  }
+  listConsents() {
+    return this.telephonyOn().listConsents();
+  }
+  grantConsent(i: Parameters<TelephonyService['grantConsent']>[0]) {
+    return this.telephonyOn().grantConsent(i);
+  }
+  revokeConsent(phone: string) {
+    this.telephonyOn().revokeConsent(phone);
+  }
+  canCall(phone: string) {
+    return this.telephonyOn().canCall(phone);
+  }
+  startCall(i: { phone: string; courseId: string; lessonId: string }) {
+    return this.telephonyOn().startCall(i);
+  }
+  callState(id: number) {
+    return this.telephonyOn().state(id);
+  }
+  callReply(id: number, text: string) {
+    this.telephonyOn().reply(id, text);
+  }
+  callHangup(id: number) {
+    this.telephonyOn().hangup(id);
+  }
+  listCalls() {
+    return this.telephonyOn().listCalls();
+  }
+  callTranscript(id: number) {
+    return this.telephonyOn().transcript(id);
+  }
+  deleteCallTranscript(id: number) {
+    this.telephonyOn().deleteTranscript(id);
+  }
+
   // ----- расписание -----
   startScheduler(): void {
     this.scheduler.start();
@@ -630,6 +679,7 @@ export class JarvisCore {
   async close(): Promise<void> {
     this.scheduler.stop();
     this.stopAll();
+    this.telephony.stopAll();
     await this.gateway.stop();
     await this.browser.close();
     this.db.close();

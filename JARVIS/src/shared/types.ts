@@ -63,6 +63,11 @@ export interface Settings {
   gatewayAllowActions: boolean;
   /** Доступ с телефона: off — выключен; localhost — только этот компьютер (для проверки); lan — по домашней сети Wi‑Fi. */
   gatewayMode: 'off' | 'localhost' | 'lan';
+  /** Телефония: окно допустимого времени звонков (местное время), лимиты. */
+  callWindowFrom: string;
+  callWindowTo: string;
+  callMaxPerDay: number;
+  callMaxPerNumberPerDay: number;
   /** Голос Windows для режима «system» ('' — подобрать лучший русский автоматически). */
   systemVoice: string;
   /** Главный выключатель камеры. Пока false — доступа к камере нет на уровне приложения. */
@@ -98,6 +103,10 @@ export const DEFAULT_SETTINGS: Settings = {
   disabledModules: [],
   gatewayAllowActions: false,
   gatewayMode: 'off',
+  callWindowFrom: '09:00',
+  callWindowTo: '20:00',
+  callMaxPerDay: 10,
+  callMaxPerNumberPerDay: 2,
   systemVoice: '',
   cameraEnabled: false,
   userName: '',
@@ -418,4 +427,43 @@ export interface GatewayDeviceDto {
   createdAt: string;
   lastSeenAt: string | null;
   revoked: boolean;
+}
+
+// ---------- Телефония (каркас) ----------
+
+export interface ConsentDto {
+  id: number;
+  phone: string;
+  name: string;
+  email: string;
+  training: boolean;
+  recording: boolean;
+  grantedAt: string;
+  revokedAt: string | null;
+  source: string;
+}
+
+export interface CallDto {
+  id: number;
+  phone: string;
+  name: string;
+  courseId: string;
+  lessonId: string;
+  provider: string;
+  startedAt: string;
+  endedAt: string | null;
+  status: string;
+  correct: number;
+  total: number;
+  recorded: boolean;
+  summary: string | null;
+}
+
+export interface CallStateDto {
+  id: number;
+  status: string;
+  /** Реплики разговора (только в симуляторе и при согласии на запись). */
+  lines: { who: 'jarvis' | 'employee' | 'system'; text: string }[];
+  awaitingReply: boolean;
+  finished: boolean;
 }

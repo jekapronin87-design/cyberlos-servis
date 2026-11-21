@@ -4,13 +4,14 @@ import { DEFAULT_SETTINGS, type ModuleId } from '../shared/types';
 import { stripUntrustedWrapper } from '../shared/text';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { HudView, type ActivityItem } from './hud/HudView';
-import { IconAudit, IconChat, IconCrm, IconHud, IconJobs, IconMentor, IconMemory, IconProfile, IconSettings } from './hud/Icons';
+import { IconAudit, IconCalls, IconChat, IconCrm, IconHud, IconJobs, IconMentor, IconMemory, IconProfile, IconSettings } from './hud/Icons';
 import type { OrbState } from './hud/Orb';
 import { AuditView } from './views/AuditView';
 import { ChatView } from './views/ChatView';
 import { CrmView } from './views/CrmView';
 import { JobsView } from './views/JobsView';
 import { MentorView } from './views/MentorView';
+import { CallsView } from './views/CallsView';
 import { MemoryView } from './views/MemoryView';
 import { ProfileView } from './views/ProfileView';
 import { SettingsView } from './views/SettingsView';
@@ -18,7 +19,7 @@ import { cancelSpeech, getSpeechLevel, onSpeaking, SpeechSession } from './voice
 import { useCamera } from './voice/useCamera';
 import { useVoice } from './voice/useVoice';
 
-type View = 'hud' | 'chat' | 'crm' | 'mentor' | 'jobs' | 'profile' | 'memory' | 'audit' | 'settings';
+type View = 'hud' | 'chat' | 'crm' | 'mentor' | 'calls' | 'jobs' | 'profile' | 'memory' | 'audit' | 'settings';
 
 const cleanError = (e: unknown): string =>
   e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'Неизвестная ошибка';
@@ -322,13 +323,14 @@ export function App() {
     ['chat', 'Чат', <IconChat key="c" />],
     ['crm', 'CRM', <IconCrm key="r" />],
     ['mentor', 'Наставник', <IconMentor key="n" />],
+    ['calls', 'Звонки', <IconCalls key="t" />],
     ['jobs', 'Задачи', <IconJobs key="j" />],
     ['profile', 'Досье', <IconProfile key="p" />],
     ['memory', 'Память', <IconMemory key="m" />],
     ['audit', 'Журнал', <IconAudit key="a" />],
     ['settings', 'Настройки', <IconSettings key="s" />],
   ] as const;
-  const needs: Partial<Record<View, ModuleId>> = { crm: 'crm', mentor: 'mentor', jobs: 'scheduler' };
+  const needs: Partial<Record<View, ModuleId>> = { crm: 'crm', mentor: 'mentor', calls: 'telephony', jobs: 'scheduler' };
   const nav = navAll.filter(([v]) => !(needs[v] && off.includes(needs[v]!)));
 
   return (
@@ -428,6 +430,7 @@ export function App() {
           </div>
         )}
         {view === 'mentor' && <MentorView onAsk={(t) => void sendSpoken(t)} />}
+        {view === 'calls' && <CallsView />}
         {view === 'jobs' && <JobsView onOpenConversation={(id) => void openConversation(id)} />}
         {view === 'crm' && <CrmView onAsk={(t) => void sendSpoken(t)} onOpenSettings={() => setView('settings')} />}
         {view === 'profile' && (

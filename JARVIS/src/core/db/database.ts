@@ -160,6 +160,37 @@ const MIGRATIONS: string[] = [
     revoked INTEGER NOT NULL DEFAULT 0
   );
   `,
+  // 8: телефония — реестр согласий и журнал учебных звонков
+  `
+  CREATE TABLE consents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL DEFAULT '',
+    training INTEGER NOT NULL DEFAULT 1,
+    recording INTEGER NOT NULL DEFAULT 0,
+    granted_at TEXT NOT NULL,
+    revoked_at TEXT,
+    source TEXT NOT NULL DEFAULT ''
+  );
+  CREATE TABLE calls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone TEXT NOT NULL,
+    name TEXT NOT NULL,
+    course_id TEXT NOT NULL,
+    lesson_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    status TEXT NOT NULL,
+    correct INTEGER NOT NULL DEFAULT 0,
+    total INTEGER NOT NULL DEFAULT 0,
+    recorded INTEGER NOT NULL DEFAULT 0,
+    transcript TEXT,
+    summary TEXT
+  );
+  CREATE INDEX idx_calls_phone ON calls (phone, started_at);
+  `,
 ];
 
 export function openDatabase(path: string): Db {

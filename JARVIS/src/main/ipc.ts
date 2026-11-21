@@ -148,6 +148,28 @@ export function registerIpc(opts: {
     return { job: r.job, status: r.status, summary: r.summary, quiet: r.quiet };
   });
   handle(IPC.jobsRuns, (_e, id) => core.jobRuns(int(id, 'id')));
+  handle(IPC.telStatus, () => core.telephonyStatus());
+  handle(IPC.telConsents, () => core.listConsents());
+  handle(IPC.telGrant, (_e, i) => {
+    const c = i as { phone?: unknown; name?: unknown; email?: unknown; recording?: unknown; source?: unknown; confirmed?: unknown };
+    core.grantConsent({ phone: str(c.phone, 'phone', 40), name: str(c.name, 'name', 80), email: c.email ? str(c.email, 'email', 200) : '', recording: c.recording === true, source: c.source ? str(c.source, 'source', 200) : '', confirmed: c.confirmed === true });
+    return core.listConsents();
+  });
+  handle(IPC.telRevoke, (_e, phone) => {
+    core.revokeConsent(str(phone, 'phone', 40));
+    return core.listConsents();
+  });
+  handle(IPC.telCanCall, (_e, phone) => core.canCall(str(phone, 'phone', 40)));
+  handle(IPC.telStart, (_e, i) => {
+    const c = i as { phone?: unknown; courseId?: unknown; lessonId?: unknown };
+    return core.startCall({ phone: str(c.phone, 'phone', 40), courseId: str(c.courseId, 'courseId', 60), lessonId: str(c.lessonId, 'lessonId', 60) });
+  });
+  handle(IPC.telState, (_e, id) => core.callState(int(id, 'id')));
+  handle(IPC.telReply, (_e, id, text) => core.callReply(int(id, 'id'), str(text, 'text', 500)));
+  handle(IPC.telHangup, (_e, id) => core.callHangup(int(id, 'id')));
+  handle(IPC.telCalls, () => core.listCalls());
+  handle(IPC.telTranscript, (_e, id) => core.callTranscript(int(id, 'id')));
+  handle(IPC.telDeleteTranscript, (_e, id) => core.deleteCallTranscript(int(id, 'id')));
   handle(IPC.gatewayStatus, () => core.gatewayStatus());
   handle(IPC.gatewayCode, () => core.gatewayPairingCode());
   handle(IPC.gatewayDevices, () => core.listDevices());

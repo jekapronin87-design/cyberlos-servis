@@ -16,6 +16,9 @@ import type {
   CrmTestDto,
   GatewayStatusDto,
   GatewayDeviceDto,
+  ConsentDto,
+  CallDto,
+  CallStateDto,
   CrmDashboardDto,
   AuditEntry,
   ChatEvent,
@@ -67,6 +70,18 @@ export const IPC = {
   jobsRunNow: 'jobs:run-now',
   jobsRuns: 'jobs:runs',
   evtJob: 'evt:job',
+  telStatus: 'tel:status',
+  telConsents: 'tel:consents',
+  telGrant: 'tel:grant',
+  telRevoke: 'tel:revoke',
+  telCanCall: 'tel:can-call',
+  telStart: 'tel:start',
+  telState: 'tel:state',
+  telReply: 'tel:reply',
+  telHangup: 'tel:hangup',
+  telCalls: 'tel:calls',
+  telTranscript: 'tel:transcript',
+  telDeleteTranscript: 'tel:transcript-delete',
   gatewayStatus: 'gateway:status',
   gatewayCode: 'gateway:code',
   gatewayDevices: 'gateway:devices',
@@ -168,6 +183,20 @@ export interface JarvisApi {
     runs(id: number): Promise<{ startedAt: string; status: string; summary: string | null }[]>;
     /** Задача по расписанию завершилась (не приходит, если итог «всё спокойно»). */
     onResult(cb: (r: JobResultDto) => void): () => void;
+  };
+  telephony: {
+    status(): Promise<{ provider: string; real: boolean; note: string }>;
+    consents(): Promise<ConsentDto[]>;
+    grant(i: { phone: string; name: string; email?: string; recording?: boolean; source?: string; confirmed: boolean }): Promise<ConsentDto[]>;
+    revoke(phone: string): Promise<ConsentDto[]>;
+    canCall(phone: string): Promise<{ ok: boolean; reason?: string }>;
+    start(i: { phone: string; courseId: string; lessonId: string }): Promise<{ callId: number }>;
+    state(id: number): Promise<CallStateDto>;
+    reply(id: number, text: string): Promise<void>;
+    hangup(id: number): Promise<void>;
+    calls(): Promise<CallDto[]>;
+    transcript(id: number): Promise<string | null>;
+    deleteTranscript(id: number): Promise<void>;
   };
   gateway: {
     status(): Promise<GatewayStatusDto>;

@@ -79,6 +79,19 @@ export function validateSettingsPatch(patch: unknown): Partial<Settings> {
     if (!['off', 'localhost', 'lan'].includes(p.gatewayMode as string)) throw new Error('Неизвестный режим доступа с телефона');
     out.gatewayMode = p.gatewayMode as Settings['gatewayMode'];
   }
+  for (const key of ['callWindowFrom', 'callWindowTo'] as const) {
+    if (key in p) {
+      if (typeof p[key] !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(p[key] as string)) throw new Error('Время звонков: формат ЧЧ:ММ');
+      out[key] = p[key] as string;
+    }
+  }
+  for (const [key, max] of [['callMaxPerDay', 200], ['callMaxPerNumberPerDay', 10]] as const) {
+    if (key in p) {
+      const n = p[key];
+      if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > max) throw new Error(`Лимит звонков: целое число от 1 до ${max}`);
+      out[key] = n;
+    }
+  }
   if ('ttsSpeed' in p) {
     if (typeof p.ttsSpeed !== 'number' || !Number.isFinite(p.ttsSpeed) || p.ttsSpeed < 0.7 || p.ttsSpeed > 1.8) throw new Error('Скорость речи: число от 0.7 до 1.8');
     out.ttsSpeed = Math.round(p.ttsSpeed * 100) / 100;
