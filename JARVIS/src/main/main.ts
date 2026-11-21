@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, safeStorage, screen, session, shell, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, desktopCapturer, Notification, safeStorage, screen, session, shell, type IpcMainInvokeEvent } from 'electron';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
@@ -143,6 +143,15 @@ if (!app.requestSingleInstanceLock()) {
       dbPath: join(dataDir, 'jarvis.db'),
       dataDir,
       installDir: app.isPackaged ? undefined : app.getAppPath(),
+      onJobResult: (e) => {
+        // Системное уведомление Windows + сообщение окну JARVIS
+        try {
+          if (Notification.isSupported()) new Notification({ title: `JARVIS: ${e.job.title}`, body: e.summary.slice(0, 220) }).show();
+        } catch {
+          /* уведомления недоступны */
+        }
+        ipc?.sendJobResult({ job: e.job, status: e.status, summary: e.summary, quiet: e.quiet });
+      },
       version: app.getVersion(),
       platform: process.platform,
       secrets,
@@ -213,6 +222,7 @@ if (!app.requestSingleInstanceLock()) {
       },
     });
     applyLoginItem(core.getSettings().launchAtLogin);
+    core.startScheduler();
 
     createWindow();
     app.on('activate', () => {

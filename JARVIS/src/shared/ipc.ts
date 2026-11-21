@@ -5,6 +5,9 @@ import type {
   UpdateProgress,
   UpdateStatus,
   CrmStatusDto,
+  JobDto,
+  JobInputDto,
+  JobResultDto,
   CrmTestDto,
   CrmDashboardDto,
   AuditEntry,
@@ -36,6 +39,13 @@ export const IPC = {
   computerAddHost: 'computer:host:add',
   computerRemoveHost: 'computer:host:remove',
   attachmentGet: 'attachment:get',
+  jobsList: 'jobs:list',
+  jobsCreate: 'jobs:create',
+  jobsToggle: 'jobs:toggle',
+  jobsDelete: 'jobs:delete',
+  jobsRunNow: 'jobs:run-now',
+  jobsRuns: 'jobs:runs',
+  evtJob: 'evt:job',
   crmGet: 'crm:get',
   crmSave: 'crm:save',
   crmDisconnect: 'crm:disconnect',
@@ -104,6 +114,16 @@ export interface JarvisApi {
     onCaptureRequest(cb: (requestId: string) => void): () => void;
     /** Ответ на запрос кадра; null — камера выключена или недоступна. */
     sendFrame(requestId: string, frame: { mime: string; base64: string; width: number; height: number } | null): Promise<void>;
+  };
+  jobs: {
+    list(): Promise<JobDto[]>;
+    create(input: JobInputDto): Promise<JobDto>;
+    setEnabled(id: number, enabled: boolean): Promise<JobDto>;
+    remove(id: number): Promise<void>;
+    runNow(id: number): Promise<JobResultDto>;
+    runs(id: number): Promise<{ startedAt: string; status: string; summary: string | null }[]>;
+    /** Задача по расписанию завершилась (не приходит, если итог «всё спокойно»). */
+    onResult(cb: (r: JobResultDto) => void): () => void;
   };
   crm: {
     get(): Promise<CrmStatusDto>;

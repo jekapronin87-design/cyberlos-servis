@@ -82,6 +82,35 @@ const MIGRATIONS: string[] = [
     updated_at TEXT NOT NULL
   );
   `,
+  // 5: задачи по расписанию
+  `
+  CREATE TABLE jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    prompt TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('daily','weekdays','interval','once')),
+    at_time TEXT,
+    interval_min INTEGER,
+    run_at TEXT,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    notify INTEGER NOT NULL DEFAULT 1,
+    speak INTEGER NOT NULL DEFAULT 0,
+    conversation_id INTEGER,
+    next_run_at TEXT,
+    last_run_at TEXT,
+    last_status TEXT,
+    last_summary TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE job_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    status TEXT NOT NULL,
+    summary TEXT
+  );
+  `,
 ];
 
 export function openDatabase(path: string): Db {

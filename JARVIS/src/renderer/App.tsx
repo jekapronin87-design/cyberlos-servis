@@ -4,11 +4,12 @@ import { DEFAULT_SETTINGS } from '../shared/types';
 import { stripUntrustedWrapper } from '../shared/text';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { HudView, type ActivityItem } from './hud/HudView';
-import { IconAudit, IconChat, IconCrm, IconHud, IconMemory, IconProfile, IconSettings } from './hud/Icons';
+import { IconAudit, IconChat, IconCrm, IconHud, IconJobs, IconMemory, IconProfile, IconSettings } from './hud/Icons';
 import type { OrbState } from './hud/Orb';
 import { AuditView } from './views/AuditView';
 import { ChatView } from './views/ChatView';
 import { CrmView } from './views/CrmView';
+import { JobsView } from './views/JobsView';
 import { MemoryView } from './views/MemoryView';
 import { ProfileView } from './views/ProfileView';
 import { SettingsView } from './views/SettingsView';
@@ -16,7 +17,7 @@ import { cancelSpeech, getSpeechLevel, onSpeaking, SpeechSession } from './voice
 import { useCamera } from './voice/useCamera';
 import { useVoice } from './voice/useVoice';
 
-type View = 'hud' | 'chat' | 'crm' | 'profile' | 'memory' | 'audit' | 'settings';
+type View = 'hud' | 'chat' | 'crm' | 'jobs' | 'profile' | 'memory' | 'audit' | 'settings';
 
 const cleanError = (e: unknown): string =>
   e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'Неизвестная ошибка';
@@ -59,6 +60,7 @@ export function App() {
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [speaking, setSpeaking] = useState(false);
   const [updateAvail, setUpdateAvail] = useState<string | null>(null);
+  const [jobToast, setJobToast] = useState<{ title: string; summary: string; ok: boolean } | null>(null);
   const activeRef = useRef<number | null>(null);
   activeRef.current = activeId;
   const runningRef = useRef(false);
@@ -73,6 +75,22 @@ export function App() {
   const refreshMemory = useCallback(async () => setMemory(await window.jarvis.memory.list()), []);
 
   useEffect(() => onSpeaking(setSpeaking), []);
+
+  // Результат задачи по расписанию: баннер и (если включено) озвучка
+  useEffect(
+    () =>
+      window.jarvis.jobs.onResult((r) => {
+        if (r.quiet) return;
+        setJobToast({ title: r.job.title, summary: r.summary, ok: r.status === 'ok' });
+        const st = settingsRef.current;
+        if (r.job.speak && r.status === 'ok' && st.ttsMode !== 'off') {
+          const s = new SpeechSession({ mode: st.ttsMode, systemVoice: st.systemVoice, speed: st.ttsSpeed, onError: setError });
+          s.push(`${r.job.title}. ${r.summary}`);
+          void s.end();
+        }
+      }),
+    [],
+  );
 
   // Тихая проверка обновлений при запуске: баннер только если точно известно, что версия устарела
   useEffect(() => {
@@ -301,6 +319,7 @@ export function App() {
     ['hud', 'Джарвис', <IconHud key="h" />],
     ['chat', 'Чат', <IconChat key="c" />],
     ['crm', 'CRM', <IconCrm key="r" />],
+    ['jobs', 'Задачи', <IconJobs key="j" />],
     ['profile', 'Досье', <IconProfile key="p" />],
     ['memory', 'Память', <IconMemory key="m" />],
     ['audit', 'Журнал', <IconAudit key="a" />],
@@ -333,6 +352,17 @@ export function App() {
           <div className="banner banner-err" role="alert">
             {error}
             <button className="link" onClick={() => setError('')}>
+              Закрыть
+            </button>
+          </div>
+        )}
+        {jobToast && (
+          <div className={`banner ${jobToast.ok ? 'banner-ok' : 'banner-err'}`} role="status">
+            ⏱ <strong>{jobToast.title}:</strong> {jobToast.summary.slice(0, 400)}
+            <button className="link" onClick={() => { setView('jobs'); setJobToast(null); }}>
+              Открыть задачи
+            </button>
+            <button className="link" onClick={() => setJobToast(null)}>
               Закрыть
             </button>
           </div>
@@ -392,6 +422,7 @@ export function App() {
             <ChatView info={info} messages={messages} streaming={streaming} running={running} hasConversation={activeId !== null} onSend={(t) => void send(t)} onStop={stop} voice={voice} />
           </div>
         )}
+        {view === 'jobs' && <JobsView onOpenConversation={(id) => void openConversation(id)} />}
         {view === 'crm' && <CrmView onAsk={(t) => void sendSpoken(t)} onOpenSettings={() => setView('settings')} />}
         {view === 'profile' && (
           <ProfileView

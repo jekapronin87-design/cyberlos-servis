@@ -50,6 +50,7 @@ export class ChatOrchestrator {
     emit: (e: ChatEvent) => void,
     signal: AbortSignal,
     runId: string = randomUUID(),
+    opts: { background?: boolean; maxSteps?: number } = {},
   ): Promise<void> {
     const finish = (status: 'done' | 'stopped' | 'error', error?: string): void =>
       emit({ type: 'run_finished', runId, conversationId, status, ...(error ? { error } : {}) });
@@ -80,7 +81,8 @@ export class ChatOrchestrator {
 
       const meta = { provider: resolved.provider.id, model: resolved.mode === 'live' ? settings.model : 'demo' };
 
-      for (let step = 0; step < MAX_TOOL_STEPS + 1; step++) {
+      const maxSteps = opts.maxSteps ?? MAX_TOOL_STEPS;
+      for (let step = 0; step < maxSteps + 1; step++) {
         if (signal.aborted) return this.stopped(runId, conversationId, finish);
 
         const history = this.buildHistory(conversationId);
@@ -92,7 +94,7 @@ export class ChatOrchestrator {
           memory: settings.memoryEnabled ? this.d.memory.list().slice(0, 100) : [],
         });
         // На последнем шаге инструменты отключаются, чтобы цикл гарантированно завершился.
-        const tools = step < MAX_TOOL_STEPS ? this.d.tools.specs() : [];
+        const tools = step < maxSteps ? this.d.tools.specs() : [];
 
         let assistantText = '';
         const toolUses: ToolUseBlock[] = [];
@@ -127,7 +129,7 @@ export class ChatOrchestrator {
 
         const results: ToolResultBlock[] = [];
         for (const use of toolUses) {
-          results.push(await this.exec.execute(use, { runId, conversationId, signal, actor: 'assistant' }));
+          results.push(await this.exec.execute(use, { runId, conversationId, signal, actor: 'assistant', background: opts.background }));
         }
         const toolMsg = this.d.conversations.addMessage(conversationId, 'tool', results);
         emit({ type: 'message', runId, message: toolMsg });

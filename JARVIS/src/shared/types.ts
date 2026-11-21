@@ -281,3 +281,41 @@ export interface CrmDashboardDto {
   truncated: boolean;
   at: string;
 }
+
+// ---------- Задачи по расписанию ----------
+
+export interface JobDto {
+  id: number;
+  title: string;
+  prompt: string;
+  kind: 'daily' | 'weekdays' | 'interval' | 'once';
+  atTime: string | null;
+  intervalMin: number | null;
+  runAt: string | null;
+  enabled: boolean;
+  notify: boolean;
+  speak: boolean;
+  conversationId: number | null;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastStatus: 'ok' | 'error' | 'stopped' | 'skipped' | null;
+  lastSummary: string | null;
+}
+
+export interface JobInputDto {
+  title: string;
+  prompt: string;
+  kind: JobDto['kind'];
+  atTime?: string | null;
+  intervalMin?: number | null;
+  runAt?: string | null;
+  notify?: boolean;
+  speak?: boolean;
+}
+
+export interface JobResultDto {
+  job: JobDto;
+  status: JobDto['lastStatus'];
+  summary: string;
+  quiet: boolean;
+}

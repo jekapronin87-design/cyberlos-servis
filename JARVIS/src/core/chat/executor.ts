@@ -48,6 +48,8 @@ export interface ExecContext {
   actor: string;
   /** Белый список инструментов (для субагентов). Остальные — отказ. */
   allowedTools?: ReadonlySet<string>;
+  /** Фоновый запуск (по расписанию): пользователя рядом нет, поэтому всё, что требует подтверждения, отклоняется. */
+  background?: boolean;
 }
 
 /**
@@ -100,6 +102,10 @@ export class ToolExecutor {
     if (policy.decision === 'deny') {
       audit('denied');
       return fail(policy.reason, true);
+    }
+    if (policy.decision === 'confirm' && ctx.background) {
+      audit('denied', { reason: 'background' });
+      return fail('Это действие требует подтверждения пользователя и недоступно в фоновом режиме. Не выполнено.', true);
     }
     if (policy.decision === 'confirm') {
       let description = tool.describe(use.input);

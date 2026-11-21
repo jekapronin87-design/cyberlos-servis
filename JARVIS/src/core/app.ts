@@ -16,6 +16,8 @@ import type {
   UpdateStatus,
 } from '../shared/types';
 import { ProfileRepo, isSectionId, registerProfileTools } from './profile';
+import { JobRepo, type Job, type JobInput } from './scheduler/jobs';
+import { Scheduler, type JobResultEvent } from './scheduler/runner';
 import { CrmService, registerCrmTools, type CrmStatus, type CrmTestResult } from './crm/service';
 import { DEFAULT_SOURCE, downloadZip, extractUpdate, fetchLatest, installAndBuild, makeBackupDir, readInstalled, writeInstalled } from './update/updater';
 import { ChatOrchestrator } from './chat/orchestrator';
@@ -62,6 +64,11 @@ export interface CoreOptions {
   home?: string;
   /** Каталог приложения (папка с package.json), если самообновление разрешено. */
   installDir?: string;
+  /** Результат задачи по расписанию (в Electron — системное уведомление и сообщение окну). */
+  onJobResult?: (e: JobResultEvent) => void;
+  /** Подмена часов планировщика (тесты). */
+  schedulerNow?: () => Date;
+  schedulerTimeoutMs?: number;
   /** Подмена сети и времени для CRM (тесты). */
   crmFetch?: typeof fetch;
   crmNow?: () => Date;
@@ -91,6 +98,8 @@ export class JarvisCore {
   readonly attachments: AttachmentRepo;
   readonly profile: ProfileRepo;
   readonly crm: CrmService;
+  readonly jobs: JobRepo;
+  readonly scheduler: Scheduler;
   readonly computer: ComputerAccessRepo;
   readonly browser: BrowserController;
   readonly executor: ToolExecutor;
@@ -201,6 +210,67 @@ export class JarvisCore {
       },
       this.executor,
     );
+    this.jobs = new JobRepo(this.db);
+    this.scheduler = new Scheduler({
+      jobs: this.jobs,
+      conversations: this.conversations,
+      settings: this.settings,
+      providers: this.providers,
+      audit: this.audit,
+      run: (convId, text, emit, signal, o) => this.orchestrator.run(convId, text, emit, signal, randomUUID(), o),
+      notify: (e) => opts.onJobResult?.(e),
+      now: opts.schedulerNow,
+      timeoutMs: opts.schedulerTimeoutMs,
+    });
+    this.tools.register<{ title: string; prompt: string; kind: string; time?: string; intervalMin?: number }>({
+      name: 'schedule_create',
+      description:
+        'Создаёт задачу по расписанию (после подтверждения пользователя): ассистент будет сам выполнять её в фоне и присылать итог. kind: daily (каждый день в time, ЧЧ:ММ), weekdays (по будням), interval (каждые intervalMin минут, от 5). ' +
+        'prompt — полный текст поручения (в фоне доступно только чтение и анализ). Пример: «Каждое утро в 9:00 присылай сводку по CRM».',
+      risk: 'medium',
+      mutates: true,
+      domain: 'local',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          prompt: { type: 'string' },
+          kind: { type: 'string', enum: ['daily', 'weekdays', 'interval'] },
+          time: { type: 'string', description: 'ЧЧ:ММ для daily/weekdays' },
+          intervalMin: { type: 'integer' },
+        },
+        required: ['title', 'prompt', 'kind'],
+      },
+      describe: (i) => `Создать задачу по расписанию «${i.title}»: ${i.kind === 'interval' ? `каждые ${i.intervalMin} мин` : `${i.kind === 'weekdays' ? 'по будням' : 'каждый день'} в ${i.time}`}\nПоручение: ${String(i.prompt).slice(0, 400)}`,
+      execute: (i) => {
+        const j = this.jobs.create({ title: i.title, prompt: i.prompt, kind: i.kind as JobInput['kind'], atTime: i.time, intervalMin: i.intervalMin, notify: true }, this.opts.schedulerNow?.());
+        return `Задача создана (№${j.id}). Ближайший запуск: ${j.nextRunAt}.`;
+      },
+    });
+    this.tools.register({
+      name: 'schedule_list',
+      description: 'Показывает задачи по расписанию.',
+      risk: 'safe',
+      mutates: false,
+      domain: 'local',
+      inputSchema: { type: 'object', properties: {} },
+      describe: () => 'Показать задачи по расписанию',
+      execute: () =>
+        this.jobs.list().map((j) => `#${j.id} ${j.title} — ${j.enabled ? 'включена' : 'выключена'}; ближайший запуск ${j.nextRunAt ?? '—'}; последний результат: ${j.lastStatus ?? '—'}`).join('\n') || 'Задач по расписанию нет.',
+    });
+    this.tools.register<{ id: number }>({
+      name: 'schedule_delete',
+      description: 'Удаляет задачу по расписанию по номеру (после подтверждения).',
+      risk: 'medium',
+      mutates: true,
+      domain: 'local',
+      inputSchema: { type: 'object', properties: { id: { type: 'integer' } }, required: ['id'] },
+      describe: (i) => `Удалить задачу по расписанию №${i.id}`,
+      execute: (i) => {
+        this.jobs.remove(Number(i.id));
+        return `Задача №${i.id} удалена.`;
+      },
+    });
     this.audit.record({ actor: 'system', action: 'app.start', decision: 'info', details: { version: opts.version } });
   }
 
@@ -301,6 +371,7 @@ export class JarvisCore {
       this.audit.record({ actor: 'user', action: 'agent.stop_requested', decision: 'info', details: { runs: this.runs.size } });
     }
     for (const c of this.runs.values()) c.abort();
+    this.scheduler.abort();
     this.confirm.rejectAll();
   }
 
@@ -345,6 +416,32 @@ export class JarvisCore {
   }
   getAttachment(id: number): { mime: string; base64: string } | null {
     return this.attachments.get(id);
+  }
+
+  // ----- расписание -----
+  startScheduler(): void {
+    this.scheduler.start();
+  }
+  listJobs(): Job[] {
+    return this.jobs.list();
+  }
+  createJob(input: JobInput): Job {
+    const j = this.jobs.create(input, this.opts.schedulerNow?.());
+    this.audit.record({ actor: 'user', action: 'job.create', target: String(j.id), decision: 'info', details: { title: j.title, kind: j.kind } });
+    return j;
+  }
+  setJobEnabled(id: number, enabled: boolean): Job {
+    return this.jobs.setEnabled(id, enabled, this.opts.schedulerNow?.());
+  }
+  deleteJob(id: number): void {
+    this.jobs.remove(id);
+    this.audit.record({ actor: 'user', action: 'job.delete', target: String(id), decision: 'info' });
+  }
+  runJobNow(id: number): Promise<JobResultEvent> {
+    return this.scheduler.runNow(id);
+  }
+  jobRuns(id: number) {
+    return this.jobs.runs(id);
   }
 
   // ----- CRM «Сайберлос» (только чтение) -----
@@ -452,6 +549,7 @@ export class JarvisCore {
   }
 
   async close(): Promise<void> {
+    this.scheduler.stop();
     this.stopAll();
     await this.browser.close();
     this.db.close();

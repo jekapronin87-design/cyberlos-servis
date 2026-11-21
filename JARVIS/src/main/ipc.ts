@@ -25,7 +25,7 @@ export function registerIpc(opts: {
   onSettings?: (next: Settings) => void;
   onRestart?: () => void;
   onCameraFrame?: (requestId: string, frame: { mime: string; base64: string; width: number; height: number } | null) => void;
-}): { sendConfirm: (r: ConfirmRequest) => void; closeConfirm: (id: string) => void; sendCameraRequest: (id: string) => void } {
+}): { sendConfirm: (r: ConfirmRequest) => void; closeConfirm: (id: string) => void; sendCameraRequest: (id: string) => void; sendJobResult: (r: unknown) => void } {
   const { core, getWindow, isTrusted } = opts;
 
   const handle = (channel: string, fn: (e: IpcMainInvokeEvent, ...args: unknown[]) => unknown): void => {
@@ -89,6 +89,27 @@ export function registerIpc(opts: {
   handle(IPC.computerRemoveHost, (_e, h) => core.removeBrowserHost(str(h, 'host', 120)));
   handle(IPC.attachmentGet, (_e, id) => core.getAttachment(int(id, 'id')));
 
+  handle(IPC.jobsList, () => core.listJobs());
+  handle(IPC.jobsCreate, (_e, input) => {
+    const i = input as Record<string, unknown>;
+    return core.createJob({
+      title: str(i.title, 'title', 200),
+      prompt: str(i.prompt, 'prompt', 5000),
+      kind: str(i.kind, 'kind', 20) as 'daily',
+      atTime: i.atTime === undefined || i.atTime === null ? null : str(i.atTime, 'atTime', 10),
+      intervalMin: i.intervalMin === undefined || i.intervalMin === null ? null : int(i.intervalMin, 'intervalMin'),
+      runAt: i.runAt === undefined || i.runAt === null ? null : str(i.runAt, 'runAt', 40),
+      notify: i.notify !== false,
+      speak: i.speak === true,
+    });
+  });
+  handle(IPC.jobsToggle, (_e, id, enabled) => core.setJobEnabled(int(id, 'id'), enabled === true));
+  handle(IPC.jobsDelete, (_e, id) => core.deleteJob(int(id, 'id')));
+  handle(IPC.jobsRunNow, async (_e, id) => {
+    const r = await core.runJobNow(int(id, 'id'));
+    return { job: r.job, status: r.status, summary: r.summary, quiet: r.quiet };
+  });
+  handle(IPC.jobsRuns, (_e, id) => core.jobRuns(int(id, 'id')));
   handle(IPC.crmGet, () => core.crmStatus());
   handle(IPC.crmSave, (_e, cfg, password) => {
     const c = cfg as { baseUrl?: unknown; environment?: unknown; email?: unknown; maskPii?: unknown };
@@ -155,6 +176,7 @@ export function registerIpc(opts: {
   return {
     sendConfirm: (r) => send(IPC.evtConfirm, r),
     sendCameraRequest: (id: string) => send(IPC.evtCameraCapture, id),
+    sendJobResult: (r: unknown) => send(IPC.evtJob, r),
     closeConfirm: (id) => send(IPC.evtConfirmClosed, id),
   };
 }
