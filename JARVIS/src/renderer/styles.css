@@ -218,3 +218,8 @@ th { background: var(--panel-solid); position: sticky; top: 0; font-family: var(
 @keyframes bootfade { 0%, 70% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
 @media (max-width: 1100px) { .hud-activity { display: none; } .hud-captions { width: calc(100% - 80px); } }
 @media (prefers-reduced-motion: reduce) { .hud-scan::after, .brand-mark::after, .mic-live-dot { animation: none; } }
+
+.hud-note, .hud-wakehint { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 5; padding: 5px 14px; border-radius: 999px; font: 500 12.5px var(--font); max-width: min(760px, calc(100% - 80px)); text-align: center; pointer-events: none; }
+.hud-wakehint { color: rgba(var(--h), 0.9); background: rgba(var(--h), 0.08); border: 1px solid rgba(var(--h), 0.25); }
+.hud-note-info { color: #d8f0ff; background: rgba(var(--h), 0.14); border: 1px solid rgba(var(--h), 0.4); }
+.hud-note-warn { color: var(--warn); background: rgba(255, 200, 87, 0.1); border: 1px solid rgba(255, 200, 87, 0.45); }

@@ -121,3 +121,30 @@ describe('VoiceService в ядре', () => {
     await expect(h.core.voice.speak('x'.repeat(4001))).rejects.toThrow(/длинный/);
   });
 });
+
+import { isLikelyEcho } from '../src/shared/voice';
+
+describe('эхо собственной речи', () => {
+  const idle = { speakingSince: null, lastSpokeEnd: 0 };
+  it('короткие фразы (возможное «стоп») пропускаются всегда', () => {
+    expect(isLikelyEcho({ startedAt: 1000, endedAt: 2800 }, { speakingSince: 500, lastSpokeEnd: 0 })).toBe(false);
+  });
+  it('длинная фраза во время речи Джарвиса — эхо', () => {
+    expect(isLikelyEcho({ startedAt: 1000, endedAt: 6000 }, { speakingSince: 500, lastSpokeEnd: 0 })).toBe(true);
+  });
+  it('длинная фраза, начавшаяся сразу после окончания его речи, — эхо «хвоста»; позже — нет', () => {
+    expect(isLikelyEcho({ startedAt: 5100, endedAt: 9000 }, { speakingSince: null, lastSpokeEnd: 5000 })).toBe(true);
+    expect(isLikelyEcho({ startedAt: 8000, endedAt: 12000 }, { speakingSince: null, lastSpokeEnd: 5000 })).toBe(false);
+    expect(isLikelyEcho({ startedAt: 1000, endedAt: 6000 }, idle)).toBe(false);
+  });
+});
+
+describe('сбои сети голосового API — понятные сообщения', () => {
+  it('таймаут и обрыв связи', async () => {
+    const timeout = (async () => { throw new DOMException('timeout', 'TimeoutError'); }) as unknown as typeof fetch;
+    const offline = (async () => { throw new TypeError('fetch failed'); }) as unknown as typeof fetch;
+    await expect(new OpenAiCompatibleStt({ baseUrl: 'https://x', apiKey: 'k', model: 'm' }, timeout).transcribe(new Uint8Array([1]), 'audio/webm')).rejects.toThrow(/не ответил вовремя/);
+    await expect(new OpenAiCompatibleStt({ baseUrl: 'https://x', apiKey: 'k', model: 'm' }, offline).transcribe(new Uint8Array([1]), 'audio/webm')).rejects.toThrow(/Нет связи/);
+    await expect(new OpenAiCompatibleTts({ baseUrl: 'https://x', apiKey: 'k', model: 'm', voice: 'v' }, offline).synthesize('привет')).rejects.toThrow(/Нет связи/);
+  });
+});

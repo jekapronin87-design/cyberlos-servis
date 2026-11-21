@@ -64,6 +64,14 @@ export function HudView(props: {
 }) {
   const [text, setText] = useState('');
   const [boot, setBoot] = useState(true);
+  const [, force] = useState(0);
+  const note = props.voice.note;
+  const noteFresh = !!note && Date.now() - note.at < 10_000;
+  useEffect(() => {
+    if (!note) return;
+    const t = setTimeout(() => force((n) => n + 1), 10_200);
+    return () => clearTimeout(t);
+  }, [note]);
   useEffect(() => {
     const t = setTimeout(() => setBoot(false), 1800);
     return () => clearTimeout(t);
@@ -132,6 +140,17 @@ export function HudView(props: {
         {props.replyText && <div className="cap-reply">{props.replyText}</div>}
         {!props.userText && !props.replyText && <div className="cap-hint">{hint}</div>}
       </div>
+
+      {live && wake && !noteFresh && (
+        <div className="hud-wakehint" role="status">
+          {props.voice.awaiting ? 'Слушаю — говорите' : 'Скажите «Джарвис, …» — без этого слова я не отвечу'}
+        </div>
+      )}
+      {noteFresh && (
+        <div className={`hud-note hud-note-${note!.kind}`} role="status">
+          {note!.text}
+        </div>
+      )}
 
       {props.camera.stream && <CameraPreview stream={props.camera.stream} />}
 

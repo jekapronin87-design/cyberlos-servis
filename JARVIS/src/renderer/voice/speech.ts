@@ -9,12 +9,39 @@ const listeners = new Set<Listener>();
 let speaking = false;
 let generation = 0; // растёт при каждой отмене — «старые» сессии замолкают
 
+let speakingSince: number | null = null;
+let lastSpokeEnd = 0;
+let lastActivity = 0;
+/** Если «говорит» и нет признаков жизни (звук не идёт, слова не произносятся) дольше этого — считаем, что озвучка зависла. */
+const STALL_MS = 20_000;
+
+const touch = (): void => {
+  lastActivity = performance.now();
+};
+
 const setSpeaking = (v: boolean): void => {
   if (speaking === v) return;
   speaking = v;
+  if (v) {
+    speakingSince = performance.now();
+    touch();
+  } else {
+    speakingSince = null;
+    lastSpokeEnd = performance.now();
+  }
   listeners.forEach((l) => l(v));
 };
-export const isSpeaking = (): boolean => speaking;
+
+/**
+ * Говорит ли Джарвис сейчас. Содержит «сторожа»: если озвучка зависла (известная проблема голосов Windows —
+ * событие окончания не приходит), сбрасывает состояние, чтобы он не оставался «говорящим» навсегда
+ * и не игнорировал ваши фразы.
+ */
+export const isSpeaking = (): boolean => {
+  if (speaking && performance.now() - lastActivity > STALL_MS) cancelSpeech();
+  return speaking;
+};
+export const speechState = (): { speakingSince: number | null; lastSpokeEnd: number } => ({ speakingSince, lastSpokeEnd });
 export const onSpeaking = (cb: Listener): (() => void) => {
   listeners.add(cb);
   return () => listeners.delete(cb);
@@ -186,23 +213,31 @@ export class SpeechSession {
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     audio.setAttribute('data-jv-tts', '1');
-    const src = ctx.createMediaElementSource(audio);
-    src.connect(an);
+    // Если звуковой контекст не запустился, подключение через него «заморозило» бы воспроизведение — играем напрямую.
+    const viaAnalyser = ctx.state === 'running';
+    if (viaAnalyser) ctx.createMediaElementSource(audio).connect(an);
     document.body.appendChild(audio);
-    activeAudio++;
+    activeAudio += viaAnalyser ? 1 : 0;
+    audio.ontimeupdate = touch;
     await new Promise<void>((resolve) => {
-      audio.onended = () => resolve();
+      // Сторож: длительность неизвестна заранее, поэтому ждём не дольше 90 с на предложение.
+      const guard = window.setTimeout(() => resolve(), 90_000);
+      const finish = (): void => {
+        window.clearTimeout(guard);
+        resolve();
+      };
+      audio.onended = finish;
       // Сбой воспроизведения нельзя глотать молча: пользователь должен видеть причину.
       audio.onerror = () => {
         if (this.alive) this.o.onError?.('Не удалось воспроизвести звук озвучки. Проверьте устройство вывода звука и повторите.');
-        resolve();
+        finish();
       };
       audio.play().catch((e: unknown) => {
         if (this.alive) this.o.onError?.(`Звук не воспроизводится: ${e instanceof Error ? e.name : 'ошибка'}. Проверьте устройство вывода звука.`);
-        resolve();
+        finish();
       });
     });
-    activeAudio = Math.max(0, activeAudio - 1);
+    if (viaAnalyser) activeAudio = Math.max(0, activeAudio - 1);
     audio.remove();
     URL.revokeObjectURL(url);
   }
@@ -220,8 +255,18 @@ export class SpeechSession {
       u.onboundary = () => {
         pseudo = 0.7 + Math.random() * 0.3;
         pseudoAt = performance.now();
+        touch();
       };
-      u.onend = u.onerror = () => resolve();
+      u.onstart = touch;
+      // У голосов Windows событие окончания иногда не приходит — не ждём дольше разумного.
+      const guard = window.setTimeout(() => {
+        window.speechSynthesis.cancel();
+        resolve();
+      }, Math.max(8000, text.length * 120));
+      u.onend = u.onerror = () => {
+        window.clearTimeout(guard);
+        resolve();
+      };
       window.speechSynthesis.speak(u);
     });
   }

@@ -8,7 +8,7 @@ export interface ListenerOptions {
   continuous: boolean;
   onState(s: ListenerState): void;
   onLevel(level: number): void;
-  onUtterance(blob: Blob): void;
+  onUtterance(blob: Blob, meta: { startedAt: number; endedAt: number }): void;
   onError(message: string): void;
   /** Для тестов. */
   minSpeechMs?: number;
@@ -35,6 +35,7 @@ export class VoiceListener {
   private heard = false;
   private running = false;
   private startedAt = 0;
+  private segStart = 0;
 
   constructor(private o: ListenerOptions) {}
 
@@ -101,6 +102,7 @@ export class VoiceListener {
     this.silenceMs = 0;
     this.segmentMs = 0;
     this.heard = false;
+    this.segStart = performance.now();
     const rec = new MediaRecorder(this.stream, { mimeType: 'audio/webm;codecs=opus' });
     rec.ondataavailable = (e) => e.data.size > 0 && chunks.push(e.data);
     this.recorder = rec;
@@ -123,9 +125,10 @@ export class VoiceListener {
     if (!rec) return;
     this.recorder = null;
     const chunks = this.chunks;
+    const meta = { startedAt: this.segStart, endedAt: performance.now() };
     rec.onstop = () => {
       const blob = new Blob(chunks, { type: 'audio/webm' });
-      if (blob.size > 0) this.o.onUtterance(blob);
+      if (blob.size > 0) this.o.onUtterance(blob, meta);
     };
     rec.stop();
   }

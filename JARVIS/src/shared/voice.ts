@@ -71,3 +71,21 @@ export function textForSpeech(text: string, maxChars = 800): string {
   const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '));
   return (end > 200 ? cut.slice(0, end + 1) : cut) + ' …';
 }
+
+export interface UtteranceMeta {
+  /** Когда фраза началась и закончилась (мс, performance.now). */
+  startedAt: number;
+  endedAt: number;
+}
+
+/**
+ * Похоже ли, что микрофон записал собственную речь Джарвиса из колонок (эхо), а не команду.
+ * Короткие фразы (до 2.5 с) пропускаем всегда — это может быть «стоп».
+ */
+export function isLikelyEcho(meta: UtteranceMeta, speech: { speakingSince: number | null; lastSpokeEnd: number }, now = meta.endedAt): boolean {
+  const duration = meta.endedAt - meta.startedAt;
+  if (duration <= 2500) return false;
+  const overlapsNow = speech.speakingSince !== null && speech.speakingSince <= now;
+  const overlapsPast = speech.lastSpokeEnd >= meta.startedAt - 300;
+  return overlapsNow || overlapsPast;
+}

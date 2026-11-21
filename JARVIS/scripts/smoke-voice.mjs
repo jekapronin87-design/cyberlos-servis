@@ -134,14 +134,29 @@ try {
   step('аудио ответа реально воспроизводится в окне (CSP разрешает blob:)');
 
   // 5. Голосовое «стоп»
-  // Пока Джарвис говорит, он реагирует только на «стоп», поэтому дожидаемся конца его реплики
-  await page.waitForFunction(() => !document.querySelector('audio[data-jv-tts]'), null, { timeout: 30000 });
-  // После ответа открывается окно «продолжайте без слова Джарвис» (8 с) — ждём, пока оно закроется,
-  // и пока не закончится возможный запуск от случайной фразы внутри этого окна.
-  await page.waitForTimeout(800);
-  await page.waitForSelector('.typing:has-text("Слушаю вас")', { state: 'detached', timeout: 20000 });
-  await page.waitForSelector('button:has-text("Отправить")');
-  await page.waitForFunction(() => !document.querySelector('audio[data-jv-tts]'), null, { timeout: 30000 });
+  // Пока Джарвис говорит, он реагирует только на «стоп», а после ответа открывается окно «продолжайте без слова Джарвис» (12 с).
+  // settle() ждёт, пока всё затихнет: речь закончилась, запуск завершён, окно закрылось.
+  const settle = async () => {
+    await page.waitForTimeout(800);
+    await page.waitForSelector('.typing:has-text("Слушаю вас")', { state: 'detached', timeout: 30000 }).catch(() => {});
+    await page.waitForSelector('button:has-text("Отправить"), .hud-btn.primary', { timeout: 30000 }).catch(() => {});
+    await page.waitForFunction(() => !document.querySelector('audio[data-jv-tts]'), null, { timeout: 30000 });
+  };
+  await settle();
+
+  // 4в. Главный экран подсказывает, почему он не отвечает: фраза без слова «Джарвис» в режиме ожидания
+  await page.click('.nav-item:has-text("Джарвис")');
+  await page.waitForSelector('.hud-wakehint', { timeout: 20000 });
+  transcripts = ['Купи хлеба и молока'];
+  await page.waitForSelector('.hud-note-warn:has-text("нет слова")', { timeout: 30000 });
+  step('фраза без слова «Джарвис» не молчит: на экране написано, что услышано и почему нет ответа');
+
+  // 4г. Второй запрос подряд после озвученного ответа обрабатывается (раньше «после первого ответа тишина»)
+  transcripts = ['Джарвис, который час?'];
+  await page.waitForSelector('.act-ok:has-text("Время")', { timeout: 40000 });
+  step('второй голосовой запрос подряд выполнен');
+  await settle();
+  await page.click('.nav-item:has-text("Чат")');
   transcripts = ['Джарвис, забудь 1', 'Стоп'];
   await page.waitForSelector('[role=alertdialog]', { timeout: 40000 });
   // голосом подтвердить нельзя — окно остаётся, пока «стоп» не закроет его

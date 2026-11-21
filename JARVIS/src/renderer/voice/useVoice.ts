@@ -1,17 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Settings } from '../../shared/types';
-import { parseVoiceCommand } from '../../shared/voice';
+import { isLikelyEcho, parseVoiceCommand, type UtteranceMeta } from '../../shared/voice';
 import { VoiceListener, type ListenerState } from './listener';
-import { cancelSpeech, isSpeaking, speak } from './speech';
+import { cancelSpeech, isSpeaking, speak, speechState } from './speech';
 
 export type VoiceUiState = 'idle' | 'listening' | 'hearing' | 'transcribing';
 
-const AWAIT_MS = 8000;
+/** Сколько секунд после ответа можно продолжать без слова «Джарвис». */
+const AWAIT_MS = 12_000;
+const STT_TIMEOUT_MS = 30_000;
 
 const cleanError = (e: unknown): string =>
   e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'Ошибка голоса';
 
+export interface VoiceNote {
+  text: string;
+  kind: 'info' | 'warn';
+  at: number;
+}
+
 export interface VoiceControl {
+  /** Что Джарвис сейчас понял/сделал с вашей последней фразой — чтобы было видно, почему он (не) ответил. */
+  note: VoiceNote | null;
   state: VoiceUiState;
   /** Сказали «Джарвис» без команды — ждём продолжение. */
   awaiting: boolean;
@@ -35,6 +45,8 @@ export function useVoice(p: {
   const [transcribing, setTranscribing] = useState(0);
   const [awaiting, setAwaiting] = useState(false);
   const [level, setLevel] = useState(0);
+  const [note, setNote] = useState<VoiceNote | null>(null);
+  const say = useCallback((text: string, kind: VoiceNote['kind'] = 'info') => setNote({ text, kind, at: Date.now() }), []);
   const listener = useRef<VoiceListener | null>(null);
   const awaitingRef = useRef(false);
   const awaitTimer = useRef<number | null>(null);
@@ -50,40 +62,63 @@ export function useVoice(p: {
   }, []);
 
   const handleUtterance = useCallback(
-    async (blob: Blob): Promise<void> => {
+    async (blob: Blob, meta: UtteranceMeta): Promise<void> => {
       const cur = pRef.current;
+      // Своя речь из колонок (эхо) — не команда: длинную фразу, пересекающуюся с речью Джарвиса, не отправляем на распознавание.
+      if (isLikelyEcho(meta, speechState())) {
+        say('Слышу свою собственную речь из колонок — пропускаю. Если мешает, используйте наушники.');
+        return;
+      }
       setTranscribing((n) => n + 1);
       try {
         const bytes = new Uint8Array(await blob.arrayBuffer());
-        const text = await window.jarvis.voice.transcribe(bytes, 'audio/webm');
+        let timer = 0;
+        const text = await Promise.race([
+          window.jarvis.voice.transcribe(bytes, 'audio/webm'),
+          new Promise<never>((_, rej) => {
+            timer = window.setTimeout(() => rej(new Error('Распознавание речи не ответило за 30 секунд. Проверьте интернет и ключ голоса.')), STT_TIMEOUT_MS);
+          }),
+        ]).finally(() => window.clearTimeout(timer));
         const wake = cur.settings.voiceMode === 'wake';
         const cmd = parseVoiceCommand(text, { requireWake: wake && !awaitingRef.current });
-        if (cmd.kind === 'stop') {
+        const heard = text.trim().slice(0, 90);
+        if (!heard) return; // тишина или шум
+        if (cmd.kind === 'ignore') {
+          say(`Услышал: «${heard}» — но нет слова «Джарвис». Начните фразу со слова «Джарвис».`, 'warn');
+        } else if (cmd.kind === 'stop') {
+          say('Команда «стоп»');
           cancelSpeech();
           cur.onStopCommand();
         } else if (cmd.kind === 'wake') {
-          if (isSpeaking()) return; // пока говорит Джарвис, реагируем только на «стоп»
+          if (isSpeaking()) {
+            say(`Услышал: «${heard}» — но я ещё говорю. Скажите «стоп», чтобы прервать.`, 'warn');
+            return;
+          }
           if (!cmd.text) {
             if (wake) {
               setAwait(true);
+              say('Слушаю вас…');
               if (cur.settings.ttsMode !== 'off') void speak('Слушаю.', cur.settings.ttsMode, { systemVoice: cur.settings.systemVoice }).catch(() => {});
             }
             return;
           }
           setAwait(false);
           if (cur.isBusy()) {
-            cur.onError('Джарвис ещё отвечает. Скажите «стоп», чтобы прервать.');
+            say(`Услышал: «${heard}» — но я ещё отвечаю на предыдущий запрос. Скажите «стоп».`, 'warn');
             return;
           }
+          say(`Понял: «${cmd.text.slice(0, 90)}»`);
           cur.onCommand(cmd.text);
         }
       } catch (e) {
-        cur.onError(cleanError(e));
+        const m = cleanError(e);
+        say(m, 'warn');
+        cur.onError(m);
       } finally {
         setTranscribing((n) => n - 1);
       }
     },
-    [setAwait],
+    [setAwait, say],
   );
 
   const stop = useCallback(() => {
@@ -107,8 +142,8 @@ export function useVoice(p: {
         continuous: cur.settings.voiceMode === 'wake',
         onState: setListenState,
         onLevel: setLevel,
-        onUtterance: (b) => {
-          queue.current = queue.current.then(() => handleUtterance(b));
+        onUtterance: (b, meta) => {
+          queue.current = queue.current.then(() => handleUtterance(b, meta));
         },
         onError: (m) => {
           pRef.current.onError(m);
@@ -131,5 +166,5 @@ export function useVoice(p: {
     if (listener.current?.active && pRef.current.settings.voiceMode === 'wake') setAwait(true);
   }, [setAwait]);
 
-  return { state, awaiting, level, toggle, stop, followUp };
+  return { state, awaiting, level, toggle, stop, followUp, note };
 }

@@ -18,6 +18,18 @@ export interface TextToSpeech {
 
 const extFor = (mime: string): string => (mime.includes('ogg') ? 'ogg' : mime.includes('mp4') ? 'mp4' : mime.includes('wav') ? 'wav' : 'webm');
 
+/** Сигнал отмены с таймаутом: зависший запрос к голосовому API не должен блокировать очередь фраз. */
+function withTimeout(signal: AbortSignal | undefined, ms: number): AbortSignal {
+  const t = AbortSignal.timeout(ms);
+  return signal ? AbortSignal.any([signal, t]) : t;
+}
+
+function friendly(e: unknown): Error {
+  if (e instanceof DOMException && (e.name === 'TimeoutError' || e.name === 'AbortError')) return new Error('Сервис голоса не ответил вовремя. Проверьте интернет.');
+  if (e instanceof TypeError) return new Error('Нет связи с сервисом голоса. Проверьте интернет и адрес API в настройках.');
+  return e instanceof Error ? e : new Error(String(e));
+}
+
 async function apiError(res: Response): Promise<Error> {
   if (res.status === 401) return new Error('Неверный ключ API голоса. Проверьте его в настройках.');
   if (res.status === 429) return new Error('Превышен лимит запросов к API голоса.');
@@ -42,7 +54,9 @@ export class OpenAiCompatibleStt implements SpeechToText {
       method: 'POST',
       headers: { Authorization: `Bearer ${this.cfg.apiKey}` },
       body: form,
-      signal,
+      signal: withTimeout(signal, 25_000),
+    }).catch((e: unknown) => {
+      throw friendly(e);
     });
     if (!res.ok) throw await apiError(res);
     const json = (await res.json()) as { text?: unknown };
@@ -69,7 +83,9 @@ export class OpenAiCompatibleTts implements TextToSpeech {
         // Стиль речи поддерживает только gpt-4o-mini-tts
         ...(this.cfg.instructions && /gpt-4o-mini-tts/.test(this.cfg.model) ? { instructions: this.cfg.instructions } : {}),
       }),
-      signal,
+      signal: withTimeout(signal, 30_000),
+    }).catch((e: unknown) => {
+      throw friendly(e);
     });
     if (!res.ok) throw await apiError(res);
     return { mime: 'audio/mpeg', data: new Uint8Array(await res.arrayBuffer()) };
