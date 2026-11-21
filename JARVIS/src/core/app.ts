@@ -13,6 +13,7 @@ import type {
   Settings,
 } from '../shared/types';
 import { ChatOrchestrator } from './chat/orchestrator';
+import { ToolExecutor } from './chat/executor';
 import { openDatabase, type Db } from './db/database';
 import { AttachmentRepo, ConversationRepo, MemoryRepo, SettingsRepo } from './db/repositories';
 import { ComputerAccessRepo } from './computer/access';
@@ -21,6 +22,11 @@ import { BrowserController, registerBrowserTools, type BrowserOptions } from './
 import { registerFileTools } from './computer/files';
 import type { HostServices } from './computer/host';
 import { registerScreenTool } from './computer/screen';
+import { AgentRunner, ROLES, type AgentId } from './dev/agents';
+import { registerGitTools } from './dev/git';
+import { registerProjectTools } from './dev/projects';
+import { registerRunTools } from './dev/run';
+import { resolveAllowed } from './computer/pathguard';
 import { ProviderManager } from './providers/manager';
 import type { ChatProvider } from './providers/types';
 import { AuditLog } from './security/audit';
@@ -40,6 +46,8 @@ export interface CoreOptions {
   role?: Role;
   env?: Record<string, string | undefined>;
   demoProvider?: ChatProvider;
+  /** Для тестов: «облачный» провайдер-заглушка (требует заданного ключа). */
+  liveProvider?: ChatProvider;
   confirmTimeoutMs?: number;
   /** Службы ОС (корзина, запуск программ, снимок экрана). Без них соответствующие инструменты не регистрируются. */
   host?: HostServices;
@@ -68,6 +76,7 @@ export class JarvisCore {
   readonly attachments: AttachmentRepo;
   readonly computer: ComputerAccessRepo;
   readonly browser: BrowserController;
+  readonly executor: ToolExecutor;
   private orchestrator: ChatOrchestrator;
   private runs = new Map<string, AbortController>();
   private role: Role;
@@ -98,9 +107,62 @@ export class JarvisCore {
     registerAppTools(this.tools, this.computer, host);
     registerBrowserTools(this.tools, this.browser);
     registerScreenTool(this.tools, host);
+    registerProjectTools(this.tools, this.computer);
+    registerRunTools(this.tools, this.computer);
+    registerGitTools(this.tools, this.computer);
     this.confirm = new ConfirmationBroker(opts.confirmUi, opts.confirmTimeoutMs);
-    this.providers = new ProviderManager(opts.secrets, opts.env ?? process.env, opts.demoProvider);
-    this.orchestrator = new ChatOrchestrator({
+    this.providers = new ProviderManager(opts.secrets, opts.env ?? process.env, opts.demoProvider, opts.liveProvider);
+    this.executor = new ToolExecutor({
+      tools: this.tools,
+      settings: this.settings,
+      audit: this.audit,
+      confirm: this.confirm,
+      attachments: this.attachments,
+      role: this.role,
+    });
+    const runner = new AgentRunner({
+      providers: this.providers,
+      getSettings: () => this.settings.get(),
+      tools: this.tools,
+      executor: this.executor,
+      audit: this.audit,
+    });
+    this.tools.register<{ agent: AgentId; task: string; project?: string }>({
+      name: 'delegate_task',
+      description:
+        'Поручает задачу специализированному субагенту: developer (пишет/правит код и проверяет), tester (запускает проверки, пишет тесты, ищет ошибки), ' +
+        'reviewer (ревью кода только на чтение). Для программных задач: сначала developer, затем tester и reviewer. Субагент работает с теми же ограничениями и подтверждениями. ' +
+        'Опиши задачу подробно и самостоятельно — субагент не видит этот диалог.',
+      risk: 'low',
+      mutates: false,
+      domain: 'local',
+      external: true,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          agent: { type: 'string', enum: Object.keys(ROLES) },
+          task: { type: 'string', description: 'Полное описание задачи, критерии готовности' },
+          project: { type: 'string', description: 'Путь к папке проекта (в разрешённой папке)' },
+        },
+        required: ['agent', 'task'],
+      },
+      describe: (i) => `Поручить задачу агенту «${ROLES[i.agent]?.title ?? i.agent}»`,
+      execute: async (i, ctx) => {
+        if (String(i.task).length > 4000) throw new Error('Описание задачи длиннее 4000 символов');
+        let project = '';
+        if (i.project) {
+          try {
+            project = resolveAllowed(i.project, this.computer.get().folders).abs;
+          } catch (e) {
+            throw new Error(e instanceof Error ? e.message : 'Недопустимый путь проекта');
+          }
+        }
+        const r = await runner.run(i.agent, String(i.task), project, { runId: ctx.runId, conversationId: ctx.conversationId, signal: ctx.signal });
+        return `Агент «${ROLES[i.agent].title}» завершил работу${r.stoppedByLimit ? ' (достигнут лимит шагов)' : ''}.\n\nОтчёт:\n${r.report}\n\nХод работы (${r.steps.length} действий):\n${r.steps.join('\n') || '—'}`;
+      },
+    });
+    this.orchestrator = new ChatOrchestrator(
+      {
       conversations: this.conversations,
       attachments: this.attachments,
       computer: () => this.computer.get(),
@@ -111,7 +173,9 @@ export class JarvisCore {
       confirm: this.confirm,
       providers: this.providers,
       role: this.role,
-    });
+      },
+      this.executor,
+    );
     this.audit.record({ actor: 'system', action: 'app.start', decision: 'info', details: { version: opts.version } });
   }
 

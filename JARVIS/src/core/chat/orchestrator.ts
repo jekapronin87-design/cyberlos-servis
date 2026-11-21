@@ -9,6 +9,7 @@ import type { ConfirmationBroker } from '../security/confirmation';
 import { wrapUntrusted } from '../security/injection';
 import { decide } from '../security/policy';
 import type { ToolDefinition, ToolRegistry } from '../tools/registry';
+import { ToolExecutor, type ToolResultBlock, type ToolUseBlock } from './executor';
 import { buildSystemPrompt } from './prompt';
 
 export const MAX_USER_TEXT = 20_000;
@@ -29,30 +30,13 @@ export interface OrchestratorDeps {
   role: Role;
 }
 
-type ToolResultBlock = Extract<ContentBlock, { type: 'tool_result' }>;
-type ToolUseBlock = Extract<ContentBlock, { type: 'tool_use' }>;
-
-/** Простая проверка входа инструмента по его JSON-схеме (обязательные поля и базовые типы). */
-export function validateToolInput(tool: ToolDefinition, input: unknown): string | null {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) return 'Аргументы должны быть объектом';
-  const obj = input as Record<string, unknown>;
-  for (const key of tool.inputSchema.required ?? []) {
-    if (!(key in obj)) return `Не хватает аргумента «${key}»`;
-  }
-  for (const [key, spec] of Object.entries(tool.inputSchema.properties)) {
-    if (!(key in obj)) continue;
-    const s = spec as { type?: string; enum?: unknown[] };
-    const v = obj[key];
-    if (s.type === 'string' && typeof v !== 'string') return `«${key}» должен быть строкой`;
-    if (s.type === 'integer' && !Number.isInteger(v)) return `«${key}» должен быть целым числом`;
-    if (s.type === 'boolean' && typeof v !== 'boolean') return `«${key}» должен быть логическим`;
-    if (s.enum && !s.enum.includes(v)) return `«${key}» имеет недопустимое значение`;
-  }
-  return null;
-}
+export { validateToolInput } from './executor';
 
 export class ChatOrchestrator {
-  constructor(private d: OrchestratorDeps) {}
+  constructor(
+    private d: OrchestratorDeps,
+    private exec: ToolExecutor,
+  ) {}
 
   /**
    * Один запуск: сообщение пользователя -> (ответ модели -> инструменты)* -> финальный ответ.
@@ -139,7 +123,7 @@ export class ChatOrchestrator {
 
         const results: ToolResultBlock[] = [];
         for (const use of toolUses) {
-          results.push(await this.executeTool(use, runId, conversationId, signal));
+          results.push(await this.exec.execute(use, { runId, conversationId, signal, actor: 'assistant' }));
         }
         const toolMsg = this.d.conversations.addMessage(conversationId, 'tool', results);
         emit({ type: 'message', runId, message: toolMsg });
@@ -182,90 +166,5 @@ export class ChatOrchestrator {
         return { ...b, images };
       }),
     }));
-  }
-
-  private async executeTool(
-    use: ToolUseBlock,
-    runId: string,
-    conversationId: number,
-    signal: AbortSignal,
-  ): Promise<ToolResultBlock> {
-    const base = { type: 'tool_result' as const, toolUseId: use.id, name: use.name };
-    const fail = (content: string, denied = false): ToolResultBlock => ({ ...base, content, isError: true, denied });
-
-    const tool = this.d.tools.get(use.name);
-    if (!tool) {
-      this.d.audit.record({ actor: 'assistant', action: 'tool.unknown', target: use.name, decision: 'denied' });
-      return fail(`Инструмент «${use.name}» не существует.`);
-    }
-    const invalid = validateToolInput(tool, use.input);
-    if (invalid) {
-      this.d.audit.record({ actor: 'assistant', action: 'tool.invalid_input', target: tool.name, decision: 'error', details: { invalid } });
-      return fail(`Неверные аргументы: ${invalid}`);
-    }
-
-    const settings = this.d.settings.get();
-    const policy = decide(tool, this.d.role, settings);
-    const audit = (decision: 'allowed' | 'confirmed' | 'denied' | 'rejected' | 'error', extra: Record<string, unknown> = {}): void =>
-      this.d.audit.record({
-        actor: 'assistant',
-        action: 'tool.execute',
-        target: tool.name,
-        risk: tool.risk,
-        decision,
-        details: { input: use.input, domain: tool.domain, reason: policy.reason, conversationId, ...extra },
-      });
-
-    if (policy.decision === 'deny') {
-      audit('denied');
-      return fail(policy.reason, true);
-    }
-    if (policy.decision === 'confirm') {
-      const approved = await this.d.confirm.request(
-        {
-          runId,
-          toolName: tool.name,
-          description: tool.describe(use.input),
-          risk: tool.risk,
-          input: use.input,
-          reason: policy.reason,
-        },
-        signal,
-      );
-      if (!approved) {
-        audit('rejected');
-        return fail('Пользователь отклонил действие (или запуск был остановлен). Действие не выполнено.', true);
-      }
-      audit('confirmed');
-    } else {
-      audit('allowed');
-    }
-
-    if (signal.aborted) return fail('Запуск остановлен.', true);
-    try {
-      const raw = await tool.execute(use.input, { conversationId, signal });
-      const images = typeof raw === 'string' ? [] : (raw.images ?? []);
-      let output = typeof raw === 'string' ? raw : raw.text;
-      if (output.length > MAX_TOOL_RESULT_CHARS) output = output.slice(0, MAX_TOOL_RESULT_CHARS) + '\n…[обрезано]';
-      if (tool.external) {
-        const { wrapped, scan } = wrapUntrusted(`tool:${tool.name}`, output);
-        if (scan.suspicious) {
-          this.d.audit.record({
-            actor: 'system',
-            action: 'injection.suspected',
-            target: tool.name,
-            decision: 'info',
-            details: { matches: scan.matches },
-          });
-        }
-        output = wrapped;
-      }
-      const imageIds = images.map((im) => this.d.attachments.add(im.mime, im.base64));
-      return { ...base, content: output, ...(imageIds.length ? { imageIds } : {}) };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      audit('error', { error: message });
-      return fail(`Ошибка выполнения: ${message}`);
-    }
   }
 }

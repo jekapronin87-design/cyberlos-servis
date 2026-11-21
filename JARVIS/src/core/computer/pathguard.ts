@@ -101,3 +101,8 @@ export function resolveAllowed(input: unknown, roots: string[], opts: ResolveOpt
   if (isSensitivePath(real)) throw new AccessError('Доступ к этому файлу запрещён (секреты и ключи недоступны ассистенту)');
   return { abs: real, root };
 }
+
+/** Каталоги, куда ассистент не должен писать, даже внутри разрешённой папки (внутренности Git и зависимости). */
+export function isProtectedForWrite(p: string): boolean {
+  return p.split(/[\\/]+/).some((x) => x.toLowerCase() === '.git' || x.toLowerCase() === 'node_modules');
+}

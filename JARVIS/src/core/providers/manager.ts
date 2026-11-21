@@ -21,6 +21,8 @@ export class ProviderManager {
     private secrets: SecretStore,
     private env: Record<string, string | undefined> = process.env,
     demo?: ChatProvider,
+    /** Для тестов: подменяет облачного провайдера. */
+    private liveOverride?: ChatProvider,
   ) {
     this.demo = demo ?? new DemoProvider();
   }
@@ -39,6 +41,7 @@ export class ProviderManager {
         note: 'API-ключ не задан — работает демо-режим',
       };
     }
+    if (this.liveOverride) return { provider: this.liveOverride, mode: 'live' };
     if (!this.anthropic || this.anthropic.key !== key) {
       this.anthropic = { key, provider: new AnthropicProvider(key) };
     }

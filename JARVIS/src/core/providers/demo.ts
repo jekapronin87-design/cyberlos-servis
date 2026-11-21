@@ -83,6 +83,35 @@ export class DemoProvider implements ChatProvider {
       yield call('browser_open', { url: m[1]!.trim() });
       return;
     }
+    if (has('project_scaffold') && (m = text.match(/^\s*создай проект\s+(node-app|static-site)\s+(.+)$/is))) {
+      yield call('project_scaffold', { template: m[1]!.trim(), path: m[2]!.trim() });
+      return;
+    }
+    if (has('project_overview') && (m = text.match(/^\s*проанализируй проект\s+(.+)$/is))) {
+      yield call('project_overview', { path: m[1]!.trim() });
+      return;
+    }
+    if (has('run_script') && (m = text.match(/^\s*запусти (тесты|сборку|проверку типов)\s+(.+)$/is))) {
+      const script = { 'тесты': 'test', 'сборку': 'build', 'проверку типов': 'typecheck' }[m[1]!.toLowerCase()]!;
+      yield call('run_script', { path: m[2]!.trim(), script });
+      return;
+    }
+    if (has('code_search') && (m = text.match(/^\s*найди в коде\s+(\S+)\s+в\s+(.+)$/is))) {
+      yield call('code_search', { query: m[1]!.trim(), path: m[2]!.trim() });
+      return;
+    }
+    if (has('git_init') && (m = text.match(/^\s*git init\s+(.+)$/is))) {
+      yield call('git_init', { path: m[1]!.trim() });
+      return;
+    }
+    if (has('git_commit') && (m = text.match(/^\s*git commit\s+(\S+)\s+(.+)$/is))) {
+      yield call('git_commit', { path: m[1]!.trim(), message: m[2]!.trim() });
+      return;
+    }
+    if (has('git_status') && (m = text.match(/^\s*git status\s+(.+)$/is))) {
+      yield call('git_status', { path: m[1]!.trim() });
+      return;
+    }
     if (has('screen_capture') && /^\s*сделай снимок экрана/.test(lower)) {
       yield call('screen_capture', {});
       return;

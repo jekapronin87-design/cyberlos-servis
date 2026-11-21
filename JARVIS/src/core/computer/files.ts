@@ -3,7 +3,7 @@ import { basename, dirname, join, relative } from 'node:path';
 import type { ToolRegistry } from '../tools/registry';
 import type { ComputerAccessRepo } from './access';
 import type { HostServices } from './host';
-import { AccessError, resolveAllowed } from './pathguard';
+import { AccessError, isProtectedForWrite, resolveAllowed } from './pathguard';
 
 const MAX_READ_BYTES = 256 * 1024;
 const MAX_WRITE_BYTES = 1024 * 1024;
@@ -147,6 +147,7 @@ export function registerFileTools(registry: ToolRegistry, access: ComputerAccess
     execute: (i) =>
       wrap(() => {
         const { abs } = resolveAllowed(i.path, roots(), { allowMissing: true });
+        if (isProtectedForWrite(abs)) throw new Error('Запись в .git и node_modules запрещена');
         if (existsSync(abs)) return 'Папка уже существует.';
         mkdirSync(abs, { recursive: true });
         return `Папка создана: ${abs}`;
@@ -170,6 +171,7 @@ export function registerFileTools(registry: ToolRegistry, access: ComputerAccess
         const bytes = Buffer.byteLength(String(i.content));
         if (bytes > MAX_WRITE_BYTES) throw new Error('Слишком большой файл (максимум 1 МБ)');
         const { abs } = resolveAllowed(i.path, roots(), { allowMissing: true });
+        if (isProtectedForWrite(abs)) throw new Error('Запись в .git и node_modules запрещена');
         if (existsSync(abs)) throw new Error('Файл уже существует. Для замены нужен fs_overwrite (требует отдельного подтверждения).');
         mkdirSync(dirname(abs), { recursive: true });
         writeFileSync(abs, String(i.content), { flag: 'wx' });
@@ -193,6 +195,7 @@ export function registerFileTools(registry: ToolRegistry, access: ComputerAccess
       wrap(() => {
         if (Buffer.byteLength(String(i.content)) > MAX_WRITE_BYTES) throw new Error('Слишком большой файл (максимум 1 МБ)');
         const { abs } = resolveAllowed(i.path, roots());
+        if (isProtectedForWrite(abs)) throw new Error('Запись в .git и node_modules запрещена');
         if (!statSync(abs).isFile()) throw new Error('Это не файл');
         writeFileSync(abs, String(i.content));
         return `Файл перезаписан: ${abs}`;
@@ -214,8 +217,10 @@ export function registerFileTools(registry: ToolRegistry, access: ComputerAccess
     execute: (i) =>
       wrap(() => {
         const src = resolveAllowed(i.from, roots());
+        if (isProtectedForWrite(src.abs)) throw new Error('Перенос из .git и node_modules запрещён');
         if (roots().includes(src.abs)) throw new Error('Нельзя переносить саму разрешённую папку');
         const dst = resolveAllowed(i.to, roots(), { allowMissing: true });
+        if (isProtectedForWrite(dst.abs)) throw new Error('Запись в .git и node_modules запрещена');
         if (existsSync(dst.abs)) throw new Error('Назначение уже существует');
         mkdirSync(dirname(dst.abs), { recursive: true });
         renameSync(src.abs, dst.abs);

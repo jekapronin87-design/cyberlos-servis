@@ -133,7 +133,7 @@ describe.skipIf(!hasChrome)('браузер ассистента (настоящ
       const risks = Object.fromEntries(reg.list().map((t) => [t.name, t.risk]));
       expect(risks).toEqual({ browser_open: 'medium', browser_read: 'low', browser_click: 'medium', browser_type: 'medium', browser_close: 'low' });
       expect(reg.get('browser_open')!.external).toBe(true);
-      const out = await reg.get('browser_open')!.execute({ url: `http://127.0.0.1:${port}/` }, { conversationId: 1, signal: new AbortController().signal });
+      const out = await reg.get('browser_open')!.execute({ url: `http://127.0.0.1:${port}/` }, { conversationId: 1, runId: 'r', signal: new AbortController().signal });
       expect(String(out)).toContain('[1]');
       expect(reg.get('browser_click')!.describe({ id: 1 })).toContain('Нажать на');
     } finally {

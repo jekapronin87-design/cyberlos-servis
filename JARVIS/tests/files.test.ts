@@ -94,7 +94,7 @@ function setup() {
     openPath: async (p) => (opened.push(p), ''),
   });
   const run = async (name: string, input: Record<string, unknown>): Promise<string> => {
-    const out = await reg.get(name)!.execute(input, { conversationId: 1, signal: new AbortController().signal });
+    const out = await reg.get(name)!.execute(input, { conversationId: 1, runId: 'r', signal: new AbortController().signal });
     return typeof out === 'string' ? out : out.text;
   };
   return { root, run, reg, trashed, opened, access, dataDir };

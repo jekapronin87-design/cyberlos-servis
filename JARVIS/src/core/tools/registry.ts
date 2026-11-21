@@ -10,6 +10,7 @@ export interface ToolOutput {
 export interface ToolContext {
   conversationId: number;
   signal: AbortSignal;
+  runId: string;
 }
 
 /**
@@ -23,6 +24,11 @@ export interface ToolDefinition<I extends Record<string, unknown> = Record<strin
   inputSchema: { type: 'object'; properties: Record<string, unknown>; required?: string[] };
   /** Что именно будет сделано — показывается пользователю при подтверждении. */
   describe(input: I): string;
+  /**
+   * Оценка риска по конкретным аргументам (например, подозрительная команда). Может только повысить риск;
+   * warning показывается в окне подтверждения.
+   */
+  assess?(input: I): { risk?: RiskLevel; warning?: string } | undefined;
   /** Результат содержит внешние данные и должен пройти защиту от инъекций. */
   external?: boolean;
   execute(input: I, ctx: ToolContext): Promise<string | ToolOutput> | string | ToolOutput;
