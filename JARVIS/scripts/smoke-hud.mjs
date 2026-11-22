@@ -61,7 +61,7 @@ try {
   await page.click('.nav-item:has-text("Чат")');
   await page.waitForSelector('.tool-card .shot', { timeout: 10000 });
   step('кадр с камеры снят по просьбе, показан миниатюрой, без окна подтверждения');
-  await page.click('.nav-item:has-text("Джарвис")');
+  await page.click('.nav-item:has-text("Системно")');
 
   // 5. Камера выключена кнопкой — инструмент отказывает
   await page.click('[data-testid=hud-cam]');

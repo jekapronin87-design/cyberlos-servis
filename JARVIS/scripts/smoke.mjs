@@ -54,7 +54,7 @@ try {
     await page.fill('textarea', t);
     await page.press('textarea', 'Enter');
   };
-  await send('Привет, Джарвис');
+  await send('Привет, Системно');
   await page.waitForSelector('.bubble-assistant:has-text("демонстрационном режиме")');
   step('ответ получен');
 

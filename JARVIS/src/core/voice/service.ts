@@ -40,7 +40,7 @@ async function apiError(res: Response): Promise<Error> {
 /** Распознавание речи через OpenAI-совместимый эндпоинт /audio/transcriptions. */
 export class OpenAiCompatibleStt implements SpeechToText {
   constructor(
-    private cfg: { baseUrl: string; apiKey: string; model: string },
+    private cfg: { baseUrl: string; apiKey: string; model: string; hint?: string },
     private fetchImpl: Fetch = fetch,
   ) {}
 
@@ -50,6 +50,8 @@ export class OpenAiCompatibleStt implements SpeechToText {
     form.append('model', this.cfg.model);
     form.append('language', 'ru');
     form.append('response_format', 'json');
+    // Подсказка словаря повышает шанс правильно услышать имя ассистента.
+    if (this.cfg.hint) form.append('prompt', this.cfg.hint);
     const res = await this.fetchImpl(`${this.cfg.baseUrl}/audio/transcriptions`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${this.cfg.apiKey}` },
@@ -123,7 +125,7 @@ export class VoiceService {
     if (!(audio instanceof Uint8Array) || audio.byteLength === 0) throw new Error('Пустая запись.');
     if (audio.byteLength > MAX_AUDIO_BYTES) throw new Error('Запись слишком длинная.');
     if (!/^audio\/[\w.+-]+(;.*)?$/.test(mime)) throw new Error('Неподдерживаемый формат звука.');
-    const stt = new OpenAiCompatibleStt({ baseUrl: s.voiceBaseUrl, apiKey: this.key(), model: s.sttModel }, this.deps.fetchImpl);
+    const stt = new OpenAiCompatibleStt({ baseUrl: s.voiceBaseUrl, apiKey: this.key(), model: s.sttModel, hint: `${s.assistantName}, Джарвис.` }, this.deps.fetchImpl);
     try {
       const text = await stt.transcribe(audio, mime, signal);
       this.deps.audit.record({ actor: 'user', action: 'voice.transcribe', decision: 'info', details: { bytes: audio.byteLength, chars: text.length } });

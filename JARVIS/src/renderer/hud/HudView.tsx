@@ -89,7 +89,7 @@ export function HudView(props: {
     ? 'Слушаю вас…'
     : live
       ? wake
-        ? 'Скажите: «Джарвис, …»'
+        ? `Скажите: «${props.settings.assistantName}, …»`
         : 'Говорите…'
       : props.info?.mode === 'demo'
         ? 'Демо-режим: подключите ключ Claude в настройках'
@@ -143,7 +143,7 @@ export function HudView(props: {
 
       {live && wake && !noteFresh && (
         <div className="hud-wakehint" role="status">
-          {props.voice.awaiting ? 'Слушаю — говорите' : 'Скажите «Джарвис, …» — без этого слова я не отвечу'}
+          {props.voice.awaiting ? 'Слушаю — говорите' : `Скажите «${props.settings.assistantName}, …» — без этого слова я не отвечу`}
         </div>
       )}
       {noteFresh && (
@@ -170,7 +170,7 @@ export function HudView(props: {
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder={hint}
-          aria-label="Сообщение Джарвису"
+          aria-label={`Сообщение: ${props.settings.assistantName}`}
           maxLength={20000}
           autoComplete="off"
         />
@@ -184,7 +184,7 @@ export function HudView(props: {
             <IconSend />
           </button>
         )}
-        <button type="button" className={`hud-btn ${props.camera.active ? 'on' : ''}`} onClick={props.camera.toggle} aria-pressed={props.camera.active} title={props.camera.active ? 'Выключить камеру' : 'Включить камеру (Джарвис сможет видеть вас)'} data-testid="hud-cam">
+        <button type="button" className={`hud-btn ${props.camera.active ? 'on' : ''}`} onClick={props.camera.toggle} aria-pressed={props.camera.active} title={props.camera.active ? 'Выключить камеру' : `Включить камеру (${props.settings.assistantName} сможет видеть вас)`} data-testid="hud-cam">
           <IconCam />
           <span>{props.camera.active ? 'Камера вкл' : 'Камера'}</span>
         </button>

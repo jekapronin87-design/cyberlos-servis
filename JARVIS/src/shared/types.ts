@@ -95,6 +95,10 @@ export interface Settings {
   systemVoice: string;
   /** Главный выключатель камеры. Пока false — доступа к камере нет на уровне приложения. */
   cameraEnabled: boolean;
+  /** Открывать на весь экран (F11 — переключить). */
+  fullscreen: boolean;
+  /** Имя ассистента (на него он откликается голосом; «Джарвис» остаётся запасным именем). */
+  assistantName: string;
   /** Как обращаться к пользователю. */
   userName: string;
   /** Включать прослушивание слова «Джарвис» сразу при запуске (нужны micEnabled и режим wake). */
@@ -135,6 +139,8 @@ export const DEFAULT_SETTINGS: Settings = {
   callMaxPerNumberPerDay: 2,
   systemVoice: '',
   cameraEnabled: false,
+  fullscreen: true,
+  assistantName: 'Системно',
   userName: '',
   autoListen: false,
   launchAtLogin: false,

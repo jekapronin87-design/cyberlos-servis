@@ -26,6 +26,10 @@ export function validateSettingsPatch(patch: unknown): Partial<Settings> {
     if (!PROVIDERS.includes(p.provider as never)) throw new Error('Неизвестный провайдер');
     out.provider = p.provider as Settings['provider'];
   }
+  if ('assistantName' in p) {
+    if (typeof p.assistantName !== 'string' || !/^[\p{L}][\p{L}\d -]{1,29}$/u.test(p.assistantName.trim())) throw new Error('Имя ассистента: 2–30 символов, буквы');
+    out.assistantName = p.assistantName.trim();
+  }
   if ('routingMode' in p) {
     if (!['smart', 'claude', 'free'].includes(p.routingMode as string)) throw new Error('Неизвестный режим выбора модели');
     out.routingMode = p.routingMode as Settings['routingMode'];
@@ -118,7 +122,7 @@ export function validateSettingsPatch(patch: unknown): Partial<Settings> {
     if (typeof p.ttsSpeed !== 'number' || !Number.isFinite(p.ttsSpeed) || p.ttsSpeed < 0.7 || p.ttsSpeed > 1.8) throw new Error('Скорость речи: число от 0.7 до 1.8');
     out.ttsSpeed = Math.round(p.ttsSpeed * 100) / 100;
   }
-  for (const key of ['memoryEnabled', 'allowProductionWrites', 'micEnabled', 'cameraEnabled', 'autoListen', 'launchAtLogin', 'profileEnabled', 'gatewayAllowActions'] as const) {
+  for (const key of ['memoryEnabled', 'allowProductionWrites', 'micEnabled', 'cameraEnabled', 'autoListen', 'launchAtLogin', 'profileEnabled', 'gatewayAllowActions', 'fullscreen'] as const) {
     if (key in p) {
       if (typeof p[key] !== 'boolean') throw new Error(`Поле ${key} должно быть логическим`);
       out[key] = p[key] as boolean;

@@ -2,7 +2,7 @@ import type { MemoryItem, Settings } from '../../shared/types';
 import { UNTRUSTED_DATA_RULE, wrapUntrusted } from '../security/injection';
 
 export function buildSystemPrompt(opts: {
-  settings: Pick<Settings, 'customInstructions' | 'memoryEnabled'> & { userName?: string };
+  settings: Pick<Settings, 'customInstructions' | 'memoryEnabled'> & { userName?: string; assistantName?: string };
   memory: MemoryItem[];
   /** Разрешённые папки (пути не секретны и нужны модели, чтобы обращаться к файлам). */
   folders?: string[];
@@ -14,7 +14,7 @@ export function buildSystemPrompt(opts: {
 }): string {
   const now = (opts.now ?? new Date()).toLocaleString('ru-RU', { dateStyle: 'full', timeStyle: 'short' });
   const parts: string[] = [
-    'Ты — Джарвис, персональный ИИ-ассистент владельца. Отвечай по-русски, кратко и по делу, дружелюбно и уважительно.',
+    `Ты — ${opts.settings.assistantName || 'Системно'}, персональный ИИ-ассистент владельца (запасное имя — Джарвис). Отвечай по-русски, кратко и по делу, дружелюбно и уважительно.`,
     `Сейчас: ${now}.`,
     opts.settings.userName ? `Пользователя зовут ${opts.settings.userName}; обращайся к нему по имени, уважительно и без фамильярности.` : '',
     'Твои ответы нередко озвучиваются вслух: пиши естественной разговорной речью, коротко (1–3 предложения, если не просят подробнее), без списков, таблиц, markdown и эмодзи.',

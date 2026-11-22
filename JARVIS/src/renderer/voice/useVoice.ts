@@ -6,7 +6,7 @@ import { cancelSpeech, isSpeaking, speak, speechState } from './speech';
 
 export type VoiceUiState = 'idle' | 'listening' | 'hearing' | 'transcribing';
 
-/** Сколько секунд после ответа можно продолжать без слова «Джарвис». */
+/** Сколько секунд после ответа можно продолжать без слова-имени. */
 const AWAIT_MS = 12_000;
 const STT_TIMEOUT_MS = 30_000;
 
@@ -28,7 +28,7 @@ export interface VoiceControl {
   level: number;
   toggle(): void;
   stop(): void;
-  /** После ответа Джарвиса: несколько секунд принимать следующую фразу без слова «Джарвис». */
+  /** После ответа Джарвиса: несколько секунд принимать следующую фразу без слова-имени. */
   followUp(): void;
 }
 
@@ -80,11 +80,11 @@ export function useVoice(p: {
           }),
         ]).finally(() => window.clearTimeout(timer));
         const wake = cur.settings.voiceMode === 'wake';
-        const cmd = parseVoiceCommand(text, { requireWake: wake && !awaitingRef.current });
+        const cmd = parseVoiceCommand(text, { requireWake: wake && !awaitingRef.current, names: [cur.settings.assistantName] });
         const heard = text.trim().slice(0, 90);
         if (!heard) return; // тишина или шум
         if (cmd.kind === 'ignore') {
-          say(`Услышал: «${heard}» — но нет слова «Джарвис». Начните фразу со слова «Джарвис».`, 'warn');
+          say(`Услышал: «${heard}» — но нет слова «${cur.settings.assistantName}». Начните фразу с этого слова.`, 'warn');
         } else if (cmd.kind === 'stop') {
           say('Команда «стоп»');
           cancelSpeech();

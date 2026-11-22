@@ -29,6 +29,7 @@ export function SettingsView(props: {
   const [ttsModel, setTtsModel] = useState(s.ttsModel);
   const [ttsVoice, setTtsVoice] = useState(s.ttsVoice);
   const [userName, setUserName] = useState(s.userName);
+  const [aName, setAName] = useState(s.assistantName);
   const [ttsInstr, setTtsInstr] = useState(s.ttsInstructions);
   const [sysVoices, setSysVoices] = useState<{ name: string; lang: string }[]>([]);
   useEffect(() => {
@@ -113,6 +114,19 @@ export function SettingsView(props: {
       <div className="card">
         <h2>Личность</h2>
         <label className="field">
+          <span>Имя ассистента (на него он откликается голосом; «Джарвис» тоже работает)</span>
+          <div className="row">
+            <input id="assistant-name" value={aName} onChange={(e) => setAName(e.target.value)} maxLength={30} />
+            <button className="btn" disabled={aName.trim() === s.assistantName} onClick={() => run(() => props.onUpdate({ assistantName: aName.trim() }), 'Имя сохранено')}>
+              Сохранить
+            </button>
+          </div>
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={s.fullscreen} onChange={(e) => run(() => props.onUpdate({ fullscreen: e.target.checked }), 'Сохранено')} />
+          <span>Открывать на весь экран <span className="muted small">(F11 — переключить в любой момент)</span></span>
+        </label>
+        <label className="field">
           <span>Как к вам обращаться</span>
           <div className="row">
             <input value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="Например: Евгений" maxLength={40} />
@@ -134,7 +148,7 @@ export function SettingsView(props: {
         <label className="check">
           <input type="checkbox" checked={s.autoListen} onChange={(e) => run(() => props.onUpdate({ autoListen: e.target.checked }), e.target.checked ? 'При запуске Джарвис сразу начнёт слушать слово «Джарвис»' : 'Автопрослушивание выключено')} />
           <span>
-            Сразу слушать слово «Джарвис» при запуске <span className="muted small">(нужны разрешённый микрофон, режим «Джарвис» и ключ голоса; он поприветствует вас голосом)</span>
+            Сразу слушать своё имя при запуске <span className="muted small">(нужны разрешённый микрофон, режим «Джарвис» и ключ голоса; он поприветствует вас голосом)</span>
           </span>
         </label>
       </div>
@@ -173,7 +187,7 @@ export function SettingsView(props: {
           <span>Режим микрофона</span>
           <select value={s.voiceMode} onChange={(e) => run(() => props.onUpdate({ voiceMode: e.target.value as Settings['voiceMode'] }), 'Сохранено')}>
             <option value="push">По кнопке: нажали «Микрофон», сказали фразу</option>
-            <option value="wake">Постоянно слушать слово «Джарвис» (каждая фраза отправляется на распознавание)</option>
+            <option value="wake">Постоянно слушать имя ассистента (каждая фраза отправляется на распознавание)</option>
           </select>
           <small className="muted">Голосом можно сказать «стоп», чтобы остановить задачу. Опасные действия голосом не подтверждаются — только кнопкой в окне.</small>
         </label>

@@ -145,7 +145,7 @@ try {
   await settle();
 
   // 4в. Главный экран подсказывает, почему он не отвечает: фраза без слова «Джарвис» в режиме ожидания
-  await page.click('.nav-item:has-text("Джарвис")');
+  await page.click('.nav-item:has-text("Системно")');
   await page.waitForSelector('.hud-wakehint:has-text("Скажите")', { timeout: 30000 }); // окно «без слова Джарвис» закрыто
   transcripts = ['Купи хлеба и молока'];
   await page.waitForSelector('.hud-note-warn:has-text("нет слова")', { timeout: 30000 });

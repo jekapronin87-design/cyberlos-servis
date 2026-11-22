@@ -12,7 +12,8 @@ describe('разбор голосовых команд', () => {
   it('команда после слова-обращения', () => {
     expect(parseVoiceCommand('Джарвис, который час?', { requireWake: true })).toEqual({ kind: 'wake', text: 'который час?' });
     expect(parseVoiceCommand('Джарвис', { requireWake: true })).toEqual({ kind: 'wake', text: '' });
-    expect(parseVoiceCommand('Эй, Джарвис, привет', { requireWake: true })).toEqual({ kind: 'ignore' });
+    expect(parseVoiceCommand('Эй, Джарвис, привет', { requireWake: true })).toEqual({ kind: 'wake', text: 'привет' });
+    expect(parseVoiceCommand('Я думаю, Джарвис это хорошее имя', { requireWake: true })).toEqual({ kind: 'ignore' });
   });
   it('чужой разговор без обращения игнорируется в режиме ожидания', () => {
     expect(parseVoiceCommand('Купи хлеба и молока', { requireWake: true })).toEqual({ kind: 'ignore' });
@@ -146,5 +147,20 @@ describe('сбои сети голосового API — понятные соо
     await expect(new OpenAiCompatibleStt({ baseUrl: 'https://x', apiKey: 'k', model: 'm' }, timeout).transcribe(new Uint8Array([1]), 'audio/webm')).rejects.toThrow(/не ответил вовремя/);
     await expect(new OpenAiCompatibleStt({ baseUrl: 'https://x', apiKey: 'k', model: 'm' }, offline).transcribe(new Uint8Array([1]), 'audio/webm')).rejects.toThrow(/Нет связи/);
     await expect(new OpenAiCompatibleTts({ baseUrl: 'https://x', apiKey: 'k', model: 'm', voice: 'v' }, offline).synthesize('привет')).rejects.toThrow(/Нет связи/);
+  });
+});
+
+describe('имя «Системно»', () => {
+  it('узнаётся с ошибками распознавания и разрывом слова', () => {
+    for (const w of ['Системно', 'системно,', 'Систэмно', 'Систем но'.replace(' ', ''), 'Cистемно']) expect(isWakeWord(w)).toBe(true);
+    expect(parseVoiceCommand('Системно, открой аналитику', { requireWake: true })).toEqual({ kind: 'wake', text: 'открой аналитику' });
+    expect(parseVoiceCommand('Систем но открой Хром', { requireWake: true })).toEqual({ kind: 'wake', text: 'открой Хром' });
+    expect(parseVoiceCommand('Эй, Системно!', { requireWake: true })).toEqual({ kind: 'wake', text: '' });
+    expect(parseVoiceCommand('Системно, стоп', { requireWake: true })).toEqual({ kind: 'stop' });
+    expect(parseVoiceCommand('Работает системно и без сбоев', { requireWake: true })).toEqual({ kind: 'ignore' });
+  });
+  it('своё имя из настроек работает наравне', () => {
+    expect(parseVoiceCommand('Орион, который час', { requireWake: true, names: ['Орион'] })).toEqual({ kind: 'wake', text: 'который час' });
+    expect(parseVoiceCommand('Орион, который час', { requireWake: true })).toEqual({ kind: 'ignore' });
   });
 });

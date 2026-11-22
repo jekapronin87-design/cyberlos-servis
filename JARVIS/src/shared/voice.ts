@@ -2,12 +2,15 @@
 
 export type VoiceCommand =
   | { kind: 'stop' }
-  /** Слово «Джарвис» + команда (text может быть пустым — «Джарвис» без продолжения). */
+  /** Слово-активатор («Системно»/«Джарвис») + команда (text может быть пустым — «Джарвис» без продолжения). */
   | { kind: 'wake'; text: string }
   | { kind: 'ignore' };
 
-const WAKE_VARIANTS = ['джарвис', 'джарвиз', 'жарвис', 'джервис', 'джарвес', 'джарвисе', 'jarvis', 'жарвиз'];
+const BASE_WAKE = ['джарвис', 'джарвиз', 'жарвис', 'джервис', 'джарвес', 'джарвисе', 'jarvis', 'жарвиз', 'дарвис', 'системно', 'system', 'systemno', 'sistemno'];
+const FILLERS = ['эй', 'привет', 'слушай', 'ну', 'алло', 'хей', 'окей', 'ок', 'так', 'слышишь', 'давай', 'а'];
 const STOP_WORDS = ['стоп', 'остановись', 'остановите', 'отмена', 'отмени', 'хватит', 'замолчи', 'прекрати'];
+
+export const DEFAULT_ASSISTANT_NAME = 'Системно';
 
 export function normalizeSpeech(t: string): string {
   return t
@@ -29,31 +32,60 @@ function levenshtein(a: string, b: string): number {
   return dp[a.length]![b.length]!;
 }
 
-export function isWakeWord(word: string): boolean {
+/** Все слова-активаторы: имя ассистента и «Джарвис» (оставлен как второе имя). */
+export function wakeWords(names: string[] = []): string[] {
+  return [...new Set([...BASE_WAKE, ...names.map(normalizeSpeech).filter((n) => n.length >= 3 && !n.includes(' '))])];
+}
+
+/** Допуск на ошибки распознавания: чем длиннее слово, тем больше можно отличаться. */
+const tolerance = (len: number): number => (len >= 8 ? 2 : len >= 6 ? 1 : 0);
+
+export function isWakeWord(word: string, names: string[] = []): boolean {
   const w = normalizeSpeech(word);
   if (!w) return false;
-  return WAKE_VARIANTS.some((v) => v === w || (w.length >= 6 && levenshtein(v, w) <= 1));
+  return wakeWords(names).some((v) => v === w || (w.length >= 6 && levenshtein(v, w) <= tolerance(v.length)));
 }
 
 /** Является ли фраза командой остановки: «стоп», «Джарвис, стоп», «остановись». */
-export function isStopPhrase(text: string): boolean {
+export function isStopPhrase(text: string, names: string[] = []): boolean {
   const words = normalizeSpeech(text).split(' ').filter(Boolean);
   if (words.length === 0 || words.length > 4) return false;
-  const rest = isWakeWord(words[0]!) ? words.slice(1) : words;
+  const rest = isWakeWord(words[0]!, names) ? words.slice(1) : words;
   return rest.length > 0 && rest.length <= 2 && STOP_WORDS.includes(rest[0]!);
 }
 
+/** Ищет слово-активатор в начале фразы (допускаются «эй», «привет» перед ним и разрыв слова «систем но»). Возвращает остаток фразы. */
+function findWake(raw: string, names: string[]): { rest: string } | null {
+  const words = [...raw.matchAll(/[\p{L}]+/gu)];
+  const limit = Math.min(words.length, 3);
+  for (let i = 0; i < limit; i++) {
+    if (i > 0 && !words.slice(0, i).every((m) => FILLERS.includes(normalizeSpeech(m[0])))) break;
+    const w = words[i]!;
+    let end = w.index! + w[0].length;
+    let hit = false;
+    const nxt = words[i + 1];
+    // Сначала склеенное («систем но» → «системно»), иначе «систем» засчитается как опечатка и «но» уйдёт в команду.
+    if (nxt && isWakeWord(w[0] + nxt[0], names)) {
+      hit = true;
+      end = nxt.index! + nxt[0].length;
+    } else hit = isWakeWord(w[0], names);
+    if (hit) return { rest: raw.slice(end).replace(/^[\s,.!?:;\-–—]+/, '').trim() };
+  }
+  return null;
+}
+
 /**
- * wake=true: реагируем только на фразы со словом «Джарвис» в начале (или команду «стоп» без него).
+ * requireWake: реагируем только на фразы со словом-активатором в начале (или команду «стоп» без него).
  * Остальное — чужой разговор — отбрасывается.
  */
-export function parseVoiceCommand(transcript: string, opts: { requireWake: boolean }): VoiceCommand {
+export function parseVoiceCommand(transcript: string, opts: { requireWake: boolean; names?: string[] }): VoiceCommand {
   const raw = transcript.trim();
   if (!raw) return { kind: 'ignore' };
-  if (isStopPhrase(raw)) return { kind: 'stop' };
+  const names = opts.names ?? [];
+  if (isStopPhrase(raw, names)) return { kind: 'stop' };
 
-  const m = raw.match(/^[\s,.!?:;\-–—«»"']*([\p{L}]+)[\s,.!?:;\-–—]*(.*)$/su);
-  if (m && isWakeWord(m[1]!)) return { kind: 'wake', text: (m[2] ?? '').trim() };
+  const found = findWake(raw, names);
+  if (found) return { kind: 'wake', text: found.rest };
   if (opts.requireWake) return { kind: 'ignore' };
   return { kind: 'wake', text: raw };
 }

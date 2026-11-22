@@ -4,9 +4,10 @@ import { MessageView } from '../components/MessageView';
 import type { VoiceControl } from '../voice/useVoice';
 
 const MIC_LABEL = { idle: 'Микрофон', listening: 'Слушаю…', hearing: 'Слышу…', transcribing: 'Распознаю…' } as const;
-const SUGGESTIONS = ['Привет, Джарвис', 'Который час?', 'Запомни: отвечай коротко и по делу', 'Что ты помнишь?'];
+const SUGGESTIONS = ['Привет', 'Который час?', 'Запомни: отвечай коротко и по делу', 'Что ты помнишь?'];
 
 export function ChatView(props: {
+  name: string;
   info: AppInfo | null;
   messages: ChatMessage[];
   streaming: string;
@@ -41,7 +42,7 @@ export function ChatView(props: {
       <div className="messages" aria-live="polite">
         {empty && (
           <div className="welcome">
-            <h1>Я Джарвис</h1>
+            <h1>Я {props.name}</h1>
             <p className="muted">Ваш персональный ИИ-ассистент. Пока я умею общаться, помнить ваши предпочтения и проекты.</p>
             <div className="chips">
               {SUGGESTIONS.map((s) => (
@@ -61,7 +62,7 @@ export function ChatView(props: {
           </div>
         )}
         {props.voice.awaiting && <div className="typing muted">Слушаю вас… (скажите команду)</div>}
-        {props.running && !props.streaming && <div className="typing muted">Джарвис думает…</div>}
+        {props.running && !props.streaming && <div className="typing muted">{props.name} думает…</div>}
         <div ref={bottom} />
       </div>
       <form

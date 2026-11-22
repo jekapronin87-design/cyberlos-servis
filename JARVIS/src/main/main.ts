@@ -62,6 +62,8 @@ function createWindow(): void {
     title: 'JARVIS',
     backgroundColor: '#0b1020',
     show: false,
+    // Полный экран по умолчанию; при тестовой папке данных (JARVIS_DATA_DIR) не включается, чтобы окно можно было менять.
+    fullscreen: (core?.getSettings().fullscreen ?? true) && !process.env.JARVIS_DATA_DIR,
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/preload.cjs'),
@@ -74,6 +76,12 @@ function createWindow(): void {
     },
   });
   win.once('ready-to-show', () => win?.show());
+  win.webContents.on('before-input-event', (e, input) => {
+    if (input.type === 'keyDown' && input.key === 'F11') {
+      e.preventDefault();
+      win?.setFullScreen(!win.isFullScreen());
+    }
+  });
   win.on('closed', () => {
     win = null;
   });
@@ -210,7 +218,10 @@ if (!app.requestSingleInstanceLock()) {
       getWindow: () => win,
       isTrusted: isTrustedSender,
       onCameraFrame: (id, frame) => cameraWaiters.get(id)?.(frame),
-      onSettings: (st) => applyLoginItem(st.launchAtLogin),
+      onSettings: (st) => {
+        applyLoginItem(st.launchAtLogin);
+        if (win && !process.env.JARVIS_DATA_DIR && win.isFullScreen() !== st.fullscreen) win.setFullScreen(st.fullscreen);
+      },
       onRestart: () => {
         const c = core;
         core = null;

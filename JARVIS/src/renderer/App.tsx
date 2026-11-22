@@ -261,7 +261,7 @@ export function App() {
       const text =
         what === 'mic'
           ? 'Включить микрофон?\n\nФразы, которые вы произносите, будут отправляться выбранному сервису распознавания речи. Микрофон слушает только пока вы включили кнопку «Микрофон».'
-          : 'Включить камеру?\n\nДжарвис сможет смотреть на вас, когда вы об этом просите («Джарвис, что я сейчас делаю?»). Кадр отправляется ИИ только по запросу и хранится до перезапуска приложения. Пока камера включена, в окне виден индикатор и превью.';
+          : 'Включить камеру?\n\nАссистент сможет смотреть на вас, когда вы об этом просите («Системно, что я сейчас делаю?»). Кадр отправляется ИИ только по запросу и хранится до перезапуска приложения. Пока камера включена, в окне виден индикатор и превью.';
       if (!window.confirm(text)) return false;
       setSettings(await window.jarvis.settings.update(what === 'mic' ? { micEnabled: true } : { cameraEnabled: true }));
       return true;
@@ -319,7 +319,7 @@ export function App() {
   const current = confirms[0];
   const off = settings.disabledModules;
   const navAll = [
-    ['hud', 'Джарвис', <IconHud key="h" />],
+    ['hud', settings.assistantName, <IconHud key="h" />],
     ['chat', 'Чат', <IconChat key="c" />],
     ['crm', 'CRM', <IconCrm key="r" />],
     ['mentor', 'Наставник', <IconMentor key="n" />],
@@ -426,7 +426,7 @@ export function App() {
                 {convs.length === 0 && <li className="muted small pad">Пока пусто</li>}
               </ul>
             </aside>
-            <ChatView info={info} messages={messages} streaming={streaming} running={running} hasConversation={activeId !== null} onSend={(t) => void send(t)} onStop={stop} voice={voice} />
+            <ChatView name={settings.assistantName} info={info} messages={messages} streaming={streaming} running={running} hasConversation={activeId !== null} onSend={(t) => void send(t)} onStop={stop} voice={voice} />
           </div>
         )}
         {view === 'mentor' && <MentorView onAsk={(t) => void sendSpoken(t)} />}
