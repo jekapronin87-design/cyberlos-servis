@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Settings } from '../../shared/types';
 import { isEchoOfSpeech, isEndPhrase, isJunkTranscript, parseVoiceCommand, type UtteranceMeta } from '../../shared/voice';
 import { VoiceListener, type ListenerState } from './listener';
+import { uiSounds } from '../audio/uiSounds';
 import { cancelSpeech, isSpeaking, recentSpoken, speak, speechState } from './speech';
 
 export type VoiceUiState = 'idle' | 'listening' | 'hearing' | 'transcribing';
@@ -35,6 +36,10 @@ export interface VoiceControl {
   stop(): void;
   /** После ответа Системно: несколько секунд принимать следующую фразу без слова-имени. */
   followUp(): void;
+  /** Сколько секунд беседы без слова-имени осталось (0 — беседа не идёт). */
+  sessionLeft: number;
+  /** Самопроверка: снять зависшую озвучку, переподключить заглохший микрофон. Вызывается при возврате в окно/на главный экран. */
+  heal(): void;
 }
 
 export function useVoice(p: {
@@ -58,6 +63,8 @@ export function useVoice(p: {
   const listener = useRef<VoiceListener | null>(null);
   const awaitingRef = useRef(false);
   const awaitTimer = useRef<number | null>(null);
+  const awaitUntil = useRef(0);
+  const [sessionLeft, setSessionLeft] = useState(0);
   const queue = useRef<Promise<void>>(Promise.resolve());
   /** Сколько подряд «коротких» (≤3 слов) реплик принято в беседе без слова-имени — признак зацикливания на эхе или шуме. */
   const shortStreak = useRef(0);
@@ -69,8 +76,34 @@ export function useVoice(p: {
     setAwaiting(v);
     if (awaitTimer.current !== null) window.clearTimeout(awaitTimer.current);
     // Беседа: после слова-имени ассистент слушает без него, пока вы разговариваете; затихает после паузы (по умолчанию 2 минуты) или на «пока».
-    awaitTimer.current = v ? window.setTimeout(() => setAwait(false), Math.max(10, pRef.current.settings.voiceSessionSec) * 1000) : null;
-  }, []);
+    const arm = (ms: number): void => {
+      awaitUntil.current = Date.now() + ms;
+      awaitTimer.current = window.setTimeout(() => {
+        // Пока он думает или говорит — беседа не заканчивается: отсчёт паузы идёт только когда все молчат.
+        if (pRef.current.isBusy() || isSpeaking()) return arm(15_000);
+        awaitTimer.current = null;
+        awaitingRef.current = false;
+        setAwaiting(false);
+        setSessionLeft(0);
+        uiSounds.play('sleep');
+        say(`Беседа закончилась (пауза). Чтобы продолжить, скажите «${pRef.current.settings.assistantName}, …».`, 'warn');
+      }, ms);
+    };
+    if (v) arm(Math.max(10, pRef.current.settings.voiceSessionSec) * 1000);
+    else {
+      awaitTimer.current = null;
+      awaitUntil.current = 0;
+      setSessionLeft(0);
+    }
+  }, [say]);
+
+  // Обратный отсчёт беседы на экране — чтобы было видно, слушает ли он без слова-имени
+  useEffect(() => {
+    if (!awaiting) return;
+    const t = setInterval(() => setSessionLeft(Math.max(0, Math.round((awaitUntil.current - Date.now()) / 1000))), 1000);
+    setSessionLeft(Math.max(0, Math.round((awaitUntil.current - Date.now()) / 1000)));
+    return () => clearInterval(t);
+  }, [awaiting]);
 
   const handleUtterance = useCallback(
     async (blob: Blob, meta: UtteranceMeta): Promise<void> => {
@@ -165,6 +198,7 @@ export function useVoice(p: {
     setAwait(false);
   }, [setAwait]);
 
+  const toggleRef = useRef<() => void>(() => undefined);
   const toggle = useCallback(() => {
     void (async () => {
       if (listener.current?.active) return stop();
@@ -188,6 +222,11 @@ export function useVoice(p: {
         onUtterance: (b, meta) => {
           queue.current = queue.current.then(() => handleUtterance(b, meta));
         },
+        onLost: () => {
+          say('Микрофон отключился или «заснул» — переподключаю…', 'warn');
+          stop();
+          window.setTimeout(() => toggleRef.current(), 600);
+        },
         onError: (m) => {
           pRef.current.onError(m);
           stop();
@@ -197,6 +236,8 @@ export function useVoice(p: {
       await l.start();
     })();
   }, [handleUtterance, stop]);
+
+  toggleRef.current = toggle;
 
   // Главный выключатель выключен — мгновенно прекращаем прослушивание.
   useEffect(() => {
@@ -209,5 +250,29 @@ export function useVoice(p: {
     if (listener.current?.active && pRef.current.settings.voiceMode === 'wake') setAwait(true);
   }, [setAwait]);
 
-  return { state, awaiting, level, toggle, stop, followUp, note };
+  /** Самопроверка: зависшая озвучка и заглохший захват. */
+  const heal = useCallback(() => {
+    isSpeaking(); // сам сбросит зависший флаг «говорит»
+    const l = listener.current;
+    if (l?.active && !document.hidden && Date.now() - l.lastAudioAt > 3500) {
+      say('Звук с микрофона перестал поступать — переподключаю…', 'warn');
+      stop();
+      window.setTimeout(() => toggleRef.current(), 400);
+    }
+  }, [say, stop]);
+  useEffect(() => {
+    const t = setInterval(heal, 3000);
+    const onVis = (): void => {
+      if (!document.hidden) heal();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('focus', heal);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('focus', heal);
+    };
+  }, [heal]);
+
+  return { state, awaiting, level, toggle, stop, followUp, note, sessionLeft, heal };
 }

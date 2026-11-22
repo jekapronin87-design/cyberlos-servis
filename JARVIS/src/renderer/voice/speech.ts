@@ -37,8 +37,17 @@ const setSpeaking = (v: boolean): void => {
  * событие окончания не приходит), сбрасывает состояние, чтобы он не оставался «говорящим» навсегда
  * и не игнорировал ваши фразы.
  */
+/** Сколько запросов синтеза речи сейчас в полёте (озвучка «ждёт звук», это не зависание). */
+let pendingTts = 0;
+/** Реально ли что-то звучит или вот-вот зазвучит. */
+const reallyActive = (): boolean => pendingTts > 0 || document.querySelector('audio[data-jv-tts]') !== null || window.speechSynthesis?.speaking === true;
+
 export const isSpeaking = (): boolean => {
-  if (speaking && performance.now() - lastActivity > STALL_MS) cancelSpeech();
+  if (speaking) {
+    const idle = performance.now() - lastActivity;
+    // Флаг «говорит» есть, а звука нет и ждать нечего — озвучка зависла (бывает после сворачивания окна/смены устройства вывода): сбрасываем, иначе ассистент «навсегда занят» и не слышит вас.
+    if ((!reallyActive() && idle > 3500) || idle > STALL_MS) cancelSpeech();
+  }
   return speaking;
 };
 export const speechState = (): { speakingSince: number | null; lastSpokeEnd: number } => ({ speakingSince, lastSpokeEnd });
@@ -230,12 +239,17 @@ export class SpeechSession {
     setSpeaking(true);
     if (this.o.mode === 'api') {
       // Запрос стартует сразу (параллельно), воспроизведение — строго по порядку.
+      pendingTts += 1;
       const req = window.jarvis.voice
         .speak(text)
         .then(({ mime, data }) => new Blob([data as BlobPart], { type: mime }))
         .catch((e: unknown) => {
           if (this.alive) this.o.onError?.(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'Ошибка озвучки');
           return null;
+        })
+        .finally(() => {
+          pendingTts = Math.max(0, pendingTts - 1);
+          touch();
         });
       this.chain = this.chain.then(async () => {
         const blob = await req;

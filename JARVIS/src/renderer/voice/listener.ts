@@ -18,6 +18,8 @@ export interface ListenerOptions {
    * speaking — говорит прямо сейчас; lastEnd — когда закончил (performance.now()).
    */
   gate?: () => { speaking: boolean; lastEnd: number };
+  /** Микрофон пропал (отключили устройство, сон/пробуждение) — владелец должен переподключить захват. */
+  onLost?: () => void;
   /** Диагностика: фраза отброшена (причина). */
   onDropped?: (reason: 'echo' | 'short') => void;
   /** Для тестов. */
@@ -43,6 +45,8 @@ export class VoiceListener {
   private src: MediaStreamAudioSourceNode | null = null;
   private running = false;
   private startedAt = 0;
+  /** Когда в последний раз приходил звук с микрофона (Date.now()). */
+  lastAudioAt = 0;
   private noiseFloor = 0.006;
   /** Кольцо последних кусков звука (до начала фразы). */
   private pre: Chunk[] = [];
@@ -80,6 +84,12 @@ export class VoiceListener {
       return;
     }
     this.ctx = new AudioContext();
+    this.lastAudioAt = Date.now();
+    // Устройство отключили или система «усыпила» звук — сообщаем, чтобы захват перезапустили сами (раньше это выглядело как «слышит, но молчит»).
+    this.stream.getAudioTracks().forEach((t) => (t.onended = () => this.running && this.o.onLost?.()));
+    this.ctx.onstatechange = () => {
+      if (this.ctx && this.ctx.state === 'suspended') void this.ctx.resume().catch(() => undefined);
+    };
     this.src = this.ctx.createMediaStreamSource(this.stream);
     // ScriptProcessor: даёт «сырой» звук без перекодирования. Подключается к выходу через нулевое усиление, иначе браузер его не запускает.
     this.proc = this.ctx.createScriptProcessor(BUFFER, 1, 1);
@@ -125,6 +135,7 @@ export class VoiceListener {
 
   private onAudio(chunk: Float32Array): void {
     if (!this.running || !this.ctx) return;
+    this.lastAudioAt = Date.now();
     const ms = (chunk.length / this.ctx.sampleRate) * 1000;
     let sum = 0;
     for (const v of chunk) sum += v * v;

@@ -143,7 +143,9 @@ export function HudView(props: {
 
       {live && wake && !noteFresh && (
         <div className="hud-wakehint" role="status">
-          {props.voice.awaiting ? 'Слушаю — говорите' : `Скажите «${props.settings.assistantName}, …» — без этого слова я не отвечу`}
+          {props.voice.awaiting
+            ? `Беседа идёт — говорите без имени${props.voice.sessionLeft > 0 ? ` (ещё ${Math.floor(props.voice.sessionLeft / 60)}:${String(props.voice.sessionLeft % 60).padStart(2, '0')}, «пока» — закончить)` : ''}`
+            : `Беседа не идёт — начните со слова «${props.settings.assistantName}, …», без него я не отвечу`}
         </div>
       )}
       {noteFresh && (

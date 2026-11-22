@@ -162,7 +162,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cameraEnabled: false,
   fullscreen: true,
   youtubeDailyUnits: 3000,
-  voiceSessionSec: 120,
+  voiceSessionSec: 300,
   uiSounds: true,
   uiVolume: 70,
   uiAmbient: false,
