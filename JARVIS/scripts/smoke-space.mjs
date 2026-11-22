@@ -24,6 +24,15 @@ try {
   await page.waitForSelector('.hud');
   assert.ok(await page.locator('.starfield').count(), 'космический фон на месте');
 
+  // звуки интерфейса: клик по кнопке действительно запускает звук (счётчик проигранных звуков растёт)
+  const p0 = await page.evaluate(() => window.__uiSounds.played);
+  await page.click('.nav-item:has-text("Чат")');
+  await page.waitForTimeout(300);
+  await page.click('.nav-item:has-text("Системно")');
+  const p1 = await page.evaluate(() => window.__uiSounds.played);
+  assert.ok(p1 > p0, `звуки интерфейса не воспроизводятся: ${p0} → ${p1}`);
+  step(`звуки на кнопки работают (проиграно: ${p1 - p0})`);
+
   await page.fill('.hud-input', 'Открой аналитику');
   await page.press('.hud-input', 'Enter');
   await page.waitForSelector('[data-testid=space] .sp-tile');

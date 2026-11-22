@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Settings } from '../../shared/types';
-import { isLikelyEcho, parseVoiceCommand, type UtteranceMeta } from '../../shared/voice';
+import { isEndPhrase, isJunkTranscript, isLikelyEcho, parseVoiceCommand, type UtteranceMeta } from '../../shared/voice';
 import { VoiceListener, type ListenerState } from './listener';
 import { cancelSpeech, isSpeaking, speak, speechState } from './speech';
 
 export type VoiceUiState = 'idle' | 'listening' | 'hearing' | 'transcribing';
 
-/** Сколько секунд после ответа можно продолжать без слова-имени. */
-const AWAIT_MS = 12_000;
 const STT_TIMEOUT_MS = 30_000;
 
 const cleanError = (e: unknown): string =>
@@ -58,7 +56,8 @@ export function useVoice(p: {
     awaitingRef.current = v;
     setAwaiting(v);
     if (awaitTimer.current !== null) window.clearTimeout(awaitTimer.current);
-    awaitTimer.current = v ? window.setTimeout(() => setAwait(false), AWAIT_MS) : null;
+    // Беседа: после слова-имени ассистент слушает без него, пока вы разговариваете; затихает после паузы (по умолчанию 2 минуты) или на «пока».
+    awaitTimer.current = v ? window.setTimeout(() => setAwait(false), Math.max(10, pRef.current.settings.voiceSessionSec) * 1000) : null;
   }, []);
 
   const handleUtterance = useCallback(
@@ -74,12 +73,19 @@ export function useVoice(p: {
         const bytes = new Uint8Array(await blob.arrayBuffer());
         let timer = 0;
         const text = await Promise.race([
-          window.jarvis.voice.transcribe(bytes, 'audio/webm'),
+          window.jarvis.voice.transcribe(bytes, blob.type || 'audio/wav'),
           new Promise<never>((_, rej) => {
             timer = window.setTimeout(() => rej(new Error('Распознавание речи не ответило за 30 секунд. Проверьте интернет и ключ голоса.')), STT_TIMEOUT_MS);
           }),
         ]).finally(() => window.clearTimeout(timer));
         const wake = cur.settings.voiceMode === 'wake';
+        if (isJunkTranscript(text)) return; // «Продолжение следует…» и прочие выдумки распознавания на шуме
+        if (wake && awaitingRef.current && isEndPhrase(text)) {
+          setAwait(false);
+          say('Хорошо, я на связи. Позовите по имени, когда понадоблюсь.');
+          if (cur.settings.ttsMode !== 'off') void speak('Хорошо.', cur.settings.ttsMode, { systemVoice: cur.settings.systemVoice, speed: cur.settings.ttsSpeed }).catch(() => {});
+          return;
+        }
         const cmd = parseVoiceCommand(text, { requireWake: wake && !awaitingRef.current, names: [cur.settings.assistantName] });
         const heard = text.trim().slice(0, 90);
         if (!heard) return; // тишина или шум
@@ -102,7 +108,7 @@ export function useVoice(p: {
             }
             return;
           }
-          setAwait(false);
+          if (wake) setAwait(true); // беседа продолжается без слова-имени
           if (cur.isBusy()) {
             say(`Услышал: «${heard}» — но я ещё отвечаю на предыдущий запрос. Скажите «стоп».`, 'warn');
             return;

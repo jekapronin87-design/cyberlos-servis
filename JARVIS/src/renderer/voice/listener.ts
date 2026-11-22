@@ -1,5 +1,7 @@
 // Захват речи с микрофона и выделение фраз по паузам (VAD по громкости).
-// Звук никуда не отправляется отсюда: готовая фраза отдаётся вызывающему коду.
+// Звук пишется «как есть» (PCM) в кольцевой буфер, поэтому в начале фразы сохраняется 0,6 с ДО того, как сработал детектор:
+// начало слова («Си-» в «Системно») не обрезается. Готовая фраза кодируется в WAV 16 кГц и отдаётся вызывающему коду; сам модуль звук никуда не отправляет.
+import { concat, downsample, encodeWav, TARGET_RATE } from './wav';
 
 export type ListenerState = 'idle' | 'listening' | 'hearing';
 
@@ -16,29 +18,31 @@ export interface ListenerOptions {
   maxUtteranceMs?: number;
 }
 
-const POLL_MS = 50;
 const NO_SPEECH_TIMEOUT_MS = 8000;
-const IDLE_ROLLOVER_MS = 1500;
+const PRE_ROLL_MS = 600;
+const BUFFER = 2048;
 
 export class VoiceListener {
   private stream: MediaStream | null = null;
   private ctx: AudioContext | null = null;
-  private analyser: AnalyserNode | null = null;
-  private recorder: MediaRecorder | null = null;
-  /** Куски записи текущей фразы; у каждого MediaRecorder — свой массив. */
-  private chunks: Blob[] = [];
-  private timer: number | null = null;
-  private noiseFloor = 0.01;
-  private speechMs = 0;
-  private silenceMs = 0;
-  private segmentMs = 0;
-  private heard = false;
+  private proc: ScriptProcessorNode | null = null;
+  private src: MediaStreamAudioSourceNode | null = null;
   private running = false;
   private startedAt = 0;
-  private segStart = 0;
-  /** Момент, когда в фразе впервые прозвучала речь, и момент последней речи (без тишины вокруг). */
+  private noiseFloor = 0.006;
+  /** Кольцо последних кусков звука (до начала фразы). */
+  private pre: Float32Array[] = [];
+  private preMs = 0;
+  /** Текущая фраза. */
+  private rec: Float32Array[] | null = null;
+  private recMs = 0;
+  private speechMs = 0;
+  private silenceMs = 0;
+  private peak = 0;
+  private heard = false;
   private speechFirstAt = 0;
   private speechLastAt = 0;
+  private segStart = 0;
 
   constructor(private o: ListenerOptions) {}
 
@@ -50,7 +54,7 @@ export class VoiceListener {
     if (this.running) return;
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
       });
     } catch (e) {
       const name = e instanceof DOMException ? e.name : '';
@@ -62,126 +66,123 @@ export class VoiceListener {
       return;
     }
     this.ctx = new AudioContext();
-    const src = this.ctx.createMediaStreamSource(this.stream);
-    this.analyser = this.ctx.createAnalyser();
-    this.analyser.fftSize = 1024;
-    src.connect(this.analyser);
+    this.src = this.ctx.createMediaStreamSource(this.stream);
+    // ScriptProcessor: даёт «сырой» звук без перекодирования. Подключается к выходу через нулевое усиление, иначе браузер его не запускает.
+    this.proc = this.ctx.createScriptProcessor(BUFFER, 1, 1);
+    this.proc.onaudioprocess = (e) => this.onAudio(new Float32Array(e.inputBuffer.getChannelData(0)));
+    const mute = this.ctx.createGain();
+    mute.gain.value = 0;
+    this.src.connect(this.proc);
+    this.proc.connect(mute);
+    mute.connect(this.ctx.destination);
     this.running = true;
     this.startedAt = Date.now();
     this.o.onState('listening');
-    this.beginSegment();
-    this.timer = window.setInterval(() => this.tick(), POLL_MS);
   }
 
   stop(): void {
     if (!this.running && !this.stream) return;
     this.running = false;
-    if (this.timer !== null) window.clearInterval(this.timer);
-    this.timer = null;
-    this.discardSegment();
+    if (this.proc) this.proc.onaudioprocess = null;
+    this.proc?.disconnect();
+    this.src?.disconnect();
+    this.proc = null;
+    this.src = null;
+    this.rec = null;
+    this.pre = [];
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
     void this.ctx?.close().catch(() => {});
     this.ctx = null;
-    this.analyser = null;
     this.o.onLevel(0);
     this.o.onState('idle');
   }
 
-  private rms(): number {
-    const a = this.analyser!;
-    const buf = new Float32Array(a.fftSize);
-    a.getFloatTimeDomainData(buf);
-    let sum = 0;
-    for (const v of buf) sum += v * v;
-    return Math.sqrt(sum / buf.length);
-  }
-
-  private beginSegment(): void {
-    if (!this.stream) return;
-    const chunks: Blob[] = [];
-    this.chunks = chunks;
+  private reset(): void {
+    this.rec = null;
+    this.recMs = 0;
     this.speechMs = 0;
     this.silenceMs = 0;
-    this.segmentMs = 0;
+    this.peak = 0;
     this.heard = false;
-    this.segStart = performance.now();
     this.speechFirstAt = 0;
     this.speechLastAt = 0;
-    const rec = new MediaRecorder(this.stream, { mimeType: 'audio/webm;codecs=opus' });
-    rec.ondataavailable = (e) => e.data.size > 0 && chunks.push(e.data);
-    this.recorder = rec;
-    rec.start();
   }
 
-  private discardSegment(): void {
-    const rec = this.recorder;
-    this.recorder = null;
-    if (rec && rec.state !== 'inactive') {
-      rec.ondataavailable = null;
-      rec.stop();
-    }
-    this.chunks = [];
-  }
-
-  /** Завершить текущую фразу и отдать её наружу. */
-  private finishSegment(): void {
-    const rec = this.recorder;
-    if (!rec) return;
-    this.recorder = null;
-    const chunks = this.chunks;
-    // Для определения эха важна длительность самой речи, а не записи с тишиной вокруг.
-    const meta = { startedAt: this.speechFirstAt || this.segStart, endedAt: this.speechLastAt || performance.now() };
-    rec.onstop = () => {
-      const blob = new Blob(chunks, { type: 'audio/webm' });
-      if (blob.size > 0) this.o.onUtterance(blob, meta);
-    };
-    rec.stop();
-  }
-
-  private tick(): void {
-    if (!this.running || !this.analyser) return;
-    const level = this.rms();
+  private onAudio(chunk: Float32Array): void {
+    if (!this.running || !this.ctx) return;
+    const ms = (chunk.length / this.ctx.sampleRate) * 1000;
+    let sum = 0;
+    for (const v of chunk) sum += v * v;
+    const level = Math.sqrt(sum / chunk.length);
     this.o.onLevel(Math.min(1, level * 6));
-    const threshold = Math.max(0.02, this.noiseFloor * 3);
-    const speaking = level > threshold;
-    const minSpeech = this.o.minSpeechMs ?? 250;
-    const silenceLimit = this.o.silenceMs ?? 900;
-    const maxMs = this.o.maxUtteranceMs ?? 15000;
 
-    if (!speaking) this.noiseFloor = this.noiseFloor * 0.95 + level * 0.05; // подстраиваемся под шум
-    this.segmentMs += POLL_MS;
+    // Порог с гистерезисом: начать фразу труднее, чем продолжить (тихие хвосты слов не теряются). Нижняя граница — чтобы тихий голос не пропадал.
+    const startThr = Math.max(0.006, this.noiseFloor * 2.6);
+    const keepThr = Math.max(0.004, this.noiseFloor * 1.8);
+    const speaking = level > (this.rec ? keepThr : startThr);
+    if (!speaking && !this.rec) this.noiseFloor = this.noiseFloor * 0.97 + level * 0.03; // подстраиваемся под шум
 
+    const minSpeech = this.o.minSpeechMs ?? 160;
+    const silenceLimit = this.o.silenceMs ?? 850;
+    const maxMs = this.o.maxUtteranceMs ?? 20000;
+
+    if (!this.rec) {
+      // ждём речь; параллельно держим «предисторию»
+      this.pre.push(chunk);
+      this.preMs += ms;
+      while (this.preMs > PRE_ROLL_MS && this.pre.length > 1) this.preMs -= (this.pre.shift()!.length / this.ctx.sampleRate) * 1000;
+      if (speaking) {
+        this.rec = [...this.pre];
+        this.recMs = this.preMs;
+        this.pre = [];
+        this.preMs = 0;
+        this.segStart = performance.now() - this.recMs;
+        this.speechFirstAt = performance.now();
+        this.speechLastAt = performance.now();
+        this.speechMs = ms;
+        this.peak = level;
+        this.silenceMs = 0;
+      } else if (!this.o.continuous && Date.now() - this.startedAt > NO_SPEECH_TIMEOUT_MS) {
+        this.stop(); // никто не заговорил
+      }
+      return;
+    }
+
+    this.rec.push(chunk);
+    this.recMs += ms;
     if (speaking) {
-      const nowT = performance.now();
-      if (!this.speechFirstAt) this.speechFirstAt = nowT;
-      this.speechLastAt = nowT;
-      this.speechMs += POLL_MS;
+      this.speechMs += ms;
       this.silenceMs = 0;
+      this.speechLastAt = performance.now();
+      this.peak = Math.max(this.peak, level);
       if (!this.heard && this.speechMs >= minSpeech) {
         this.heard = true;
         this.o.onState('hearing');
       }
-    } else if (this.heard) {
-      this.silenceMs += POLL_MS;
+    } else {
+      this.silenceMs += ms;
     }
 
-    if (this.heard && (this.silenceMs >= silenceLimit || this.segmentMs >= maxMs)) {
-      this.finishSegment();
-      this.o.onState('listening');
-      if (this.o.continuous) this.beginSegment();
-      else this.stop();
+    // шум/щелчок: речи было слишком мало — выбрасываем и продолжаем слушать
+    if (!this.heard && this.silenceMs >= 450) {
+      this.reset();
       return;
     }
-    if (!this.heard) {
-      if (!this.o.continuous && Date.now() - this.startedAt > NO_SPEECH_TIMEOUT_MS) {
-        this.stop(); // никто не заговорил
-        return;
-      }
-      if (this.segmentMs >= IDLE_ROLLOVER_MS) {
-        this.discardSegment();
-        this.beginSegment(); // не копим тишину в памяти
-      }
+    if (this.heard && (this.silenceMs >= silenceLimit || this.recMs >= maxMs)) this.finish();
+  }
+
+  private finish(): void {
+    const rec = this.rec;
+    const rate = this.ctx?.sampleRate ?? 48000;
+    const meta = { startedAt: this.speechFirstAt || this.segStart, endedAt: this.speechLastAt || performance.now() };
+    const quiet = this.peak < 0.012; // почти тишина — отправлять на распознавание нет смысла
+    this.reset();
+    this.o.onState('listening');
+    if (rec && !quiet) {
+      const wav = encodeWav(downsample(concat(rec), rate, TARGET_RATE), Math.min(rate, TARGET_RATE));
+      this.o.onUtterance(new Blob([wav as BlobPart], { type: 'audio/wav' }), meta);
     }
+    if (!this.o.continuous) this.stop();
   }
 }

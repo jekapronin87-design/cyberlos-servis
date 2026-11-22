@@ -104,7 +104,7 @@ try {
   step('push-режим: фраза распознана, отправлена в чат, микрофон выключился сам');
 
   // 3. Режим «Джарвис»: чужие фразы игнорируются
-  await page.evaluate(() => window.jarvis.settings.update({ voiceMode: 'wake', ttsMode: 'api' }));
+  await page.evaluate(() => window.jarvis.settings.update({ voiceMode: 'wake', ttsMode: 'api', voiceSessionSec: 10 }));
   await page.reload();
   await page.click('.nav-item:has-text("Чат")');
   await page.waitForSelector('.btn-mic');

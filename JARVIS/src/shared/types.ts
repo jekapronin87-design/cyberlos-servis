@@ -106,6 +106,8 @@ export interface Settings {
   browserAutoApprove: boolean;
   /** Звуки интерфейса (клики, переключатели, пробуждение). */
   uiSounds: boolean;
+  /** Громкость звуков интерфейса, 0–100. */
+  uiVolume: number;
   /** Тихий фоновый «гул космоса». */
   uiAmbient: boolean;
   /** Открывать на весь экран (F11 — переключить). */
@@ -114,6 +116,8 @@ export interface Settings {
   assistantName: string;
   /** Как обращаться к пользователю. */
   userName: string;
+  /** Сколько секунд после обращения по имени ассистент продолжает слушать без слова-имени (беседа). */
+  voiceSessionSec: number;
   /** Включать прослушивание слова «Джарвис» сразу при запуске (нужны micEnabled и режим wake). */
   autoListen: boolean;
   /** Запускать JARVIS при входе в Windows. */
@@ -135,7 +139,7 @@ export const DEFAULT_SETTINGS: Settings = {
   voiceMode: 'push',
   ttsMode: 'system',
   voiceBaseUrl: 'https://api.openai.com/v1',
-  sttModel: 'gpt-4o-mini-transcribe',
+  sttModel: 'gpt-4o-transcribe',
   ttsModel: 'gpt-4o-mini-tts',
   ttsVoice: 'onyx',
   ttsInstructions:
@@ -153,7 +157,9 @@ export const DEFAULT_SETTINGS: Settings = {
   systemVoice: '',
   cameraEnabled: false,
   fullscreen: true,
+  voiceSessionSec: 120,
   uiSounds: true,
+  uiVolume: 70,
   uiAmbient: false,
   browserAutoApprove: false,
   telegramEnabled: false,

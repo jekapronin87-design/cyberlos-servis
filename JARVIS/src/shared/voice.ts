@@ -90,6 +90,28 @@ export function parseVoiceCommand(transcript: string, opts: { requireWake: boole
   return { kind: 'wake', text: raw };
 }
 
+/**
+ * Фразы, которые модели распознавания «выдумывают» на тишине и шуме («Продолжение следует…», «Субтитры сделал…»).
+ * Такие результаты отбрасываются, иначе в режиме беседы они превратились бы в «команды».
+ */
+const JUNK = /продолжение следует|субтитры (сделал|создал|подготовил|делал)|редактор субтитров|корректор|спасибо за (просмотр|внимание)|подписывайтесь|ставьте лайки|dimatorzok|amara\.org|thanks for watching|subtitles by|до новых встреч/i;
+export function isJunkTranscript(text: string): boolean {
+  const t = normalizeSpeech(text);
+  if (!t) return true;
+  if (JUNK.test(text)) return true;
+  if (t.length <= 2) return true; // «а», «э», «м»
+  const words = t.split(' ');
+  if (words.length >= 4 && new Set(words).size === 1) return true; // «да да да да»
+  return false;
+}
+
+/** «Пока», «отбой», «всё, спасибо» — закончить беседу (ассистент перестаёт слушать без слова-имени). */
+export function isEndPhrase(text: string): boolean {
+  const t = normalizeSpeech(text);
+  if (!t || t.split(' ').length > 6) return false;
+  return /^((все|ну|ладно|хорошо|системно|джарвис)\s+)*(отбой|пока|до свидания|до связи|свободен|отдыхай|можешь отдыхать|спи|отключись|закончили|на сегодня все|спасибо пока|спасибо все|все спасибо)(\s+(спасибо|системно|джарвис|пока))*$/.test(t);
+}
+
 export type NavIntent = 'analytics' | 'city' | 'home';
 
 /**

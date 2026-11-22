@@ -362,6 +362,32 @@ export function App() {
 
   // Состояние шара и его «громкость»
   const orbState: OrbState = speaking ? 'speaking' : running || voice.state === 'transcribing' ? 'thinking' : voice.state === 'listening' || voice.state === 'hearing' ? 'listening' : 'idle';
+  // Звуки интерфейса: на все кнопки, на «пробуждение», на начало ответа, на ошибки; звук включения при запуске
+  useEffect(() => installUiSounds(), []);
+  useEffect(() => {
+    uiSounds.enabled = settings.uiSounds;
+    uiSounds.volume = settings.uiVolume / 100;
+    if (settings.uiSounds && settings.uiAmbient) ambient.start();
+    else ambient.stop();
+  }, [settings.uiSounds, settings.uiAmbient, settings.uiVolume]);
+  useEffect(() => {
+    const t = setTimeout(() => uiSounds.play('boot'), 600);
+    return () => clearTimeout(t);
+  }, []);
+  useEffect(() => {
+    uiSounds.micActive = voice.state !== 'idle';
+  }, [voice.state]);
+  const prevOrb = useRef<OrbState>('idle');
+  useEffect(() => {
+    const prev = prevOrb.current;
+    prevOrb.current = orbState;
+    if (orbState === 'listening' && prev === 'idle') uiSounds.play('wake');
+    else if (orbState === 'speaking' && prev !== 'speaking') uiSounds.play('reply');
+    else if (orbState === 'idle' && prev === 'listening') uiSounds.play('sleep');
+  }, [orbState]);
+  useEffect(() => {
+    if (error) uiSounds.play('error');
+  }, [error]);
   const levelRef = useRef({ voiceLevel: 0, state: orbState });
   levelRef.current = { voiceLevel: voice.level, state: orbState };
   const getLevel = useCallback((): number => {

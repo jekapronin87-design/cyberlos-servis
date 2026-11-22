@@ -50,6 +50,7 @@ export class OpenAiCompatibleStt implements SpeechToText {
     form.append('model', this.cfg.model);
     form.append('language', 'ru');
     form.append('response_format', 'json');
+    form.append('temperature', '0'); // без «фантазий» на неразборчивой речи
     // Подсказка словаря повышает шанс правильно услышать имя ассистента.
     if (this.cfg.hint) form.append('prompt', this.cfg.hint);
     const res = await this.fetchImpl(`${this.cfg.baseUrl}/audio/transcriptions`, {

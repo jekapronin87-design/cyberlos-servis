@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateVoiceBaseUrl } from '../src/core/db/repositories';
 import { MAX_AUDIO_BYTES, OpenAiCompatibleStt, OpenAiCompatibleTts, SECRET_VOICE_KEY } from '../src/core/voice/service';
-import { parseAppIntent, parseNavIntent, isStopPhrase, isWakeWord, parseVoiceCommand, textForSpeech } from '../src/shared/voice';
+import { isEndPhrase, isJunkTranscript, parseAppIntent, parseNavIntent, isStopPhrase, isWakeWord, parseVoiceCommand, textForSpeech } from '../src/shared/voice';
 import { makeCore } from './helpers';
 
 describe('разбор голосовых команд', () => {
@@ -192,5 +192,16 @@ describe('голосовой запуск программ', () => {
   });
   it('сайты, файлы, настройки и длинные просьбы уходят модели', () => {
     for (const t of ['открой сайт яндекса', 'открой google.com', 'открой файл отчёт', 'открой папку проекты', 'открой настройки', 'открой аналитику', 'открой мне все отчёты за прошлый месяц', 'какой хром лучше', 'открой https://ya.ru']) expect(parseAppIntent(t), t).toBeNull();
+  });
+});
+
+describe('беседа: конец разговора и мусор распознавания', () => {
+  it('фразы завершения', () => {
+    for (const t of ['Пока', 'Отбой', 'Всё, спасибо', 'Ладно, пока', 'Системно, отбой', 'До свидания', 'на сегодня всё', 'спасибо, пока']) expect(isEndPhrase(t), t).toBe(true);
+    for (const t of ['пока не знаю что выбрать', 'расскажи про отбой в футболе', 'спасибо, а теперь открой аналитику', 'который час']) expect(isEndPhrase(t), t).toBe(false);
+  });
+  it('выдумки модели распознавания на тишине отбрасываются, обычные фразы — нет', () => {
+    for (const t of ['Продолжение следует...', 'Субтитры сделал DimaTorzok', 'Спасибо за просмотр!', 'Редактор субтитров А.Семкин', 'да да да да да', 'а', '']) expect(isJunkTranscript(t), t).toBe(true);
+    for (const t of ['Доброе утро', 'Который час?', 'Открой аналитику', 'Спасибо, это то, что нужно']) expect(isJunkTranscript(t), t).toBe(false);
   });
 });

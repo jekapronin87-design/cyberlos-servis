@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { MODULES, type AppInfo, type ModuleId, type Settings } from '../../shared/types';
 import { ComputerAccessCard } from '../components/ComputerAccessCard';
+import { uiSounds } from '../audio/uiSounds';
 import { CrmCard } from '../components/CrmCard';
 import { GatewayCard } from '../components/GatewayCard';
 import { ModelsCard } from '../components/ModelsCard';
@@ -126,6 +127,13 @@ export function SettingsView(props: {
           <input id="ui-sounds" type="checkbox" checked={s.uiSounds} onChange={(e) => run(() => props.onUpdate({ uiSounds: e.target.checked }), 'Сохранено')} />
           <span>Звуки интерфейса <span className="muted small">(клики, переключатели, «пробуждение» на имя, начало ответа)</span></span>
         </label>
+        <label className="field">
+          <span>Громкость звуков интерфейса: {s.uiVolume}%</span>
+          <div className="row">
+            <input id="ui-volume" type="range" min={0} max={100} step={5} defaultValue={s.uiVolume} disabled={!s.uiSounds} onChange={(e) => { uiSounds.volume = Number(e.target.value) / 100; }} onMouseUp={(e) => void run(() => props.onUpdate({ uiVolume: Number((e.target as HTMLInputElement).value) }), 'Сохранено')} style={{ flex: 1 }} />
+            <button className="btn" disabled={!s.uiSounds} onClick={() => void uiSounds.demo()}>Проверить звук</button>
+          </div>
+        </label>
         <label className="check">
           <input id="ui-ambient" type="checkbox" checked={s.uiAmbient} disabled={!s.uiSounds} onChange={(e) => run(() => props.onUpdate({ uiAmbient: e.target.checked }), 'Сохранено')} />
           <span>Тихий фон — «гул космоса»</span>
@@ -192,12 +200,16 @@ export function SettingsView(props: {
           </span>
         </label>
         <label className="field">
+          <span>Беседа: сколько секунд слушать без слова-имени после обращения</span>
+          <input id="voice-session" type="number" min={10} max={900} defaultValue={s.voiceSessionSec} onBlur={(e) => { const n = Number(e.target.value); if (n !== s.voiceSessionSec) void run(() => props.onUpdate({ voiceSessionSec: n }), 'Сохранено'); }} style={{ maxWidth: 140 }} />
+        </label>
+        <label className="field">
           <span>Режим микрофона</span>
           <select value={s.voiceMode} onChange={(e) => run(() => props.onUpdate({ voiceMode: e.target.value as Settings['voiceMode'] }), 'Сохранено')}>
             <option value="push">По кнопке: нажали «Микрофон», сказали фразу</option>
             <option value="wake">Постоянно слушать имя ассистента (каждая фраза отправляется на распознавание)</option>
           </select>
-          <small className="muted">Голосом можно сказать «стоп», чтобы остановить задачу. Опасные действия голосом не подтверждаются — только кнопкой в окне.</small>
+          <small className="muted">Скажите имя один раз («{s.assistantName}, доброе утро») — дальше можно разговаривать без него; фраза «пока» или «отбой» заканчивает беседу. Голосом можно сказать «стоп», чтобы остановить задачу. Опасные действия голосом не подтверждаются — только кнопкой в окне.</small>
         </label>
         <label className="field">
           <span>Озвучка ответов (на голосовые команды)</span>
@@ -288,6 +300,7 @@ export function SettingsView(props: {
           <label className="field grow">
             <span>Модель распознавания</span>
             <input value={sttModel} onChange={(e) => setSttModel(e.target.value)} spellCheck={false} />
+            {sttModel !== 'gpt-4o-transcribe' && <small className="muted">Точнее по-русски: <button type="button" className="link" onClick={() => setSttModel('gpt-4o-transcribe')}>gpt-4o-transcribe</button> (нажмите «Сохранить» ниже)</small>}
           </label>
           <label className="field grow">
             <span>Модель синтеза</span>

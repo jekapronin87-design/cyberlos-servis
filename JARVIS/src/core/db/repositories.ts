@@ -34,6 +34,16 @@ export function validateSettingsPatch(patch: unknown): Partial<Settings> {
     if (typeof p.telegramReplyInstructions !== 'string' || p.telegramReplyInstructions.length > 3000) throw new Error('Инструкции автоответчика: до 3000 символов');
     out.telegramReplyInstructions = p.telegramReplyInstructions;
   }
+  if ('voiceSessionSec' in p) {
+    const n = p.voiceSessionSec;
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < 10 || n > 900) throw new Error('Время беседы: целое число секунд от 10 до 900');
+    out.voiceSessionSec = n;
+  }
+  if ('uiVolume' in p) {
+    const n = p.uiVolume;
+    if (typeof n !== 'number' || !Number.isFinite(n) || n < 0 || n > 100) throw new Error('Громкость: число от 0 до 100');
+    out.uiVolume = Math.round(n);
+  }
   if ('routingMode' in p) {
     if (!['smart', 'claude', 'free'].includes(p.routingMode as string)) throw new Error('Неизвестный режим выбора модели');
     out.routingMode = p.routingMode as Settings['routingMode'];
