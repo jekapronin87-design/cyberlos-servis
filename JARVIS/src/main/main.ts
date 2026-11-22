@@ -160,6 +160,14 @@ if (!app.requestSingleInstanceLock()) {
         }
         ipc?.sendJobResult({ job: e.job, status: e.status, summary: e.summary, quiet: e.quiet });
       },
+      onTelegram: (e) => {
+        try {
+          if (e.kind !== 'incoming' && Notification.isSupported()) new Notification({ title: e.kind === 'handoff' ? `Telegram: ${e.name} просит человека` : 'Telegram', body: e.text.slice(0, 200) }).show();
+        } catch {
+          /* уведомления недоступны */
+        }
+        ipc?.sendTelegram(e);
+      },
       version: app.getVersion(),
       platform: process.platform,
       secrets,
@@ -234,6 +242,7 @@ if (!app.requestSingleInstanceLock()) {
     });
     applyLoginItem(core.getSettings().launchAtLogin);
     core.startScheduler();
+    core.startTelegram();
     void core.applyGateway();
 
     createWindow();

@@ -10,7 +10,7 @@ export type RiskLevel = 'safe' | 'low' | 'medium' | 'high' | 'critical';
 export type DataDomain = 'local' | 'training' | 'production';
 
 /** Модули JARVIS: каждый можно отключить целиком (инструменты, вкладки). */
-export type ModuleId = 'computer' | 'dev' | 'crm' | 'mentor' | 'scheduler' | 'telephony' | 'gateway';
+export type ModuleId = 'computer' | 'dev' | 'crm' | 'mentor' | 'scheduler' | 'telephony' | 'gateway' | 'telegram';
 export const MODULES: { id: ModuleId; title: string; description: string }[] = [
   { id: 'computer', title: 'Управление компьютером', description: 'Файлы, программы, браузер, снимок экрана, камера' },
   { id: 'dev', title: 'ИИ-программист', description: 'Проекты, правка кода, тесты, Git, субагенты' },
@@ -19,6 +19,7 @@ export const MODULES: { id: ModuleId; title: string; description: string }[] = [
   { id: 'scheduler', title: 'Задачи по расписанию', description: 'Фоновые поручения и уведомления' },
   { id: 'telephony', title: 'Телефония', description: 'Голосовое обучение по телефону (с согласиями)' },
   { id: 'gateway', title: 'Доступ с телефона', description: 'Управление JARVIS с мобильного' },
+  { id: 'telegram', title: 'Telegram', description: 'Бот: переписка, автоответчик, управление из Telegram' },
 ];
 
 export type ProviderChoice = 'auto' | 'demo' | 'anthropic';
@@ -95,6 +96,12 @@ export interface Settings {
   systemVoice: string;
   /** Главный выключатель камеры. Пока false — доступа к камере нет на уровне приложения. */
   cameraEnabled: boolean;
+  /** Telegram-бот включён (опрашивает сообщения). */
+  telegramEnabled: boolean;
+  /** Автоответчик: ИИ отвечает людям, написавшим боту (только текстом, по вашим инструкциям). */
+  telegramAutoReply: boolean;
+  /** Что можно рассказывать собеседникам (цены, график, контакты, FAQ). Автоответчик знает ТОЛЬКО это. */
+  telegramReplyInstructions: string;
   /** Открывать на весь экран (F11 — переключить). */
   fullscreen: boolean;
   /** Имя ассистента (на него он откликается голосом; «Джарвис» остаётся запасным именем). */
@@ -140,6 +147,9 @@ export const DEFAULT_SETTINGS: Settings = {
   systemVoice: '',
   cameraEnabled: false,
   fullscreen: true,
+  telegramEnabled: false,
+  telegramAutoReply: false,
+  telegramReplyInstructions: '',
   assistantName: 'Системно',
   userName: '',
   autoListen: false,
@@ -510,4 +520,37 @@ export interface ProviderStatusDto {
   model: string;
   baseUrl: string;
   help: string;
+}
+
+// ---------- Telegram ----------
+
+export interface TelegramStatusDto {
+  connected: boolean;
+  running: boolean;
+  botName: string;
+  botUsername: string;
+  ownerLinked: boolean;
+  ownerName: string;
+  error?: string;
+}
+
+export interface TelegramChatDto {
+  chatId: number;
+  kind: string;
+  name: string;
+  username: string;
+  isOwner: boolean;
+  autoReply: boolean;
+  needsHuman: boolean;
+  lastAt: string | null;
+  lastText: string;
+  unread: number;
+}
+
+export interface TelegramMessageDto {
+  id: number;
+  dir: 'in' | 'out';
+  text: string;
+  at: string;
+  auto: boolean;
 }

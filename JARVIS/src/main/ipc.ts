@@ -26,7 +26,7 @@ export function registerIpc(opts: {
   onSettings?: (next: Settings) => void;
   onRestart?: () => void;
   onCameraFrame?: (requestId: string, frame: { mime: string; base64: string; width: number; height: number } | null) => void;
-}): { sendConfirm: (r: ConfirmRequest) => void; closeConfirm: (id: string) => void; sendCameraRequest: (id: string) => void; sendJobResult: (r: unknown) => void } {
+}): { sendConfirm: (r: ConfirmRequest) => void; closeConfirm: (id: string) => void; sendCameraRequest: (id: string) => void; sendJobResult: (r: unknown) => void; sendTelegram: (r: unknown) => void } {
   const { core, getWindow, isTrusted } = opts;
 
   const handle = (channel: string, fn: (e: IpcMainInvokeEvent, ...args: unknown[]) => unknown): void => {
@@ -153,6 +153,28 @@ export function registerIpc(opts: {
     if (typeof v !== 'string' || !FREE_PROVIDER_PRESETS.some((p) => p.id === v)) throw new Error('Неизвестная модель');
     return v as FreeProviderId;
   };
+  handle(IPC.tgStatus, () => core.telegramStatus());
+  handle(IPC.tgConnect, (_e, token) => core.telegramConnect(str(token, 'token', 200)));
+  handle(IPC.tgDisconnect, () => core.telegramDisconnect());
+  handle(IPC.tgPairCode, () => core.telegramPairCode());
+  handle(IPC.tgUnlink, () => {
+    core.telegramUnlink();
+    return core.telegramStatus();
+  });
+  handle(IPC.tgChats, () => core.telegramChats());
+  handle(IPC.tgMessages, (_e, id) => core.telegramMessages(int(id, 'chatId')));
+  handle(IPC.tgSend, async (_e, id, text) => {
+    await core.telegramSend(int(id, 'chatId'), str(text, 'text', 4000));
+    return core.telegramMessages(int(id, 'chatId'));
+  });
+  handle(IPC.tgAutoReply, (_e, id, on) => {
+    core.telegramSetAutoReply(int(id, 'chatId'), on === true);
+    return core.telegramChats();
+  });
+  handle(IPC.tgResolve, (_e, id) => {
+    core.telegramResolveHuman(int(id, 'chatId'));
+    return core.telegramChats();
+  });
   handle(IPC.modelsList, () => core.providerStatuses());
   handle(IPC.modelsSetKey, (_e, id, key) => {
     core.setProviderKey(provId(id), str(key, 'key', 400));
@@ -259,6 +281,7 @@ export function registerIpc(opts: {
     sendConfirm: (r) => send(IPC.evtConfirm, r),
     sendCameraRequest: (id: string) => send(IPC.evtCameraCapture, id),
     sendJobResult: (r: unknown) => send(IPC.evtJob, r),
+    sendTelegram: (r: unknown) => send(IPC.evtTelegram, r),
     closeConfirm: (id) => send(IPC.evtConfirmClosed, id),
   };
 }

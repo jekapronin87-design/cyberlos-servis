@@ -13,6 +13,7 @@ import { JobsView } from './views/JobsView';
 import { parseNavIntent } from '../shared/voice';
 import { MentorView } from './views/MentorView';
 import { CallsView } from './views/CallsView';
+import { TelegramView } from './views/TelegramView';
 import { SpaceView, type SpaceMode } from './views/SpaceView';
 import { Starfield } from './hud/Starfield';
 import { MemoryView } from './views/MemoryView';
@@ -22,7 +23,7 @@ import { cancelSpeech, getSpeechLevel, onSpeaking, speak, SpeechSession } from '
 import { useCamera } from './voice/useCamera';
 import { useVoice } from './voice/useVoice';
 
-type View = 'hud' | 'chat' | 'crm' | 'mentor' | 'calls' | 'space' | 'jobs' | 'profile' | 'memory' | 'audit' | 'settings';
+type View = 'hud' | 'chat' | 'crm' | 'mentor' | 'calls' | 'telegram' | 'space' | 'jobs' | 'profile' | 'memory' | 'audit' | 'settings';
 
 const cleanError = (e: unknown): string =>
   e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'Неизвестная ошибка';
@@ -81,6 +82,16 @@ export function App() {
   const refreshMemory = useCallback(async () => setMemory(await window.jarvis.memory.list()), []);
 
   useEffect(() => onSpeaking(setSpeaking), []);
+
+  // Telegram: новое сообщение / просьба позвать человека / ошибка — баннер (системное уведомление показывает главный процесс)
+  useEffect(
+    () =>
+      window.jarvis.telegram.onEvent((e) => {
+        if (e.kind === 'incoming') return setJobToast({ title: `Telegram — ${e.name}`, summary: e.text, ok: true });
+        setJobToast({ title: e.kind === 'handoff' ? `Telegram: ${e.name} просит человека` : 'Telegram', summary: e.text, ok: e.kind !== 'error' });
+      }),
+    [],
+  );
 
   // Результат задачи по расписанию: баннер и (если включено) озвучка
   useEffect(
@@ -349,6 +360,7 @@ export function App() {
     ['space', 'Аналитика', <IconHud key="sp" />],
     ['crm', 'CRM', <IconCrm key="r" />],
     ['mentor', 'Наставник', <IconMentor key="n" />],
+    ['telegram', 'Telegram', <IconCalls key="tg" />],
     ['calls', 'Звонки', <IconCalls key="t" />],
     ['jobs', 'Задачи', <IconJobs key="j" />],
     ['profile', 'Досье', <IconProfile key="p" />],
@@ -356,7 +368,7 @@ export function App() {
     ['audit', 'Журнал', <IconAudit key="a" />],
     ['settings', 'Настройки', <IconSettings key="s" />],
   ] as const;
-  const needs: Partial<Record<View, ModuleId>> = { crm: 'crm', mentor: 'mentor', calls: 'telephony', jobs: 'scheduler' };
+  const needs: Partial<Record<View, ModuleId>> = { crm: 'crm', mentor: 'mentor', calls: 'telephony', telegram: 'telegram', jobs: 'scheduler' };
   const nav = navAll.filter(([v]) => !(needs[v] && off.includes(needs[v]!)));
 
   return (
@@ -458,6 +470,10 @@ export function App() {
         )}
         {view === 'mentor' && <MentorView onAsk={(t) => void sendSpoken(t)} />}
         {view === 'calls' && <CallsView />}
+        {view === 'telegram' && <TelegramView settings={settings} onUpdate={async (p) => {
+          setSettings(await window.jarvis.settings.update(p));
+          await refreshInfo();
+        }} />}
         {view === 'space' && <SpaceView mode={spaceMode} onMode={setSpaceMode} onClose={() => setView('hud')} onAsk={(t) => void sendSpoken(t)} orbState={orbState} getLevel={getLevel} />}
         {view === 'jobs' && <JobsView onOpenConversation={(id) => void openConversation(id)} />}
         {view === 'crm' && <CrmView onAsk={(t) => void sendSpoken(t)} onOpenSettings={() => setView('settings')} />}

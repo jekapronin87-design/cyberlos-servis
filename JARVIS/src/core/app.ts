@@ -25,6 +25,7 @@ import { Scheduler, type JobResultEvent } from './scheduler/runner';
 import { DeviceRepo, PairingCodes, type Device } from './gateway/devices';
 import { Gateway } from './gateway/server';
 import { registerImageTool } from './media/images';
+import { TelegramService, type TelegramEvent } from './telegram/service';
 import { TelephonyService } from './telephony/service';
 import { ProviderHttpError } from './providers/types';
 import { describeProviderHttp } from './providers/openai';
@@ -79,6 +80,12 @@ export interface CoreOptions {
   /** Подмена часов планировщика (тесты). */
   schedulerNow?: () => Date;
   schedulerTimeoutMs?: number;
+  /** Событие Telegram (входящее, передача человеку, ошибка) — для уведомлений. */
+  onTelegram?: (e: TelegramEvent) => void;
+  /** Для тестов: подмена сети Telegram. */
+  telegramFetch?: typeof fetch;
+  /** false — без фонового опроса Telegram (тесты). */
+  telegramPolling?: boolean;
   /** Подмена часов и ожидания ответа в телефонии (тесты). */
   telephonyNow?: () => Date;
   telephonyHearTimeoutMs?: number;
@@ -119,6 +126,7 @@ export class JarvisCore {
   readonly jobs: JobRepo;
   readonly scheduler: Scheduler;
   readonly telephony: TelephonyService;
+  readonly telegram: TelegramService;
   readonly devices: DeviceRepo;
   readonly pairing: PairingCodes;
   readonly gateway: Gateway;
@@ -249,6 +257,23 @@ export class JarvisCore {
       now: opts.schedulerNow,
       timeoutMs: opts.schedulerTimeoutMs,
     });
+    this.telegram = new TelegramService({
+      db: this.db,
+      secrets: opts.secrets,
+      audit: this.audit,
+      getSettings: () => this.settings.get(),
+      providers: this.providers,
+      runOwner: (convId, text, emit) => {
+        const r = this.startRemoteChat({ id: -1, name: 'Telegram', conversationId: convId }, convId, text, emit);
+        return { done: r.done, abort: r.abort };
+      },
+      createConversation: (title) => this.conversations.create(title).id,
+      conversationExists: (id) => this.conversations.get(id) !== null,
+      notify: opts.onTelegram,
+      fetchImpl: opts.telegramFetch,
+      polling: opts.telegramPolling,
+    });
+    this.telegram.registerTools(this.tools);
     this.devices = new DeviceRepo(this.db);
     this.pairing = new PairingCodes();
     this.gateway = new Gateway({
@@ -352,6 +377,11 @@ export class JarvisCore {
     if (next.gatewayAllowActions !== before.gatewayAllowActions) {
       this.audit.record({ actor: 'user', action: next.gatewayAllowActions ? 'gateway.actions_enabled' : 'gateway.actions_disabled', risk: 'high', decision: 'info' });
     }
+    if (next.telegramAutoReply !== before.telegramAutoReply) {
+      this.audit.record({ actor: 'user', action: next.telegramAutoReply ? 'telegram.autoreply_enabled' : 'telegram.autoreply_disabled', risk: 'high', decision: 'info' });
+    }
+    if (next.disabledModules.includes('telegram')) this.telegram.stop();
+    else if (before.disabledModules.includes('telegram')) this.telegram.start();
     if ((patch as Partial<Settings>).allowProductionWrites === true) {
       this.audit.record({ actor: 'user', action: 'security.production_writes_enabled', risk: 'high', decision: 'info' });
     }
@@ -546,6 +576,50 @@ export class JarvisCore {
     this.audit.record({ actor: 'user', action: 'gateway.device_revoked', target: String(id), decision: 'info' });
   }
 
+  // ----- Telegram -----
+  private telegramOn(): TelegramService {
+    if (this.settings.get().disabledModules.includes('telegram')) throw new Error('Модуль «Telegram» отключён в настройках.');
+    return this.telegram;
+  }
+  startTelegram(): void {
+    this.telegram.start();
+  }
+  telegramStatus() {
+    return this.telegramOn().status();
+  }
+  async telegramConnect(token: string) {
+    const st = await this.telegramOn().connect(token);
+    this.settings.update({ telegramEnabled: true });
+    this.telegram.start();
+    return { ...st, running: true };
+  }
+  telegramDisconnect() {
+    this.telegramOn().disconnect();
+    this.settings.update({ telegramEnabled: false, telegramAutoReply: false });
+    return this.telegram.status();
+  }
+  telegramPairCode() {
+    return this.telegramOn().pairingCode();
+  }
+  telegramUnlink() {
+    this.telegramOn().unlinkOwner();
+  }
+  telegramChats() {
+    return this.telegramOn().listChats();
+  }
+  telegramMessages(chatId: number) {
+    return this.telegramOn().messages(chatId);
+  }
+  telegramSend(chatId: number, text: string) {
+    return this.telegramOn().send(chatId, text, { limited: false });
+  }
+  telegramSetAutoReply(chatId: number, on: boolean) {
+    this.telegramOn().setAutoReply(chatId, on);
+  }
+  telegramResolveHuman(chatId: number) {
+    this.telegramOn().resolveHuman(chatId);
+  }
+
   // ----- телефония (каркас) -----
   private telephonyOn(): TelephonyService {
     if (this.settings.get().disabledModules.includes('telephony')) throw new Error('Модуль «Телефония» отключён в настройках.');
@@ -722,6 +796,7 @@ export class JarvisCore {
     this.scheduler.stop();
     this.stopAll();
     this.telephony.stopAll();
+    await this.telegram.close();
     await this.gateway.stop();
     await this.browser.close();
     this.db.close();

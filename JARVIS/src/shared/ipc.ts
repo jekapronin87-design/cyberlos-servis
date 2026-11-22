@@ -17,6 +17,9 @@ import type {
   GatewayStatusDto,
   GatewayDeviceDto,
   FreeProviderId,
+  TelegramStatusDto,
+  TelegramChatDto,
+  TelegramMessageDto,
   ProviderStatusDto,
   ConsentDto,
   CallDto,
@@ -72,6 +75,17 @@ export const IPC = {
   jobsRunNow: 'jobs:run-now',
   jobsRuns: 'jobs:runs',
   evtJob: 'evt:job',
+  tgStatus: 'tg:status',
+  tgConnect: 'tg:connect',
+  tgDisconnect: 'tg:disconnect',
+  tgPairCode: 'tg:pair-code',
+  tgUnlink: 'tg:unlink',
+  tgChats: 'tg:chats',
+  tgMessages: 'tg:messages',
+  tgSend: 'tg:send',
+  tgAutoReply: 'tg:autoreply',
+  tgResolve: 'tg:resolve',
+  evtTelegram: 'evt:telegram',
   modelsList: 'models:list',
   modelsSetKey: 'models:key:set',
   modelsClearKey: 'models:key:clear',
@@ -189,6 +203,20 @@ export interface JarvisApi {
     runs(id: number): Promise<{ startedAt: string; status: string; summary: string | null }[]>;
     /** Задача по расписанию завершилась (не приходит, если итог «всё спокойно»). */
     onResult(cb: (r: JobResultDto) => void): () => void;
+  };
+  telegram: {
+    status(): Promise<TelegramStatusDto>;
+    connect(token: string): Promise<TelegramStatusDto>;
+    disconnect(): Promise<TelegramStatusDto>;
+    pairCode(): Promise<{ code: string; expiresAt: string }>;
+    unlink(): Promise<TelegramStatusDto>;
+    chats(): Promise<TelegramChatDto[]>;
+    messages(chatId: number): Promise<TelegramMessageDto[]>;
+    send(chatId: number, text: string): Promise<TelegramMessageDto[]>;
+    setAutoReply(chatId: number, on: boolean): Promise<TelegramChatDto[]>;
+    resolveHuman(chatId: number): Promise<TelegramChatDto[]>;
+    /** Новое сообщение, запрос «позовите человека» или ошибка Telegram. */
+    onEvent(cb: (e: { kind: 'incoming' | 'handoff' | 'error'; chatId: number; name: string; text: string }) => void): () => void;
   };
   models: {
     list(): Promise<ProviderStatusDto[]>;

@@ -191,6 +191,31 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX idx_calls_phone ON calls (phone, started_at);
   `,
+  // 9: Telegram — чаты, сообщения, служебное состояние
+  `
+  CREATE TABLE tg_chats (
+    chat_id INTEGER PRIMARY KEY,
+    kind TEXT NOT NULL,
+    name TEXT NOT NULL,
+    username TEXT NOT NULL DEFAULT '',
+    is_owner INTEGER NOT NULL DEFAULT 0,
+    autoreply INTEGER NOT NULL DEFAULT 1,
+    needs_human INTEGER NOT NULL DEFAULT 0,
+    disclosed INTEGER NOT NULL DEFAULT 0,
+    last_at TEXT
+  );
+  CREATE TABLE tg_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id INTEGER NOT NULL REFERENCES tg_chats(chat_id) ON DELETE CASCADE,
+    dir TEXT NOT NULL CHECK (dir IN ('in','out')),
+    text TEXT NOT NULL,
+    at TEXT NOT NULL,
+    auto INTEGER NOT NULL DEFAULT 0,
+    seen INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX idx_tgm_chat ON tg_messages (chat_id, id);
+  CREATE TABLE tg_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+  `,
 ];
 
 export function openDatabase(path: string): Db {
