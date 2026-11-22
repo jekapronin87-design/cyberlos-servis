@@ -214,7 +214,10 @@ describe('эхо колонок по смыслу', () => {
     expect(isEchoOfSpeech('Евгений я здесь если надо спросите я отвечу', said)).toBe(true);
     expect(isEchoOfSpeech('Системно открой мне аналитику по заявкам', said)).toBe(false);
     expect(isEchoOfSpeech('какая сегодня погода в Москве', said)).toBe(false);
-    expect(isEchoOfSpeech('да я здесь', said)).toBe(false); // слишком коротко, чтобы судить
+    expect(isEchoOfSpeech('Евгений, я здесь', said)).toBe(true); // обрывок его же фразы — то самое «да, я здесь» по кругу
+    expect(isEchoOfSpeech('если надо спросите', said)).toBe(true);
+    expect(isEchoOfSpeech('да давайте', said)).toBe(false); // ваш короткий ответ, которого он не говорил
+    expect(isEchoOfSpeech('да', said)).toBe(false);
     expect(isEchoOfSpeech('что-то длинное и совсем другое', '')).toBe(false);
   });
 });

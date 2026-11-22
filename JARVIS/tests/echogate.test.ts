@@ -25,15 +25,15 @@ describe('отсев эха колонок', () => {
     const r = applyEchoGate(c, { startedAt: 9500, endedAt: 14000 }, { speaking: false, lastEnd: 10000 });
     expect('chunks' in r).toBe(true);
     if ('chunks' in r) {
-      expect(r.startedAt).toBe(10300);
-      expect(r.chunks[0]!.t - r.chunks[0]!.ms / 2).toBeGreaterThanOrEqual(10300);
-      expect(r.chunks.reduce((a, x) => a + x.ms, 0)).toBeGreaterThan(3500); // почти вся ваша речь сохранена
+      expect(r.startedAt).toBe(10600);
+      expect(r.chunks[0]!.t - r.chunks[0]!.ms / 2).toBeGreaterThanOrEqual(10600);
+      expect(r.chunks.reduce((a, x) => a + x.ms, 0)).toBeGreaterThan(3200); // почти вся ваша речь сохранена
     }
   });
 
   it('если после его речи звука почти нет — это был только хвост эха', () => {
     expect(applyEchoGate(mk(9000, 10200), { startedAt: 9000, endedAt: 10200 }, { speaking: false, lastEnd: 10000 })).toEqual({ drop: 'echo' });
-    expect(applyEchoGate(mk(9000, 10500), { startedAt: 9000, endedAt: 10500 }, { speaking: false, lastEnd: 10000 })).toEqual({ drop: 'short' });
+    expect(applyEchoGate(mk(9000, 10700), { startedAt: 9000, endedAt: 10700 }, { speaking: false, lastEnd: 10000 })).toEqual({ drop: 'short' });
   });
 
   it('давно после речи ассистента — ничего не режем', () => {

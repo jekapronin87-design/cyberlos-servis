@@ -49,6 +49,8 @@ export function useVoice(p: {
   const awaitingRef = useRef(false);
   const awaitTimer = useRef<number | null>(null);
   const queue = useRef<Promise<void>>(Promise.resolve());
+  /** Сколько подряд «коротких» (≤3 слов) реплик принято в беседе без слова-имени — признак зацикливания на эхе или шуме. */
+  const shortStreak = useRef(0);
   const pRef = useRef(p);
   pRef.current = p;
 
@@ -108,6 +110,17 @@ export function useVoice(p: {
             }
             return;
           }
+          const words = cmd.text.split(/\s+/).filter(Boolean).length;
+          if (wake && awaitingRef.current) {
+            shortStreak.current = words <= 3 ? shortStreak.current + 1 : 0;
+            // Две коротких реплики подряд без слова-имени — скорее всего, я слышу сам себя или шум, а не вас. Прекращаем, чтобы не зациклиться.
+            if (shortStreak.current >= 3) {
+              shortStreak.current = 0;
+              setAwait(false);
+              say('Похоже, я слышу сам себя или шум, а не вас, — беседу завершил. Скажите имя, когда понадоблюсь (в наушниках такого не бывает).', 'warn');
+              return;
+            }
+          } else shortStreak.current = 0;
           if (wake) setAwait(true); // беседа продолжается без слова-имени
           if (cur.isBusy()) {
             say(`Услышал: «${heard}» — но я ещё отвечаю на предыдущий запрос. Скажите «стоп».`, 'warn');

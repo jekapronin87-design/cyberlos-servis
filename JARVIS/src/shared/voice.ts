@@ -118,11 +118,13 @@ export function isEndPhrase(text: string): boolean {
  */
 export function isEchoOfSpeech(transcript: string, spokenRecently: string): boolean {
   const words = normalizeSpeech(transcript).split(' ').filter((w) => w.length >= 3);
-  if (words.length < 4) return false;
   const spoken = new Set(normalizeSpeech(spokenRecently).split(' ').filter((w) => w.length >= 3));
-  if (spoken.size === 0) return false;
+  if (spoken.size === 0 || words.length === 0) return false;
   const hit = words.filter((w) => spoken.has(w)).length;
-  return hit / words.length >= 0.75;
+  // Длинная фраза: почти все слова уже звучали из колонок. Короткая («Евгений, я здесь»): ВСЕ её слова из его же недавней речи —
+  // именно такие обрывки хвоста эха и запускали бесконечное «да, я здесь».
+  if (words.length >= 4) return hit / words.length >= 0.75;
+  return hit === words.length && words.join('').length >= 5;
 }
 
 export type NavIntent = 'analytics' | 'city' | 'home' | 'agents';
