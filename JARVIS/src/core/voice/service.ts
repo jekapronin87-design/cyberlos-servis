@@ -1,4 +1,5 @@
 import type { Settings } from '../../shared/types';
+import { isPromptLeak } from '../../shared/voice';
 import type { AuditLog } from '../security/audit';
 import type { SecretStore } from '../security/secrets';
 
@@ -63,7 +64,8 @@ export class OpenAiCompatibleStt implements SpeechToText {
     });
     if (!res.ok) throw await apiError(res);
     const json = (await res.json()) as { text?: unknown };
-    return typeof json.text === 'string' ? json.text.trim() : '';
+    const text = typeof json.text === 'string' ? json.text.trim() : '';
+    return this.cfg.hint && isPromptLeak(text, this.cfg.hint) ? '' : text;
   }
 }
 

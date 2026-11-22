@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { voiceLog } from '../voice/useVoice';
 import { VoiceListener } from '../voice/listener';
 
 const clean = (e: unknown): string =>
@@ -11,6 +12,11 @@ export function MicTest({ micEnabled }: { micEnabled: boolean }) {
   const [peak, setPeak] = useState(0);
   const [steps, setSteps] = useState<{ ok: boolean; text: string }[]>([]);
   const ref = useRef<VoiceListener | null>(null);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 1500);
+    return () => clearInterval(t);
+  }, []);
 
   const start = async (): Promise<void> => {
     setSteps([]);
@@ -65,6 +71,16 @@ export function MicTest({ micEnabled }: { micEnabled: boolean }) {
         </div>
         <span className="muted small">пик: {Math.round(peak * 100)}%</span>
       </div>
+      {voiceLog.length > 0 && (
+        <details open style={{ marginTop: 8 }}>
+          <summary className="small">Что я слышал и что с этим сделал (последние реплики)</summary>
+          <ul className="small" style={{ margin: '4px 0', paddingLeft: 18 }}>
+            {[...voiceLog].reverse().map((l, i) => (
+              <li key={i}><span className="muted">{new Date(l.at).toLocaleTimeString('ru-RU')}</span> {l.text}</li>
+            ))}
+          </ul>
+        </details>
+      )}
       {steps.map((s, i) => (
         <p key={i} className={s.ok ? 'small' : 'small'} style={{ color: s.ok ? undefined : 'var(--danger, #f88)', margin: '4px 0' }}>{s.ok ? '✓' : '✗'} {s.text}</p>
       ))}

@@ -11,6 +11,13 @@ const STT_TIMEOUT_MS = 30_000;
 const cleanError = (e: unknown): string =>
   e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'Ошибка голоса';
 
+/** Журнал голоса (последние реплики и что с ними сделано) — виден в «Настройки → Голос → Проверить микрофон»: помогает понять, почему он (не) отвечает. */
+export const voiceLog: { at: number; text: string }[] = [];
+const logVoice = (text: string): void => {
+  voiceLog.push({ at: Date.now(), text });
+  while (voiceLog.length > 14) voiceLog.shift();
+};
+
 export interface VoiceNote {
   text: string;
   kind: 'info' | 'warn';
@@ -44,7 +51,10 @@ export function useVoice(p: {
   const [awaiting, setAwaiting] = useState(false);
   const [level, setLevel] = useState(0);
   const [note, setNote] = useState<VoiceNote | null>(null);
-  const say = useCallback((text: string, kind: VoiceNote['kind'] = 'info') => setNote({ text, kind, at: Date.now() }), []);
+  const say = useCallback((text: string, kind: VoiceNote['kind'] = 'info') => {
+    logVoice(text);
+    setNote({ text, kind, at: Date.now() });
+  }, []);
   const listener = useRef<VoiceListener | null>(null);
   const awaitingRef = useRef(false);
   const awaitTimer = useRef<number | null>(null);
@@ -77,7 +87,10 @@ export function useVoice(p: {
           }),
         ]).finally(() => window.clearTimeout(timer));
         const wake = cur.settings.voiceMode === 'wake';
-        if (isJunkTranscript(text)) return;
+        if (isJunkTranscript(text)) {
+          if (text.trim()) logVoice(`Отброшено как шум/выдумку распознавания: «${text.trim().slice(0, 60)}»`);
+          return;
+        }
         if (isEchoOfSpeech(text, recentSpoken())) {
           say('Это слова самого ассистента из колонок — пропускаю. С наушниками такого не будет.');
           return;
@@ -90,7 +103,11 @@ export function useVoice(p: {
         }
         const cmd = parseVoiceCommand(text, { requireWake: wake && !awaitingRef.current, names: [cur.settings.assistantName] });
         const heard = text.trim().slice(0, 90);
-        if (!heard) return; // тишина или шум
+        if (!heard) {
+          logVoice('Фраза записана, но распознана как тишина — пропущена.');
+          return; // тишина или шум
+        }
+        logVoice(`Распознано: «${heard}»`);
         if (cmd.kind === 'ignore') {
           say(`Услышал: «${heard}» — но нет слова «${cur.settings.assistantName}». Начните фразу с этого слова.`, 'warn');
         } else if (cmd.kind === 'stop') {
@@ -104,7 +121,9 @@ export function useVoice(p: {
           }
           if (!cmd.text) {
             if (wake) {
+              const already = awaitingRef.current;
               setAwait(true);
+              if (already) return; // уже слушаю: повторный зов по имени (или шум) не должен вызывать новый ответ
               say('Слушаю вас…');
               if (cur.settings.ttsMode !== 'off') void speak('Слушаю.', cur.settings.ttsMode, { systemVoice: cur.settings.systemVoice, speed: cur.settings.ttsSpeed }).catch(() => {});
             }

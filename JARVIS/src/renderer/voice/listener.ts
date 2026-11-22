@@ -192,7 +192,8 @@ export class VoiceListener {
     const rec = this.rec;
     const rate = this.ctx?.sampleRate ?? 48000;
     const meta = { startedAt: this.speechFirstAt || this.segStart, endedAt: this.speechLastAt || performance.now() };
-    const quiet = this.peak < 0.012; // почти тишина — отправлять на распознавание нет смысла
+    // Почти тишина или ровный шум — отправлять на распознавание нет смысла (на тишине модель «выдумывает» слова): пик должен заметно превышать шум комнаты.
+    const quiet = this.peak < Math.max(0.015, this.noiseFloor * 3.2);
     this.reset();
     this.o.onState('listening');
     if (rec && !quiet) {

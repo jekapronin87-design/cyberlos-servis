@@ -69,7 +69,12 @@ function findWake(raw: string, names: string[]): { rest: string } | null {
       hit = true;
       end = nxt.index! + nxt[0].length;
     } else hit = isWakeWord(w[0], names);
-    if (hit) return { rest: raw.slice(end).replace(/^[\s,.!?:;\-–—]+/, '').trim() };
+    if (hit) {
+      let rest = raw.slice(end).replace(/^[\s,.!?:;\-–—]+/, '').trim();
+      // «Системно, Джарвис.» — это два зова по имени подряд, а не команда «Джарвис»
+      if (rest && normalizeSpeech(rest).split(' ').every((x) => isWakeWord(x, names))) rest = '';
+      return { rest };
+    }
   }
   return null;
 }
@@ -125,6 +130,17 @@ export function isEchoOfSpeech(transcript: string, spokenRecently: string): bool
   // именно такие обрывки хвоста эха и запускали бесконечное «да, я здесь».
   if (words.length >= 4) return hit / words.length >= 0.75;
   return hit === words.length && words.join('').length >= 5;
+}
+
+/**
+ * Модель распознавания на тишине и шуме иногда «зачитывает» подсказку-словарь, которую мы ей передали («Системно, Джарвис.»).
+ * Такой результат — не речь, его отбрасываем. Одно слово («Системно») — это настоящий зов по имени, его не трогаем.
+ */
+export function isPromptLeak(transcript: string, hint: string): boolean {
+  const t = normalizeSpeech(transcript).split(' ').filter(Boolean);
+  const h = new Set(normalizeSpeech(hint).split(' ').filter(Boolean));
+  if (t.length < 2 || h.size < 2) return false;
+  return t.every((w) => h.has(w)) && new Set(t).size >= 2;
 }
 
 export type NavIntent = 'analytics' | 'city' | 'home' | 'agents';

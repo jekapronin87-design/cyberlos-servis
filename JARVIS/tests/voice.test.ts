@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateVoiceBaseUrl } from '../src/core/db/repositories';
 import { MAX_AUDIO_BYTES, OpenAiCompatibleStt, OpenAiCompatibleTts, SECRET_VOICE_KEY } from '../src/core/voice/service';
-import { isEchoOfSpeech, isEndPhrase, isJunkTranscript, parseAppIntent, parseNavIntent, isStopPhrase, isWakeWord, parseVoiceCommand, textForSpeech } from '../src/shared/voice';
+import { isPromptLeak, isEchoOfSpeech, isEndPhrase, isJunkTranscript, parseAppIntent, parseNavIntent, isStopPhrase, isWakeWord, parseVoiceCommand, textForSpeech } from '../src/shared/voice';
 import { makeCore } from './helpers';
 
 describe('разбор голосовых команд', () => {
@@ -55,6 +55,12 @@ const okFetch = (calls: { url: string; init: RequestInit }[], body: unknown, sta
   }) as unknown as typeof fetch;
 
 describe('клиенты STT/TTS', () => {
+  it('STT: «зачитанная» подсказка на тишине даёт пустой результат, настоящий зов по имени — нет', async () => {
+    const mk = (text: string) => new OpenAiCompatibleStt({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm', hint: 'Системно, Джарвис.' }, okFetch([], { text }));
+    expect(await mk('Системно, Джарвис.').transcribe(new Uint8Array([1]), 'audio/wav')).toBe('');
+    expect(await mk('Системно.').transcribe(new Uint8Array([1]), 'audio/wav')).toBe('Системно.');
+  });
+
   it('STT: отправляет файл с ключом и возвращает текст', async () => {
     const calls: { url: string; init: RequestInit }[] = [];
     const stt = new OpenAiCompatibleStt({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm' }, okFetch(calls, { text: ' привет ' }));
@@ -219,5 +225,19 @@ describe('эхо колонок по смыслу', () => {
     expect(isEchoOfSpeech('да давайте', said)).toBe(false); // ваш короткий ответ, которого он не говорил
     expect(isEchoOfSpeech('да', said)).toBe(false);
     expect(isEchoOfSpeech('что-то длинное и совсем другое', '')).toBe(false);
+  });
+});
+
+describe('подсказка-словарь не становится командой', () => {
+  it('«зачитанная» подсказка на тишине отбрасывается, а зов по одному имени — нет', () => {
+    const hint = 'Системно, Джарвис.';
+    expect(isPromptLeak('Системно, Джарвис.', hint)).toBe(true);
+    expect(isPromptLeak('Джарвис, Системно', hint)).toBe(true);
+    expect(isPromptLeak('Системно', hint)).toBe(false);
+    expect(isPromptLeak('Системно, открой аналитику', hint)).toBe(false);
+  });
+  it('два зова по имени подряд — не команда «Джарвис»', () => {
+    expect(parseVoiceCommand('Системно, Джарвис.', { requireWake: true })).toEqual({ kind: 'wake', text: '' });
+    expect(parseVoiceCommand('Системно, Джарвис, который час?', { requireWake: true })).toEqual({ kind: 'wake', text: 'Джарвис, который час?' });
   });
 });
