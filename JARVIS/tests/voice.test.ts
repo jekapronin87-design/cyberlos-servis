@@ -173,6 +173,8 @@ describe('голосовая навигация', () => {
     expect(parseNavIntent('покажи наш город')).toBe('city');
     expect(parseNavIntent('Открой мой город')).toBe('city');
     expect(parseNavIntent('вернись')).toBe('home');
+    expect(parseNavIntent('открой агентов')).toBe('agents');
+    expect(parseNavIntent('запусти агента аналитик')).toBeNull();
     expect(parseNavIntent('закрой аналитику')).toBe('home');
   });
   it('обычные фразы и длинные просьбы не перехватываются', () => {

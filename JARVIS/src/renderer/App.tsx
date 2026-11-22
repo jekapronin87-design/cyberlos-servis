@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS, type ModuleId } from '../shared/types';
 import { stripUntrustedWrapper } from '../shared/text';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { HudView, type ActivityItem } from './hud/HudView';
-import { IconAudit, IconCalls, IconChat, IconCrm, IconHud, IconJobs, IconMentor, IconMemory, IconProfile, IconSettings } from './hud/Icons';
+import { IconAgents, IconAudit, IconCalls, IconChat, IconCrm, IconHud, IconJobs, IconMentor, IconMemory, IconProfile, IconSettings } from './hud/Icons';
 import type { OrbState } from './hud/Orb';
 import { AuditView } from './views/AuditView';
 import { ChatView } from './views/ChatView';
@@ -14,6 +14,7 @@ import { parseAppIntent, parseNavIntent } from '../shared/voice';
 import { MentorView } from './views/MentorView';
 import { CallsView } from './views/CallsView';
 import { TelegramView } from './views/TelegramView';
+import { AgentsView } from './views/AgentsView';
 import { SpaceView, type SpaceMode } from './views/SpaceView';
 import { SpaceBackground } from './hud/SpaceBackground';
 import { ambient, installUiSounds, uiSounds } from './audio/uiSounds';
@@ -24,7 +25,7 @@ import { cancelSpeech, getSpeechLevel, onSpeaking, speak, SpeechSession } from '
 import { useCamera } from './voice/useCamera';
 import { useVoice } from './voice/useVoice';
 
-type View = 'hud' | 'chat' | 'crm' | 'mentor' | 'calls' | 'telegram' | 'space' | 'jobs' | 'profile' | 'memory' | 'audit' | 'settings';
+type View = 'hud' | 'chat' | 'crm' | 'mentor' | 'calls' | 'telegram' | 'agents' | 'space' | 'jobs' | 'profile' | 'memory' | 'audit' | 'settings';
 
 const cleanError = (e: unknown): string =>
   e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'Неизвестная ошибка';
@@ -90,6 +91,16 @@ export function App() {
       window.jarvis.telegram.onEvent((e) => {
         if (e.kind === 'incoming') return setJobToast({ title: `Telegram — ${e.name}`, summary: e.text, ok: true });
         setJobToast({ title: e.kind === 'handoff' ? `Telegram: ${e.name} просит человека` : 'Telegram', summary: e.text, ok: e.kind !== 'error' });
+      }),
+    [],
+  );
+
+  // Агент закончил работу по расписанию: баннер с итогом
+  useEffect(
+    () =>
+      window.jarvis.agents.onResult((e) => {
+        setJobToast({ title: `Агент «${e.agent.name}»`, summary: e.run.report || e.agent.lastSummary || '', ok: e.run.status === 'ok' });
+        uiSounds.play(e.run.status === 'ok' ? 'success' : 'error');
       }),
     [],
   );
@@ -233,6 +244,10 @@ export function App() {
     if (intent === 'home') {
       setView('hud');
       say('Возвращаюсь.');
+    } else if (intent === 'agents') {
+      uiSounds.play('open');
+      setView('agents');
+      say('Открываю агентов.');
     } else {
       uiSounds.play('open');
       setSpaceMode(intent);
@@ -406,6 +421,7 @@ export function App() {
     ['space', 'Аналитика', <IconHud key="sp" />],
     ['crm', 'CRM', <IconCrm key="r" />],
     ['mentor', 'Наставник', <IconMentor key="n" />],
+    ['agents', 'Агенты', <IconAgents key="ag" />],
     ['telegram', 'Telegram', <IconCalls key="tg" />],
     ['calls', 'Звонки', <IconCalls key="t" />],
     ['jobs', 'Задачи', <IconJobs key="j" />],
@@ -414,7 +430,7 @@ export function App() {
     ['audit', 'Журнал', <IconAudit key="a" />],
     ['settings', 'Настройки', <IconSettings key="s" />],
   ] as const;
-  const needs: Partial<Record<View, ModuleId>> = { crm: 'crm', mentor: 'mentor', calls: 'telephony', telegram: 'telegram', jobs: 'scheduler' };
+  const needs: Partial<Record<View, ModuleId>> = { crm: 'crm', mentor: 'mentor', calls: 'telephony', telegram: 'telegram', agents: 'agents', jobs: 'scheduler' };
   const nav = navAll.filter(([v]) => !(needs[v] && off.includes(needs[v]!)));
 
   return (
@@ -516,6 +532,7 @@ export function App() {
         )}
         {view === 'mentor' && <MentorView onAsk={(t) => void sendSpoken(t)} />}
         {view === 'calls' && <CallsView />}
+        {view === 'agents' && <AgentsView />}
         {view === 'telegram' && <TelegramView settings={settings} onUpdate={async (p) => {
           setSettings(await window.jarvis.settings.update(p));
           await refreshInfo();

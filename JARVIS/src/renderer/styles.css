@@ -282,3 +282,6 @@ th { background: var(--panel-solid); position: sticky; top: 0; font-family: var(
 .city-tip { position: absolute; pointer-events: none; background: rgba(5, 15, 30, 0.92); border: 1px solid rgba(90, 200, 255, 0.5); color: #dff4ff; padding: 6px 10px; border-radius: 8px; font-size: 13px; z-index: 3; }
 .space-legend { color: #8fc9ee; font-size: 12px; margin-top: 6px; } .space-legend .hot { color: #ff9a80; }
 @media (prefers-reduced-motion: reduce) { .space-orb, .sp-card, .space, .sp-bar-fill { animation: none !important; } }
+
+.grid-checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 18px; margin-bottom: 8px; }
+@media (max-width: 1000px) { .grid-checks { grid-template-columns: 1fr; } }

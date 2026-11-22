@@ -78,28 +78,37 @@ export class AgentRunner {
 
   async run(id: AgentId, task: string, projectPath: string, ctx: Omit<ExecContext, 'actor' | 'allowedTools'>): Promise<AgentRunResult> {
     const role = ROLES[id];
+    const allowed = new Set(role.tools.filter((t) => this.d.tools.get(t)));
+    return this.runSpec({ actor: `agent:${id}`, system: buildAgentPrompt(role, projectPath), allowed, maxSteps: MAX_AGENT_STEPS, auditDetails: { project: projectPath, taskChars: task.length } }, task, ctx);
+  }
+
+  /** Общий цикл «модель → инструменты» для встроенных ролей и пользовательских агентов. Инструменты — только из `allowed`, всё через ToolExecutor. */
+  async runSpec(
+    spec: { actor: string; system: string; allowed: Set<string>; maxSteps: number; auditDetails?: Record<string, unknown> },
+    task: string,
+    ctx: Omit<ExecContext, 'actor' | 'allowedTools'>,
+    onStep?: (line: string) => void,
+  ): Promise<AgentRunResult> {
     const settings = this.d.getSettings();
     const resolved = this.d.providers.resolve(settings);
     if (resolved.mode === 'demo') {
-      throw new Error('Субагенты работают только с настоящей моделью. Подключите ключ Claude в «Настройках».');
+      throw new Error('Агенты работают только с настоящей моделью. Подключите ключ Claude (или бесплатную модель) в «Настройках».');
     }
-    const allowed = new Set(role.tools.filter((t) => this.d.tools.get(t)));
+    const { actor, system, allowed } = spec;
+    const MAX = spec.maxSteps;
     const specs = this.d.tools.specs().filter((s) => allowed.has(s.name));
-    const actor = `agent:${id}`;
-    this.d.audit.record({ actor, action: 'agent.start', decision: 'info', details: { project: projectPath, taskChars: task.length } });
-
-    const system = buildAgentPrompt(role, projectPath);
+    this.d.audit.record({ actor, action: 'agent.start', decision: 'info', details: spec.auditDetails ?? { taskChars: task.length } });
     const messages: ProviderMessage[] = [{ role: 'user', content: [{ type: 'text', text: task }] }];
     const steps: string[] = [];
     let report = '';
     let stoppedByLimit = false;
 
-    for (let step = 0; step <= MAX_AGENT_STEPS; step++) {
+    for (let step = 0; step <= MAX; step++) {
       if (ctx.signal.aborted) {
         report ||= 'Остановлено пользователем.';
         break;
       }
-      const last = step === MAX_AGENT_STEPS;
+      const last = step === MAX;
       let text = '';
       const uses: ToolUseBlock[] = [];
       try {
@@ -127,7 +136,9 @@ export class AgentRunner {
       for (const use of uses) {
         const r = await this.d.executor.execute(use, { ...ctx, actor, allowedTools: allowed });
         results.push(r);
-        steps.push(`${r.denied ? '✗' : r.isError ? '!' : '✓'} ${use.name}${summarize(use.input)}`);
+        const line = `${r.denied ? '✗' : r.isError ? '!' : '✓'} ${use.name}${summarize(use.input)}`;
+        steps.push(line);
+        onStep?.(line);
       }
       messages.push({ role: 'tool', content: results });
       if (last) stoppedByLimit = true;

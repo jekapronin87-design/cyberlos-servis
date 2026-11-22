@@ -18,6 +18,10 @@ import type {
   GatewayDeviceDto,
   FreeProviderId,
   TelegramStatusDto,
+  AgentDto,
+  AgentInputDto,
+  AgentRunDto,
+  AgentTemplateDto,
   TelegramChatDto,
   TelegramMessageDto,
   ProviderStatusDto,
@@ -78,6 +82,15 @@ export const IPC = {
   appsStartMenu: 'apps:startmenu',
   appsSetStartMenu: 'apps:startmenu:set',
   appsLaunch: 'apps:launch',
+  agentsList: 'agents:list',
+  agentsTemplates: 'agents:templates',
+  agentsSave: 'agents:save',
+  agentsDelete: 'agents:delete',
+  agentsRun: 'agents:run',
+  agentsStop: 'agents:stop',
+  agentsRuns: 'agents:runs',
+  agentsClearNotes: 'agents:clear-notes',
+  evtAgent: 'evt:agent',
   tgStatus: 'tg:status',
   tgConnect: 'tg:connect',
   tgDisconnect: 'tg:disconnect',
@@ -213,6 +226,19 @@ export interface JarvisApi {
     setStartMenu(on: boolean): Promise<ComputerAccess>;
     /** Голосовая команда «открой …»: matched=false — не нашли, пусть разбирается модель. */
     launch(query: string): Promise<{ matched: boolean; ok: boolean; message: string }>;
+  };
+  agents: {
+    list(): Promise<AgentDto[]>;
+    templates(): Promise<AgentTemplateDto[]>;
+    save(input: AgentInputDto): Promise<AgentDto>;
+    remove(id: number): Promise<void>;
+    /** Запустить агента (идёт в фоне; состояние — через list/runs). Подтверждения действий — на экране. */
+    run(id: number, task: string): Promise<void>;
+    stop(id: number): Promise<void>;
+    runs(id: number): Promise<AgentRunDto[]>;
+    clearNotes(id: number): Promise<void>;
+    /** Агент закончил работу по расписанию (не приходит, если итог «OK»). */
+    onResult(cb: (e: { agent: AgentDto; run: AgentRunDto }) => void): () => void;
   };
   telegram: {
     status(): Promise<TelegramStatusDto>;

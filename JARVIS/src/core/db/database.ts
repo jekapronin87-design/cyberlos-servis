@@ -216,6 +216,39 @@ const MIGRATIONS: string[] = [
   CREATE INDEX idx_tgm_chat ON tg_messages (chat_id, id);
   CREATE TABLE tg_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
   `,
+  // 10: пользовательские ИИ-агенты и журнал их запусков
+  `
+  CREATE TABLE agents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL DEFAULT '',
+    instructions TEXT NOT NULL,
+    groups TEXT NOT NULL DEFAULT '[]',
+    mode TEXT NOT NULL DEFAULT 'read' CHECK (mode IN ('read','act')),
+    sched_kind TEXT NOT NULL DEFAULT 'none',
+    sched_time TEXT,
+    sched_interval INTEGER,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    notes TEXT NOT NULL DEFAULT '',
+    next_run_at TEXT,
+    last_run_at TEXT,
+    last_status TEXT,
+    last_summary TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE agent_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    status TEXT NOT NULL,
+    trigger TEXT NOT NULL,
+    task TEXT NOT NULL DEFAULT '',
+    report TEXT NOT NULL DEFAULT '',
+    steps TEXT NOT NULL DEFAULT '[]'
+  );
+  CREATE INDEX idx_agent_runs ON agent_runs (agent_id, id);
+  `,
 ];
 
 export function openDatabase(path: string): Db {

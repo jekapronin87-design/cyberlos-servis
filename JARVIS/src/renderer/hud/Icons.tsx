@@ -18,3 +18,4 @@ export const IconJobs = () => I(<><circle cx="12" cy="13" r="8" /><path d="M12 9
 export const IconMentor = () => I(<><path d="M2 9l10-5 10 5-10 5z" /><path d="M6 11v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5" /></>);
 
 export const IconCalls = () => I(<><path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z" /></>);
+export const IconAgents = () => I(<><circle cx="12" cy="8" r="3.2" /><path d="M5 20c0-3.6 3-6 7-6s7 2.4 7 6" /><path d="M3 5h3M18 5h3M4.5 9.5L7 8M19.5 9.5L17 8" /></>);

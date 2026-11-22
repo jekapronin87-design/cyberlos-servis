@@ -161,6 +161,15 @@ if (!app.requestSingleInstanceLock()) {
         }
         ipc?.sendJobResult({ job: e.job, status: e.status, summary: e.summary, quiet: e.quiet });
       },
+      onAgent: (e) => {
+        if (e.quiet) return;
+        try {
+          if (Notification.isSupported()) new Notification({ title: `Агент «${e.agent.name}»`, body: (e.run.report || e.agent.lastSummary || '').slice(0, 220) }).show();
+        } catch {
+          /* уведомления недоступны */
+        }
+        ipc?.sendAgent({ agent: e.agent, run: e.run });
+      },
       onTelegram: (e) => {
         try {
           if (e.kind !== 'incoming' && Notification.isSupported()) new Notification({ title: e.kind === 'handoff' ? `Telegram: ${e.name} просит человека` : 'Telegram', body: e.text.slice(0, 200) }).show();
@@ -249,6 +258,7 @@ if (!app.requestSingleInstanceLock()) {
     applyLoginItem(core.getSettings().launchAtLogin);
     core.startScheduler();
     core.startTelegram();
+    core.startAgents();
     void core.applyGateway();
 
     createWindow();

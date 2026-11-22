@@ -73,6 +73,17 @@ const api: JarvisApi = {
     setStartMenu: (on) => invoke(IPC.appsSetStartMenu, on),
     launch: (query) => invoke(IPC.appsLaunch, query),
   },
+  agents: {
+    list: () => invoke(IPC.agentsList),
+    templates: () => invoke(IPC.agentsTemplates),
+    save: (input) => invoke(IPC.agentsSave, input),
+    remove: (id) => invoke(IPC.agentsDelete, id),
+    run: (id, task) => invoke(IPC.agentsRun, id, task),
+    stop: (id) => invoke(IPC.agentsStop, id),
+    runs: (id) => invoke(IPC.agentsRuns, id),
+    clearNotes: (id) => invoke(IPC.agentsClearNotes, id),
+    onResult: subscribe(IPC.evtAgent),
+  },
   telegram: {
     status: () => invoke(IPC.tgStatus),
     connect: (token) => invoke(IPC.tgConnect, token),

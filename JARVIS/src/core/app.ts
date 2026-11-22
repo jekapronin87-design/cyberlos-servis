@@ -26,6 +26,7 @@ import { DeviceRepo, PairingCodes, type Device } from './gateway/devices';
 import { Gateway } from './gateway/server';
 import { registerImageTool } from './media/images';
 import { TelegramService, type TelegramEvent } from './telegram/service';
+import { AgentService, AGENT_TEMPLATES, type AgentEvent } from './agents/service';
 import { TelephonyService } from './telephony/service';
 import { ProviderHttpError } from './providers/types';
 import { describeProviderHttp } from './providers/openai';
@@ -81,6 +82,8 @@ export interface CoreOptions {
   /** Подмена часов планировщика (тесты). */
   schedulerNow?: () => Date;
   schedulerTimeoutMs?: number;
+  /** Результат запуска агента по расписанию (в Electron — системное уведомление и сообщение окну). */
+  onAgent?: (e: AgentEvent) => void;
   /** Событие Telegram (входящее, передача человеку, ошибка) — для уведомлений. */
   onTelegram?: (e: TelegramEvent) => void;
   /** Для тестов: подмена сети Telegram. */
@@ -128,6 +131,7 @@ export class JarvisCore {
   readonly scheduler: Scheduler;
   readonly telephony: TelephonyService;
   readonly telegram: TelegramService;
+  readonly agents: AgentService;
   readonly devices: DeviceRepo;
   readonly pairing: PairingCodes;
   readonly gateway: Gateway;
@@ -261,6 +265,17 @@ export class JarvisCore {
       now: opts.schedulerNow,
       timeoutMs: opts.schedulerTimeoutMs,
     });
+    this.agents = new AgentService({
+      db: this.db,
+      runner,
+      tools: this.tools,
+      audit: this.audit,
+      getSettings: () => this.settings.get(),
+      notify: opts.onAgent,
+      now: opts.schedulerNow,
+      notReady: () => (this.providers.resolve(this.settings.get()).mode === 'demo' ? 'Агентам нужна настоящая модель: подключите ключ Claude или бесплатную модель в «Настройках».' : null),
+    });
+    this.agents.registerTools(this.tools);
     this.telegram = new TelegramService({
       db: this.db,
       secrets: opts.secrets,
@@ -494,6 +509,7 @@ export class JarvisCore {
     }
     for (const c of this.runs.values()) c.abort();
     this.scheduler.abort();
+    this.agents.stopAll();
     this.confirm.rejectAll();
   }
 
@@ -578,6 +594,42 @@ export class JarvisCore {
   revokeDevice(id: number): void {
     this.devices.revoke(id);
     this.audit.record({ actor: 'user', action: 'gateway.device_revoked', target: String(id), decision: 'info' });
+  }
+
+  // ----- агенты -----
+  private agentsOn(): AgentService {
+    if (this.settings.get().disabledModules.includes('agents')) throw new Error('Модуль «Агенты» отключён в настройках.');
+    return this.agents;
+  }
+  startAgents(): void {
+    this.agents.start();
+  }
+  listAgents() {
+    return this.agentsOn().list();
+  }
+  agentTemplates() {
+    return AGENT_TEMPLATES;
+  }
+  saveAgent(input: Parameters<AgentService['save']>[0]) {
+    return this.agentsOn().save(input);
+  }
+  deleteAgent(id: number) {
+    this.agentsOn().remove(id);
+  }
+  /** Запуск кнопкой: идёт в фоне, окно опрашивает состояние; подтверждения опасных действий — на экране. */
+  startAgent(id: number, task: string) {
+    const svc = this.agentsOn();
+    svc.canRun(id);
+    void svc.run(id, task, 'manual').catch(() => undefined);
+  }
+  stopAgent(id: number) {
+    this.agentsOn().stop(id);
+  }
+  agentRuns(id: number) {
+    return this.agentsOn().runs(id);
+  }
+  clearAgentNotes(id: number) {
+    this.agentsOn().clearNotes(id);
   }
 
   // ----- Telegram -----
@@ -827,6 +879,7 @@ export class JarvisCore {
     this.scheduler.stop();
     this.stopAll();
     this.telephony.stopAll();
+    this.agents.close();
     await this.telegram.close();
     await this.gateway.stop();
     await this.browser.close();

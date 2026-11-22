@@ -26,7 +26,7 @@ export function registerIpc(opts: {
   onSettings?: (next: Settings) => void;
   onRestart?: () => void;
   onCameraFrame?: (requestId: string, frame: { mime: string; base64: string; width: number; height: number } | null) => void;
-}): { sendConfirm: (r: ConfirmRequest) => void; closeConfirm: (id: string) => void; sendCameraRequest: (id: string) => void; sendJobResult: (r: unknown) => void; sendTelegram: (r: unknown) => void } {
+}): { sendConfirm: (r: ConfirmRequest) => void; closeConfirm: (id: string) => void; sendCameraRequest: (id: string) => void; sendJobResult: (r: unknown) => void; sendTelegram: (r: unknown) => void; sendAgent: (r: unknown) => void } {
   const { core, getWindow, isTrusted } = opts;
 
   const handle = (channel: string, fn: (e: IpcMainInvokeEvent, ...args: unknown[]) => unknown): void => {
@@ -156,6 +156,27 @@ export function registerIpc(opts: {
   handle(IPC.appsStartMenu, () => core.startMenuApps());
   handle(IPC.appsSetStartMenu, (_e, on) => core.setStartMenuAccess(on === true));
   handle(IPC.appsLaunch, (_e, q) => core.launchAppByName(str(q, 'query', 100)));
+  handle(IPC.agentsList, () => core.listAgents());
+  handle(IPC.agentsTemplates, () => core.agentTemplates());
+  handle(IPC.agentsSave, (_e, input) => {
+    const i = input as Record<string, unknown>;
+    const sch = (i.schedule ?? {}) as Record<string, unknown>;
+    return core.saveAgent({
+      id: i.id === undefined || i.id === null ? undefined : int(i.id, 'id'),
+      name: str(i.name, 'name', 60),
+      description: i.description ? str(i.description, 'description', 300) : '',
+      instructions: str(i.instructions, 'instructions', 5000),
+      groups: Array.isArray(i.groups) ? (i.groups.map((g) => str(g, 'group', 30)) as never) : [],
+      mode: i.mode === 'act' ? 'act' : 'read',
+      schedule: { kind: (['daily', 'weekdays', 'interval'].includes(String(sch.kind)) ? sch.kind : 'none') as never, atTime: typeof sch.atTime === 'string' ? sch.atTime : null, intervalMin: typeof sch.intervalMin === 'number' ? sch.intervalMin : null },
+      enabled: i.enabled === true,
+    });
+  });
+  handle(IPC.agentsDelete, (_e, id) => core.deleteAgent(int(id, 'id')));
+  handle(IPC.agentsRun, (_e, id, task) => core.startAgent(int(id, 'id'), typeof task === 'string' ? task.slice(0, 2000) : ''));
+  handle(IPC.agentsStop, (_e, id) => core.stopAgent(int(id, 'id')));
+  handle(IPC.agentsRuns, (_e, id) => core.agentRuns(int(id, 'id')));
+  handle(IPC.agentsClearNotes, (_e, id) => core.clearAgentNotes(int(id, 'id')));
   handle(IPC.tgStatus, () => core.telegramStatus());
   handle(IPC.tgConnect, (_e, token) => core.telegramConnect(str(token, 'token', 200)));
   handle(IPC.tgDisconnect, () => core.telegramDisconnect());
@@ -285,6 +306,7 @@ export function registerIpc(opts: {
     sendCameraRequest: (id: string) => send(IPC.evtCameraCapture, id),
     sendJobResult: (r: unknown) => send(IPC.evtJob, r),
     sendTelegram: (r: unknown) => send(IPC.evtTelegram, r),
+    sendAgent: (r: unknown) => send(IPC.evtAgent, r),
     closeConfirm: (id) => send(IPC.evtConfirmClosed, id),
   };
 }

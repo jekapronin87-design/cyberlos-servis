@@ -10,7 +10,7 @@ export type RiskLevel = 'safe' | 'low' | 'medium' | 'high' | 'critical';
 export type DataDomain = 'local' | 'training' | 'production';
 
 /** Модули JARVIS: каждый можно отключить целиком (инструменты, вкладки). */
-export type ModuleId = 'computer' | 'dev' | 'crm' | 'mentor' | 'scheduler' | 'telephony' | 'gateway' | 'telegram';
+export type ModuleId = 'computer' | 'dev' | 'crm' | 'mentor' | 'scheduler' | 'telephony' | 'gateway' | 'telegram' | 'agents';
 export const MODULES: { id: ModuleId; title: string; description: string }[] = [
   { id: 'computer', title: 'Управление компьютером', description: 'Файлы, программы, браузер, снимок экрана, камера' },
   { id: 'dev', title: 'ИИ-программист', description: 'Проекты, правка кода, тесты, Git, субагенты' },
@@ -20,6 +20,7 @@ export const MODULES: { id: ModuleId; title: string; description: string }[] = [
   { id: 'telephony', title: 'Телефония', description: 'Голосовое обучение по телефону (с согласиями)' },
   { id: 'gateway', title: 'Доступ с телефона', description: 'Управление JARVIS с мобильного' },
   { id: 'telegram', title: 'Telegram', description: 'Бот: переписка, автоответчик, управление из Telegram' },
+  { id: 'agents', title: 'Агенты', description: 'Свои ИИ-агенты: роль, права, расписание, отчёты' },
 ];
 
 export type ProviderChoice = 'auto' | 'demo' | 'anthropic';
@@ -570,4 +571,65 @@ export interface TelegramMessageDto {
   text: string;
   at: string;
   auto: boolean;
+}
+
+// ---------- Агенты ----------
+
+export type AgentGroupId = 'web' | 'files' | 'apps' | 'crm' | 'dev' | 'telegram' | 'knowledge' | 'images' | 'screen';
+
+export const AGENT_GROUPS: { id: AgentGroupId; title: string; description: string; risky?: boolean }[] = [
+  { id: 'web', title: 'Интернет (браузер)', description: 'Поиск, открыть сайт, прочитать, прокрутить, нажать, ввести текст' },
+  { id: 'crm', title: 'CRM (только чтение)', description: 'Заявки, воронки, задачи, команда, производство, отчёты' },
+  { id: 'knowledge', title: 'База знаний и обучение', description: 'Поиск по утверждённым документам, курсы, прогресс' },
+  { id: 'telegram', title: 'Telegram', description: 'Читать переписку бота, отправлять сообщения (с подтверждением)', risky: true },
+  { id: 'files', title: 'Файлы в разрешённых папках', description: 'Читать, создавать, менять файлы', risky: true },
+  { id: 'apps', title: 'Запуск программ', description: 'Открывать программы по названию', risky: true },
+  { id: 'dev', title: 'Программирование', description: 'Проекты, правка кода, тесты, Git', risky: true },
+  { id: 'images', title: 'Картинки', description: 'Создание картинок (платно)', risky: true },
+  { id: 'screen', title: 'Экран и камера', description: 'Снимок экрана, кадр с камеры', risky: true },
+];
+
+export interface AgentScheduleDto {
+  kind: 'none' | 'daily' | 'weekdays' | 'interval';
+  atTime: string | null;
+  intervalMin: number | null;
+}
+
+export interface AgentInputDto {
+  id?: number;
+  name: string;
+  description: string;
+  instructions: string;
+  groups: AgentGroupId[];
+  /** read — только чтение и анализ; act — может предлагать действия (каждое — с вашим подтверждением на экране). */
+  mode: 'read' | 'act';
+  schedule: AgentScheduleDto;
+  enabled: boolean;
+}
+
+export interface AgentDto extends AgentInputDto {
+  id: number;
+  notes: string;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastStatus: 'ok' | 'error' | 'stopped' | null;
+  lastSummary: string | null;
+  running: boolean;
+}
+
+export interface AgentRunDto {
+  id: number;
+  agentId: number;
+  startedAt: string;
+  finishedAt: string | null;
+  status: 'running' | 'ok' | 'error' | 'stopped';
+  trigger: 'manual' | 'schedule' | 'assistant';
+  task: string;
+  report: string;
+  steps: string[];
+}
+
+export interface AgentTemplateDto {
+  key: string;
+  input: AgentInputDto;
 }
