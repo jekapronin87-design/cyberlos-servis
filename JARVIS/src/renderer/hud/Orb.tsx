@@ -24,6 +24,27 @@ const POINTS = Array.from({ length: N }, (_, i) => {
   return { x: Math.cos(t) * r, y, z: Math.sin(t) * r, seed: (i * 37) % 100 };
 });
 
+/** Голографическая «голова»: та же сфера точек, деформированная в силуэт лица (y вниз: лоб — минус, подбородок — плюс). */
+const smooth = (a: number, b: number, v: number): number => {
+  const t = Math.max(0, Math.min(1, (v - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+const toHead = (x: number, y: number, z: number): [number, number, number] => {
+  const hx = x * 0.78 * (1 - 0.32 * smooth(0.05, 1, y));
+  const hy = y * 1.08;
+  let hz = z * 0.86;
+  if (z > 0.3 && Math.abs(x) < 0.14 && y > -0.12 && y < 0.28) hz += 0.2 * (1 - Math.abs(x) / 0.14); // нос
+  if (z > 0.3 && y > -0.34 && y < -0.1 && Math.abs(Math.abs(x) - 0.3) < 0.14) hz -= 0.08; // глазницы
+  return [hx, hy, hz];
+};
+/** Передняя поверхность головы в точке (x, y) — чтобы черты лица «лежали» на ней. */
+const faceZ = (x: number, y: number): number => {
+  const sx = 0.78 * (1 - 0.32 * smooth(0.05, 1, y / 1.08));
+  const k = 1 - (x / sx) ** 2 - (y / 1.08) ** 2;
+  return 0.86 * Math.sqrt(Math.max(0, k)) + 0.02;
+};
+const HEAD_POINTS = POINTS.map((p) => toHead(p.x, p.y, p.z));
+
 /**
  * Голографический шар: облако точек на сфере, меридианы и параллели, вращающиеся кольца и светящееся ядро.
  * Реагирует на состояние (покой / слушает / думает / говорит) и на громкость. Чистый Canvas 2D — без WebGL.
@@ -46,6 +67,7 @@ export function Orb({ state, getLevel }: Props) {
     let level = 0;
     let color: [number, number, number] = [...PALETTE.idle];
     let energy = 0.2;
+    let morph = 0; // 0 — шар, 1 — голова (когда говорит)
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     const resize = (): void => {
@@ -79,6 +101,7 @@ export function Orb({ state, getLevel }: Props) {
       const wantEnergy = st === 'thinking' ? 1 : st === 'speaking' ? 0.8 : st === 'listening' ? 0.55 : 0.2;
       energy += (wantEnergy - energy) * 0.04;
       spin += dt * (reduce ? 0.05 : 0.18 + energy * 0.9);
+      morph += ((st === 'speaking' ? 1 : 0) - morph) * (reduce ? 1 : 0.045);
 
       ctx.clearRect(0, 0, w, h);
       const cx = w / 2;
@@ -129,8 +152,8 @@ export function Orb({ state, getLevel }: Props) {
       ctx.restore();
 
       // ---- 3D: вращение и проекция
-      const ay = spin;
-      const ax = 0.42 + Math.sin(time * 0.35) * 0.08;
+      const ay = spin * (1 - morph) + Math.sin(time * 0.7) * 0.28 * morph;
+      const ax = (0.42 + Math.sin(time * 0.35) * 0.08) * (1 - morph) + Math.sin(time * 0.5) * 0.05 * morph;
       const cyA = Math.cos(ay), syA = Math.sin(ay), cxA = Math.cos(ax), sxA = Math.sin(ax);
       const project = (x: number, y: number, z: number, rad = 1): { px: number; py: number; d: number } => {
         const x1 = x * cyA + z * syA;
@@ -155,7 +178,7 @@ export function Orb({ state, getLevel }: Props) {
           const p = project(x, y, z);
           i === 0 ? ctx.moveTo(p.px, p.py) : ctx.lineTo(p.px, p.py);
         }
-        ctx.strokeStyle = rgba(0.11 + energy * 0.06);
+        ctx.strokeStyle = rgba((0.11 + energy * 0.06) * (1 - morph));
         ctx.stroke();
       }
       for (let k = -3; k <= 3; k++) {
@@ -167,14 +190,19 @@ export function Orb({ state, getLevel }: Props) {
           const p = project(Math.cos(a) * rr, y, Math.sin(a) * rr);
           i === 0 ? ctx.moveTo(p.px, p.py) : ctx.lineTo(p.px, p.py);
         }
-        ctx.strokeStyle = rgba(0.1 + energy * 0.05);
+        ctx.strokeStyle = rgba((0.1 + energy * 0.05) * (1 - morph));
         ctx.stroke();
       }
 
       // облако точек (с «дыханием» поверхности от громкости)
-      for (const pt of POINTS) {
-        const wob = 1 + Math.sin(time * (2 + energy * 3) + pt.seed) * (0.015 + level * 0.12) + level * 0.05;
-        const p = project(pt.x * wob, pt.y * wob, pt.z * wob);
+      for (let i = 0; i < POINTS.length; i++) {
+        const pt = POINTS[i]!;
+        const hp = HEAD_POINTS[i]!;
+        const wob = 1 + Math.sin(time * (2 + energy * 3) + pt.seed) * (0.015 + level * 0.12 * (1 - morph * 0.7)) + level * 0.05 * (1 - morph);
+        const mx = pt.x + (hp[0] - pt.x) * morph;
+        const my = pt.y + (hp[1] - pt.y) * morph;
+        const mz = pt.z + (hp[2] - pt.z) * morph;
+        const p = project(mx * wob, my * wob, mz * wob);
         const front = (p.d + 1) / 2; // 0 — сзади, 1 — спереди
         const a = 0.12 + front * front * 0.85;
         const size = 0.6 + front * 1.6 + level * 0.6;
@@ -184,9 +212,47 @@ export function Orb({ state, getLevel }: Props) {
         ctx.fill();
       }
 
+      // черты лица: глаза, брови, нос, рот (рот открывается от громкости голоса)
+      if (morph > 0.25) {
+        const fa = Math.min(1, (morph - 0.25) / 0.6);
+        const P = (x: number, y: number) => project(x, y, faceZ(x, y) + 0.015);
+        const line = (pts: [number, number][], alpha: number, wd = 1.6, close = false): void => {
+          ctx.beginPath();
+          pts.forEach(([x, y], i) => {
+            const q = P(x, y);
+            i === 0 ? ctx.moveTo(q.px, q.py) : ctx.lineTo(q.px, q.py);
+          });
+          if (close) ctx.closePath();
+          ctx.setLineDash([]);
+          ctx.lineWidth = wd;
+          ctx.strokeStyle = rgba(alpha * fa);
+          ctx.stroke();
+        };
+        const blink = Math.sin(time * 0.9) > 0.985 ? 0.15 : 1;
+        for (const sx of [-1, 1]) {
+          const eye: [number, number][] = [];
+          for (let i = 0; i < 12; i++) {
+            const a = (i / 12) * Math.PI * 2;
+            eye.push([sx * 0.3 + Math.cos(a) * 0.15, -0.2 + Math.sin(a) * 0.055 * blink]);
+          }
+          line(eye, 0.95, 1.8, true);
+          const q = P(sx * 0.3, -0.2);
+          ctx.fillStyle = `rgba(255,255,255,${0.9 * fa})`;
+          ctx.beginPath();
+          ctx.arc(q.px, q.py, R * 0.035, 0, Math.PI * 2);
+          ctx.fill();
+          line([[sx * 0.14, -0.36], [sx * 0.3, -0.4], [sx * 0.46, -0.35]], 0.55);
+        }
+        line([[0, -0.15], [-0.03, 0.12], [-0.1, 0.24], [0, 0.27], [0.1, 0.24], [0.03, 0.12]], 0.5);
+        const open = 0.02 + level * 0.16;
+        line([[-0.27, 0.5], [-0.12, 0.47 - open * 0.15], [0, 0.46], [0.12, 0.47 - open * 0.15], [0.27, 0.5]], 0.9, 1.8);
+        line([[-0.27, 0.5], [-0.14, 0.5 + open], [0, 0.52 + open], [0.14, 0.5 + open], [0.27, 0.5]], 0.8, 1.8);
+        line([[-0.55, 0.15], [-0.52, 0.45], [-0.3, 0.8], [0, 0.95], [0.3, 0.8], [0.52, 0.45], [0.55, 0.15]], 0.3, 1.2);
+      }
+
       // ядро
       const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * (0.45 + level * 0.25));
-      core.addColorStop(0, `rgba(255,255,255,${0.55 + level * 0.4})`);
+      core.addColorStop(0, `rgba(255,255,255,${(0.55 + level * 0.4) * (1 - morph * 0.75)})`);
       core.addColorStop(0.25, rgba(0.45 + level * 0.3));
       core.addColorStop(1, rgba(0));
       ctx.fillStyle = core;
@@ -215,5 +281,5 @@ export function Orb({ state, getLevel }: Props) {
     };
   }, []);
 
-  return <canvas ref={ref} className="orb-canvas" data-state={state} aria-label="Джарвис" role="img" />;
+  return <canvas ref={ref} className="orb-canvas" data-state={state} aria-label="Ассистент" role="img" />;
 }

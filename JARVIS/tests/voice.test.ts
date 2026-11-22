@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateVoiceBaseUrl } from '../src/core/db/repositories';
 import { MAX_AUDIO_BYTES, OpenAiCompatibleStt, OpenAiCompatibleTts, SECRET_VOICE_KEY } from '../src/core/voice/service';
-import { isStopPhrase, isWakeWord, parseVoiceCommand, textForSpeech } from '../src/shared/voice';
+import { parseNavIntent, isStopPhrase, isWakeWord, parseVoiceCommand, textForSpeech } from '../src/shared/voice';
 import { makeCore } from './helpers';
 
 describe('разбор голосовых команд', () => {
@@ -162,5 +162,23 @@ describe('имя «Системно»', () => {
   it('своё имя из настроек работает наравне', () => {
     expect(parseVoiceCommand('Орион, который час', { requireWake: true, names: ['Орион'] })).toEqual({ kind: 'wake', text: 'который час' });
     expect(parseVoiceCommand('Орион, который час', { requireWake: true })).toEqual({ kind: 'ignore' });
+  });
+});
+
+describe('голосовая навигация', () => {
+  it('распознаёт переходы', () => {
+    expect(parseNavIntent('Открой аналитику')).toBe('analytics');
+    expect(parseNavIntent('покажи статистику по продажам')).toBe('analytics');
+    expect(parseNavIntent('давай посмотрим, что у нас с бизнесом')).toBe('city');
+    expect(parseNavIntent('покажи наш город')).toBe('city');
+    expect(parseNavIntent('Открой мой город')).toBe('city');
+    expect(parseNavIntent('вернись')).toBe('home');
+    expect(parseNavIntent('закрой аналитику')).toBe('home');
+  });
+  it('обычные фразы и длинные просьбы не перехватываются', () => {
+    expect(parseNavIntent('Расскажи про аналитику в целом подробно и с примерами для нашей компании')).toBeNull();
+    expect(parseNavIntent('Который час?')).toBeNull();
+    expect(parseNavIntent('напиши письмо про город')).toBeNull();
+    expect(parseNavIntent('что ты умеешь')).toBeNull();
   });
 });

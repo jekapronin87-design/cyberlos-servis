@@ -90,6 +90,24 @@ export function parseVoiceCommand(transcript: string, opts: { requireWake: boole
   return { kind: 'wake', text: raw };
 }
 
+export type NavIntent = 'analytics' | 'city' | 'home';
+
+/**
+ * Локальные команды перехода по интерфейсу («открой аналитику», «покажи наш город», «вернись»).
+ * Разбираются без модели — мгновенно и бесплатно. Только короткие фразы, начинающиеся с глагола-команды.
+ */
+export function parseNavIntent(text: string): NavIntent | null {
+  const t = normalizeSpeech(text);
+  const words = t.split(' ').filter(Boolean);
+  if (words.length === 0 || words.length > 9) return null;
+  const verb = /^(открой|открыть|покажи|показать|включи|давай|запусти|перейди|переключись|вернись|вернуться|закрой|свернись|сверни|назад|домой|что)(?![а-я])/.test(t);
+  if (!verb) return null;
+  if (/(^| )(вернись|вернуться|назад|домой|свернись|сверни)( |$)|закрой (аналитику|город|карточки|все|это)|на главную|главный экран/.test(t)) return 'home';
+  if (/(^| )(город|города|городом|городу)( |$)|что (там )?(у нас )?с бизнесом|как (там )?(у нас )?бизнес|состояние бизнеса|карта бизнеса/.test(t)) return 'city';
+  if (/аналитик|статистик|показател|дашборд|карточки|отчет по бизнесу|цифры/.test(t)) return 'analytics';
+  return null;
+}
+
 /** Подготовка ответа к озвучке: без служебной разметки и слишком длинных текстов. */
 export function textForSpeech(text: string, maxChars = 800): string {
   const clean = text

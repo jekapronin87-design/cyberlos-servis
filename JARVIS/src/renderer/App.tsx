@@ -10,16 +10,19 @@ import { AuditView } from './views/AuditView';
 import { ChatView } from './views/ChatView';
 import { CrmView } from './views/CrmView';
 import { JobsView } from './views/JobsView';
+import { parseNavIntent } from '../shared/voice';
 import { MentorView } from './views/MentorView';
 import { CallsView } from './views/CallsView';
+import { SpaceView, type SpaceMode } from './views/SpaceView';
+import { Starfield } from './hud/Starfield';
 import { MemoryView } from './views/MemoryView';
 import { ProfileView } from './views/ProfileView';
 import { SettingsView } from './views/SettingsView';
-import { cancelSpeech, getSpeechLevel, onSpeaking, SpeechSession } from './voice/speech';
+import { cancelSpeech, getSpeechLevel, onSpeaking, speak, SpeechSession } from './voice/speech';
 import { useCamera } from './voice/useCamera';
 import { useVoice } from './voice/useVoice';
 
-type View = 'hud' | 'chat' | 'crm' | 'mentor' | 'calls' | 'jobs' | 'profile' | 'memory' | 'audit' | 'settings';
+type View = 'hud' | 'chat' | 'crm' | 'mentor' | 'calls' | 'space' | 'jobs' | 'profile' | 'memory' | 'audit' | 'settings';
 
 const cleanError = (e: unknown): string =>
   e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'Неизвестная ошибка';
@@ -47,6 +50,7 @@ const TOOL_LABEL: Record<string, string> = {
 
 export function App() {
   const [view, setView] = useState<View>('hud');
+  const [spaceMode, setSpaceMode] = useState<SpaceMode>('analytics');
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [convs, setConvs] = useState<Conversation[]>([]);
@@ -206,7 +210,27 @@ export function App() {
     await openConversation(c.id);
   };
 
+  /** Голосовая/текстовая навигация без обращения к модели: мгновенно и бесплатно. */
+  const navigateByIntent = (text: string): boolean => {
+    const intent = parseNavIntent(text);
+    if (!intent) return false;
+    const st = settingsRef.current;
+    const say = (t: string): void => {
+      if (st.ttsMode !== 'off') void speak(t, st.ttsMode, { systemVoice: st.systemVoice, speed: st.ttsSpeed }).catch(() => undefined);
+    };
+    if (intent === 'home') {
+      setView('hud');
+      say('Возвращаюсь.');
+    } else {
+      setSpaceMode(intent);
+      setView('space');
+      say(intent === 'city' ? 'Открываю город бизнеса.' : 'Открываю аналитику.');
+    }
+    return true;
+  };
+
   const send = async (text: string): Promise<void> => {
+    if (navigateByIntent(text)) return;
     try {
       let id = activeId;
       if (id === null) {
@@ -276,7 +300,8 @@ export function App() {
       // Голосовая команда: отвечаем голосом, по мере того как ответ генерируется
       const st = settingsRef.current;
       session.current = new SpeechSession({ mode: st.ttsMode, systemVoice: st.systemVoice, speed: st.ttsSpeed, onError: setError });
-      setView((v) => (v === 'settings' || v === 'audit' || v === 'memory' ? 'hud' : v));
+      if (parseNavIntent(text)) return void send(text);
+      setView((v) => (v === 'settings' || v === 'audit' || v === 'memory' || v === 'space' ? 'hud' : v));
       void send(text);
     },
     onStopCommand: stop,
@@ -321,6 +346,7 @@ export function App() {
   const navAll = [
     ['hud', settings.assistantName, <IconHud key="h" />],
     ['chat', 'Чат', <IconChat key="c" />],
+    ['space', 'Аналитика', <IconHud key="sp" />],
     ['crm', 'CRM', <IconCrm key="r" />],
     ['mentor', 'Наставник', <IconMentor key="n" />],
     ['calls', 'Звонки', <IconCalls key="t" />],
@@ -335,6 +361,7 @@ export function App() {
 
   return (
     <div className="app">
+      <Starfield />
       <nav className="rail" aria-label="Разделы">
         <div className="rail-brand" aria-hidden="true">
           <span className="brand-mark" />
@@ -431,6 +458,7 @@ export function App() {
         )}
         {view === 'mentor' && <MentorView onAsk={(t) => void sendSpoken(t)} />}
         {view === 'calls' && <CallsView />}
+        {view === 'space' && <SpaceView mode={spaceMode} onMode={setSpaceMode} onClose={() => setView('hud')} onAsk={(t) => void sendSpoken(t)} orbState={orbState} getLevel={getLevel} />}
         {view === 'jobs' && <JobsView onOpenConversation={(id) => void openConversation(id)} />}
         {view === 'crm' && <CrmView onAsk={(t) => void sendSpoken(t)} onOpenSettings={() => setView('settings')} />}
         {view === 'profile' && (
