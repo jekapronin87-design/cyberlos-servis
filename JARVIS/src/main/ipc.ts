@@ -2,7 +2,8 @@ import { readFileSync, statSync } from 'node:fs';
 import { basename } from 'node:path';
 import { app, dialog, ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron';
 import { IPC } from '../shared/ipc';
-import type { ChatEvent, ConfirmRequest, MemoryKind, Settings } from '../shared/types';
+import type { ChatEvent, ConfirmRequest, FreeProviderId, MemoryKind, Settings } from '../shared/types';
+import { FREE_PROVIDER_PRESETS } from '../shared/types';
 import type { JarvisCore } from '../core/app';
 
 const int = (v: unknown, name: string): number => {
@@ -148,6 +149,20 @@ export function registerIpc(opts: {
     return { job: r.job, status: r.status, summary: r.summary, quiet: r.quiet };
   });
   handle(IPC.jobsRuns, (_e, id) => core.jobRuns(int(id, 'id')));
+  const provId = (v: unknown): FreeProviderId => {
+    if (typeof v !== 'string' || !FREE_PROVIDER_PRESETS.some((p) => p.id === v)) throw new Error('Неизвестная модель');
+    return v as FreeProviderId;
+  };
+  handle(IPC.modelsList, () => core.providerStatuses());
+  handle(IPC.modelsSetKey, (_e, id, key) => {
+    core.setProviderKey(provId(id), str(key, 'key', 400));
+    return core.providerStatuses();
+  });
+  handle(IPC.modelsClearKey, (_e, id) => {
+    core.clearProviderKey(provId(id));
+    return core.providerStatuses();
+  });
+  handle(IPC.modelsTest, (_e, id) => core.testProvider(provId(id)));
   handle(IPC.telStatus, () => core.telephonyStatus());
   handle(IPC.telConsents, () => core.listConsents());
   handle(IPC.telGrant, (_e, i) => {

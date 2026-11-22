@@ -109,7 +109,7 @@ export class AgentRunner {
         )) {
           if (ctx.signal.aborted) break;
           if (ev.type === 'text') text += ev.text;
-          else uses.push({ type: 'tool_use', id: ev.id, name: ev.name, input: ev.input });
+          else if (ev.type === 'tool_use') uses.push({ type: 'tool_use', id: ev.id, name: ev.name, input: ev.input });
         }
       } catch (e) {
         if (!ctx.signal.aborted) throw e;

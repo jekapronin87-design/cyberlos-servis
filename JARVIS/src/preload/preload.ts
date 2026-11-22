@@ -68,6 +68,12 @@ const api: JarvisApi = {
     runs: (id) => invoke(IPC.jobsRuns, id),
     onResult: subscribe(IPC.evtJob),
   },
+  models: {
+    list: () => invoke(IPC.modelsList),
+    setKey: (id, key) => invoke(IPC.modelsSetKey, id, key),
+    clearKey: (id) => invoke(IPC.modelsClearKey, id),
+    test: (id) => invoke(IPC.modelsTest, id),
+  },
   telephony: {
     status: () => invoke(IPC.telStatus),
     consents: () => invoke(IPC.telConsents),

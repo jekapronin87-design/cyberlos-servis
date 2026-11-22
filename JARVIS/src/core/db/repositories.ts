@@ -26,6 +26,28 @@ export function validateSettingsPatch(patch: unknown): Partial<Settings> {
     if (!PROVIDERS.includes(p.provider as never)) throw new Error('Неизвестный провайдер');
     out.provider = p.provider as Settings['provider'];
   }
+  if ('routingMode' in p) {
+    if (!['smart', 'claude', 'free'].includes(p.routingMode as string)) throw new Error('Неизвестный режим выбора модели');
+    out.routingMode = p.routingMode as Settings['routingMode'];
+  }
+  if ('imageModel' in p) {
+    if (typeof p.imageModel !== 'string' || !/^[\w.:\-/]{1,100}$/.test(p.imageModel)) throw new Error('Некорректное имя модели картинок');
+    out.imageModel = p.imageModel;
+  }
+  if ('freeProviders' in p) {
+    const ids = ['ollama', 'openrouter', 'groq', 'gemini', 'qwen', 'custom'];
+    if (!Array.isArray(p.freeProviders) || p.freeProviders.length > 12) throw new Error('Некорректный список моделей');
+    const seen = new Set<string>();
+    out.freeProviders = (p.freeProviders as Record<string, unknown>[]).map((c) => {
+      if (!c || typeof c !== 'object' || !ids.includes(c.id as string) || seen.has(c.id as string)) throw new Error('Неизвестная модель в списке');
+      seen.add(c.id as string);
+      if (typeof c.model !== 'string' || !/^[\w.:\-/]{0,100}$/.test(c.model)) throw new Error('Некорректное имя модели');
+      const placeholder = c.baseUrl === 'https://' && c.enabled !== true;
+      const baseUrl = placeholder ? 'https://' : validateVoiceBaseUrl(c.baseUrl);
+      if (c.enabled === true && !c.model) throw new Error('Укажите название модели');
+      return { id: c.id as never, enabled: c.enabled === true, model: c.model, baseUrl };
+    });
+  }
   if ('theme' in p) {
     if (!THEMES.includes(p.theme as never)) throw new Error('Неизвестная тема');
     out.theme = p.theme as Settings['theme'];
@@ -301,7 +323,7 @@ export class MemoryRepo {
 export class AttachmentRepo {
   constructor(private db: Db) {}
 
-  add(mime: string, base64: string, kind: 'screen' | 'camera' = 'screen'): number {
+  add(mime: string, base64: string, kind: 'screen' | 'camera' | 'image' = 'screen'): number {
     const res = this.db
       .prepare('INSERT INTO attachments (mime, data, kind, created_at) VALUES (?, ?, ?, ?)')
       .run(mime, Buffer.from(base64, 'base64'), kind, nowIso());

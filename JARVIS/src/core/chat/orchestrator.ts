@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { ChatEvent, ChatMessage, ComputerAccess, ContentBlock, Role } from '../../shared/types';
 import type { AttachmentRepo, ConversationRepo, MemoryRepo, SettingsRepo } from '../db/repositories';
 import { describeApiError } from '../providers/anthropic';
+import { describeProviderHttp } from '../providers/openai';
+import { ProviderHttpError } from '../providers/types';
 import type { ProviderManager } from '../providers/manager';
 import type { ProviderMessage } from '../providers/types';
 import type { AuditLog } from '../security/audit';
@@ -80,7 +82,7 @@ export class ChatOrchestrator {
         details: { conversationId, provider: resolved.provider.id, model: settings.model, chars: text.length },
       });
 
-      const meta = { provider: resolved.provider.id, model: resolved.mode === 'live' ? settings.model : 'demo' };
+      const meta: { provider: string; model: string } = { provider: resolved.provider.id, model: resolved.mode === 'live' ? settings.model : 'demo' };
 
       const maxSteps = opts.maxSteps ?? MAX_TOOL_STEPS;
       for (let step = 0; step < maxSteps + 1; step++) {
@@ -94,6 +96,8 @@ export class ChatOrchestrator {
           crm: this.d.crm() ?? undefined,
           memory: settings.memoryEnabled ? this.d.memory.list().slice(0, 100) : [],
         });
+        // Версия подсказки без личных данных — для сторонних облачных моделей.
+        const systemLite = buildSystemPrompt({ settings: { ...settings, userName: '' }, folders: [], memory: [] });
         // На последнем шаге инструменты отключаются, чтобы цикл гарантированно завершился.
         const tools = step < maxSteps ? this.d.tools.specs().filter((t) => isToolEnabled(t.name, settings.disabledModules)) : [];
 
@@ -101,13 +105,19 @@ export class ChatOrchestrator {
         const toolUses: ToolUseBlock[] = [];
         try {
           for await (const ev of resolved.provider.stream(
-            { system, messages: history, tools, model: settings.model, maxTokens: 4096 },
+            { system, systemLite, messages: history, tools, model: settings.model, maxTokens: 4096 },
             signal,
           )) {
             if (signal.aborted) break;
             if (ev.type === 'text') {
               assistantText += ev.text;
               emit({ type: 'delta', runId, conversationId, text: ev.text });
+            } else if (ev.type === 'route') {
+              meta.provider = ev.provider;
+              meta.model = ev.model;
+              if (ev.provider !== 'anthropic' && ev.provider !== 'demo') {
+                this.d.audit.record({ actor: 'system', action: 'chat.route', decision: 'info', details: { provider: ev.provider, model: ev.model, reason: ev.reason } });
+              }
             } else {
               toolUses.push({ type: 'tool_use', id: ev.id, name: ev.name, input: ev.input });
             }
@@ -138,7 +148,7 @@ export class ChatOrchestrator {
       }
       finish('done');
     } catch (err) {
-      const message = describeApiError(err);
+      const message = err instanceof ProviderHttpError ? describeProviderHttp(err) : describeApiError(err);
       this.d.audit.record({ actor: 'system', action: 'chat.error', decision: 'error', details: { message } });
       finish('error', message);
     }

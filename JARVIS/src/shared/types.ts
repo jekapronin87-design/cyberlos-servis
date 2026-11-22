@@ -22,6 +22,25 @@ export const MODULES: { id: ModuleId; title: string; description: string }[] = [
 ];
 
 export type ProviderChoice = 'auto' | 'demo' | 'anthropic';
+/** Бесплатные/дешёвые модели с OpenAI-совместимым интерфейсом. */
+export type FreeProviderId = 'ollama' | 'openrouter' | 'groq' | 'gemini' | 'qwen' | 'custom';
+export interface FreeProviderConfig {
+  id: FreeProviderId;
+  enabled: boolean;
+  model: string;
+  baseUrl: string;
+}
+/** smart — простое делают бесплатные модели, сложное — Claude; claude — только Claude; free — только бесплатные (платная не используется никогда). */
+export type RoutingMode = 'smart' | 'claude' | 'free';
+export const FREE_PROVIDER_PRESETS: { id: FreeProviderId; name: string; baseUrl: string; model: string; needsKey: boolean; local: boolean; help: string }[] = [
+  { id: 'ollama', name: 'Ollama (Qwen на этом компьютере)', baseUrl: 'http://127.0.0.1:11434/v1', model: 'qwen2.5:7b', needsKey: false, local: true, help: 'Полностью бесплатно и приватно. Установите Ollama (ollama.com), затем в командной строке: ollama pull qwen2.5:7b' },
+  { id: 'gemini', name: 'Google Gemini (бесплатный тариф)', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-flash-latest', needsKey: true, local: false, help: 'Ключ бесплатно: aistudio.google.com → Get API key. Есть дневные лимиты.' },
+  { id: 'groq', name: 'Groq (быстрый, бесплатный тариф)', baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile', needsKey: true, local: false, help: 'Ключ бесплатно: console.groq.com → API Keys. Есть лимиты запросов в минуту.' },
+  { id: 'openrouter', name: 'OpenRouter (бесплатные модели «:free»)', baseUrl: 'https://openrouter.ai/api/v1', model: 'qwen/qwen3-coder:free', needsKey: true, local: false, help: 'Ключ: openrouter.ai/keys. Бесплатные модели помечены «:free»; их список меняется — название можно поправить.' },
+  { id: 'qwen', name: 'Qwen (Alibaba Cloud Model Studio)', baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus', needsKey: true, local: false, help: 'Ключ: Alibaba Cloud Model Studio. Новым аккаунтам обычно дают бесплатную квоту; условия смотрите у них.' },
+  { id: 'custom', name: 'Своя модель (любой OpenAI-совместимый адрес)', baseUrl: 'https://', model: '', needsKey: true, local: false, help: 'Например, LM Studio (http://127.0.0.1:1234/v1) или другой сервис.' },
+];
+export const DEFAULT_FREE_PROVIDERS: FreeProviderConfig[] = FREE_PROVIDER_PRESETS.map((p) => ({ id: p.id, enabled: false, model: p.model, baseUrl: p.baseUrl }));
 export type ThemeChoice = 'dark' | 'light' | 'system';
 /** push — по нажатию на микрофон; wake — постоянное прослушивание слова «Джарвис». */
 export type VoiceMode = 'push' | 'wake';
@@ -30,6 +49,10 @@ export type TtsMode = 'off' | 'system' | 'api';
 
 export interface Settings {
   provider: ProviderChoice;
+  routingMode: RoutingMode;
+  freeProviders: FreeProviderConfig[];
+  /** Модель для генерации картинок (ключ — тот же, что для голоса, OpenAI). */
+  imageModel: string;
   model: string;
   theme: ThemeChoice;
   /** Дополнительные инструкции пользователя к системному промпту. */
@@ -82,6 +105,9 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   provider: 'auto',
+  routingMode: 'smart',
+  freeProviders: DEFAULT_FREE_PROVIDERS,
+  imageModel: 'gpt-image-1',
   model: 'claude-sonnet-5-5',
   theme: 'dark',
   customInstructions: '',
@@ -466,4 +492,16 @@ export interface CallStateDto {
   lines: { who: 'jarvis' | 'employee' | 'system'; text: string }[];
   awaitingReply: boolean;
   finished: boolean;
+}
+
+export interface ProviderStatusDto {
+  id: FreeProviderId;
+  name: string;
+  enabled: boolean;
+  hasKey: boolean;
+  needsKey: boolean;
+  local: boolean;
+  model: string;
+  baseUrl: string;
+  help: string;
 }

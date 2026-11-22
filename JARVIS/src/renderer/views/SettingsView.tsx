@@ -3,6 +3,7 @@ import { MODULES, type AppInfo, type ModuleId, type Settings } from '../../share
 import { ComputerAccessCard } from '../components/ComputerAccessCard';
 import { CrmCard } from '../components/CrmCard';
 import { GatewayCard } from '../components/GatewayCard';
+import { ModelsCard } from '../components/ModelsCard';
 import { UpdateCard } from '../components/UpdateCard';
 import { listSystemVoices, speak } from '../voice/speech';
 
@@ -327,6 +328,8 @@ export function SettingsView(props: {
           </label>
         ))}
       </div>
+
+      <ModelsCard settings={s} onUpdate={async (p) => { await props.onUpdate(p); }} />
 
       <UpdateCard branch={s.updateBranch} onBranch={(b) => run(() => props.onUpdate({ updateBranch: b }), 'Ветка сохранена')} />
 

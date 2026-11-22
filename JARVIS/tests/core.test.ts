@@ -5,6 +5,7 @@ import { validateToolInput } from '../src/core/chat/orchestrator';
 import { ProviderManager } from '../src/core/providers/manager';
 import { MemorySecretStore } from '../src/core/security/secrets';
 import type { ContentBlock } from '../src/shared/types';
+import { DEFAULT_SETTINGS } from '../src/shared/types';
 import { chat, makeCore } from './helpers';
 
 const textOf = (blocks: ContentBlock[]): string =>
@@ -232,8 +233,8 @@ describe('настройки, ключи и провайдеры', () => {
 
   it('ключ из переменной окружения тоже включает live-режим', () => {
     const pm = new ProviderManager(new MemorySecretStore(), { ANTHROPIC_API_KEY: 'sk-ant-api03-' + 'b'.repeat(40) });
-    expect(pm.resolve({ provider: 'auto' }).mode).toBe('live');
-    expect(pm.resolve({ provider: 'demo' }).mode).toBe('demo');
+    expect(pm.resolve({ ...DEFAULT_SETTINGS, provider: 'auto' }).mode).toBe('live');
+    expect(pm.resolve({ ...DEFAULT_SETTINGS, provider: 'demo' }).mode).toBe('demo');
   });
 
   it('включение записи в производственные данные фиксируется в журнале', () => {

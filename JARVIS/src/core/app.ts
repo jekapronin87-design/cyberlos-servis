@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import type {
   AppInfo,
   AuditEntry,
+  FreeProviderId,
+  ProviderStatusDto,
   ChatEvent,
   ChatMessage,
   Conversation,
@@ -15,13 +17,17 @@ import type {
   UpdateProgress,
   UpdateStatus,
 } from '../shared/types';
+import { FREE_PROVIDER_PRESETS } from '../shared/types';
 import { ProfileRepo, isSectionId, registerProfileTools } from './profile';
 import { MentorService, registerMentorTools } from './mentor/service';
 import { JobRepo, type Job, type JobInput } from './scheduler/jobs';
 import { Scheduler, type JobResultEvent } from './scheduler/runner';
 import { DeviceRepo, PairingCodes, type Device } from './gateway/devices';
 import { Gateway } from './gateway/server';
+import { registerImageTool } from './media/images';
 import { TelephonyService } from './telephony/service';
+import { ProviderHttpError } from './providers/types';
+import { describeProviderHttp } from './providers/openai';
 import { CrmService, registerCrmTools, type CrmStatus, type CrmTestResult } from './crm/service';
 import { DEFAULT_SOURCE, downloadZip, extractUpdate, fetchLatest, installAndBuild, makeBackupDir, readInstalled, writeInstalled } from './update/updater';
 import { ChatOrchestrator } from './chat/orchestrator';
@@ -85,6 +91,8 @@ export interface CoreOptions {
   updateFetch?: typeof fetch;
   /** Для тестов: пропустить npm install/build. */
   skipBuild?: boolean;
+  /** Для тестов: подмена сети бесплатных моделей. */
+  modelFetch?: typeof fetch;
   /** Для тестов: подмена сетевого клиента голосовых API. */
   fetchImpl?: typeof fetch;
 }
@@ -151,6 +159,7 @@ export class JarvisCore {
     registerScreenTool(this.tools, host);
     registerCameraTool(this.tools, host, () => this.settings.get());
     this.attachments.purgeKind('camera'); // кадры камеры живут только до перезапуска
+    registerImageTool(this.tools, { getSettings: () => this.settings.get(), secrets: opts.secrets, audit: this.audit, dir: join(opts.dataDir, 'images'), fetchImpl: opts.fetchImpl });
     registerProfileTools(this.tools, this.profile);
     registerCrmTools(this.tools, this.crm);
     this.mentor = new MentorService(this.db, this.crm, this.audit, this.browser);
@@ -161,7 +170,7 @@ export class JarvisCore {
     registerRunTools(this.tools, this.computer);
     registerGitTools(this.tools, this.computer);
     this.confirm = new ConfirmationBroker(opts.confirmUi, opts.confirmTimeoutMs);
-    this.providers = new ProviderManager(opts.secrets, opts.env ?? process.env, opts.demoProvider, opts.liveProvider);
+    this.providers = new ProviderManager(opts.secrets, opts.env ?? process.env, opts.demoProvider, opts.liveProvider, opts.modelFetch);
     this.executor = new ToolExecutor({
       tools: this.tools,
       settings: this.settings,
@@ -362,6 +371,39 @@ export class JarvisCore {
   setVoiceKey(key: string): void {
     this.opts.secrets.set(SECRET_VOICE_KEY, validateApiKey(key));
     this.audit.record({ actor: 'user', action: 'secrets.voice_key_set', decision: 'info' });
+  }
+
+  // ----- бесплатные модели -----
+  providerStatuses(): ProviderStatusDto[] {
+    const st = this.settings.get();
+    return FREE_PROVIDER_PRESETS.map((p) => {
+      const c = st.freeProviders.find((x) => x.id === p.id) ?? { id: p.id, enabled: false, model: p.model, baseUrl: p.baseUrl };
+      return { id: p.id, name: p.name, enabled: c.enabled, hasKey: this.providers.providerKey(p.id) !== null, needsKey: p.needsKey, local: p.local, model: c.model, baseUrl: c.baseUrl, help: p.help };
+    });
+  }
+  setProviderKey(id: FreeProviderId, key: string): void {
+    if (!FREE_PROVIDER_PRESETS.some((p) => p.id === id)) throw new Error('Неизвестная модель');
+    this.opts.secrets.set(`provider.${id}.key`, validateApiKey(key));
+    this.audit.record({ actor: 'user', action: 'secrets.provider_key_set', target: id, decision: 'info' });
+  }
+  clearProviderKey(id: FreeProviderId): void {
+    this.opts.secrets.delete(`provider.${id}.key`);
+    this.audit.record({ actor: 'user', action: 'secrets.provider_key_cleared', target: id, decision: 'info' });
+  }
+  /** Проверка связи с моделью (кнопка «Проверить»): короткий запрос «готов». */
+  async testProvider(id: FreeProviderId): Promise<string> {
+    const st = this.settings.get();
+    const c = st.freeProviders.find((x) => x.id === id);
+    const preset = FREE_PROVIDER_PRESETS.find((p) => p.id === id);
+    if (!c || !preset) throw new Error('Неизвестная модель');
+    if (preset.needsKey && !this.providers.providerKey(id)) throw new Error('Сначала сохраните ключ');
+    const p = this.providers.freeProviders({ freeProviders: [{ ...c, enabled: true }] })[0];
+    if (!p) throw new Error('Укажите название модели');
+    try {
+      return await p.ping();
+    } catch (e) {
+      throw new Error(e instanceof ProviderHttpError ? describeProviderHttp(e) : e instanceof Error ? e.message : 'Ошибка');
+    }
   }
 
   clearVoiceKey(): void {

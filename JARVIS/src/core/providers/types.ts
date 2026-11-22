@@ -13,11 +13,27 @@ export interface ProviderRequest {
   tools: ToolSpec[];
   model: string;
   maxTokens: number;
+  /** Системная подсказка БЕЗ личных данных (досье, память) — для сторонних облачных моделей. */
+  systemLite?: string;
+}
+
+/** Ошибка HTTP от API модели (для понятных сообщений и переключения на запасную модель). */
+export class ProviderHttpError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+    public provider = '',
+  ) {
+    super(message);
+    this.name = 'ProviderHttpError';
+  }
 }
 
 export type ProviderEvent =
   | { type: 'text'; text: string }
-  | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> };
+  | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
+  /** Служебное: какая модель реально отвечает (для интерфейса и журнала). */
+  | { type: 'route'; provider: string; model: string; reason: string };
 
 /**
  * Контракт ИИ-провайдера. Новые провайдеры (локальные модели, другие API) добавляются

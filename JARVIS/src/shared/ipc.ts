@@ -16,6 +16,8 @@ import type {
   CrmTestDto,
   GatewayStatusDto,
   GatewayDeviceDto,
+  FreeProviderId,
+  ProviderStatusDto,
   ConsentDto,
   CallDto,
   CallStateDto,
@@ -70,6 +72,10 @@ export const IPC = {
   jobsRunNow: 'jobs:run-now',
   jobsRuns: 'jobs:runs',
   evtJob: 'evt:job',
+  modelsList: 'models:list',
+  modelsSetKey: 'models:key:set',
+  modelsClearKey: 'models:key:clear',
+  modelsTest: 'models:test',
   telStatus: 'tel:status',
   telConsents: 'tel:consents',
   telGrant: 'tel:grant',
@@ -183,6 +189,13 @@ export interface JarvisApi {
     runs(id: number): Promise<{ startedAt: string; status: string; summary: string | null }[]>;
     /** Задача по расписанию завершилась (не приходит, если итог «всё спокойно»). */
     onResult(cb: (r: JobResultDto) => void): () => void;
+  };
+  models: {
+    list(): Promise<ProviderStatusDto[]>;
+    setKey(id: FreeProviderId, key: string): Promise<ProviderStatusDto[]>;
+    clearKey(id: FreeProviderId): Promise<ProviderStatusDto[]>;
+    /** Проверка связи: короткий запрос к модели; возвращает её ответ. */
+    test(id: FreeProviderId): Promise<string>;
   };
   telephony: {
     status(): Promise<{ provider: string; real: boolean; note: string }>;

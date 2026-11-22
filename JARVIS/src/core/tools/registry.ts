@@ -4,7 +4,7 @@ import type { ToolPolicyInfo } from '../security/policy';
 /** Результат инструмента: текст и, при необходимости, изображения (base64). */
 export interface ToolOutput {
   text: string;
-  images?: { mime: string; base64: string; kind?: 'screen' | 'camera' }[];
+  images?: { mime: string; base64: string; kind?: 'screen' | 'camera' | 'image' }[];
 }
 
 export interface ToolContext {
