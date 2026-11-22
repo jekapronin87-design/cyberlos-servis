@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { genMilkyWay, genStars, genTexture, hash, makeSphereGeom, shadeSphere, type BodyKind, type SphereGeom, type Texture } from './spaceGen';
+import { genCorona, genMilkyWay, genStars, genTexture, hash, makeSphereGeom, moonPlacement, shadeSphere, type BodyKind, type SphereGeom, type Texture } from './spaceGen';
 
 /**
  * Реалистичный космос: фотографичный Млечный Путь с пылевыми рукавами и цветными звёздами, Солнечная система «издалека и сверху»:
@@ -89,24 +89,18 @@ function renderBackdrop(w: number, h: number): HTMLCanvasElement {
     g.beginPath();
     g.arc(s.x, s.y, r, 0, Math.PI * 2);
     g.fill();
-    if (s.mag > 0.55) {
-      const gl = g.createRadialGradient(s.x, s.y, 0, s.x, s.y, r * 7);
-      gl.addColorStop(0, `rgba(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]},${0.35 * s.mag})`);
+    if (s.mag > 0.5) {
+      // мягкое свечение (гауссов спад) — как у настоящих ярких звёзд на снимках, без «лучей»
+      const R = r * 6;
+      const gl = g.createRadialGradient(s.x, s.y, 0, s.x, s.y, R);
+      const k = 0.5 * s.mag;
+      gl.addColorStop(0, `rgba(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]},${k})`);
+      gl.addColorStop(0.12, `rgba(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]},${k * 0.45})`);
+      gl.addColorStop(0.35, `rgba(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]},${k * 0.12})`);
+      gl.addColorStop(0.7, `rgba(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]},${k * 0.025})`);
       gl.addColorStop(1, 'rgba(0,0,0,0)');
       g.fillStyle = gl;
-      g.fillRect(s.x - r * 7, s.y - r * 7, r * 14, r * 14);
-    }
-    if (s.mag > 0.97) {
-      // дифракционные лучи самых ярких звёзд
-      g.strokeStyle = `rgba(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]},${0.35 * s.mag})`;
-      g.lineWidth = 0.7;
-      const L = 7 + s.mag * 16;
-      g.beginPath();
-      g.moveTo(s.x - L, s.y);
-      g.lineTo(s.x + L, s.y);
-      g.moveTo(s.x, s.y - L);
-      g.lineTo(s.x, s.y + L);
-      g.stroke();
+      g.fillRect(s.x - R, s.y - R, R * 2, R * 2);
     }
   }
   g.globalCompositeOperation = 'source-over';
@@ -126,6 +120,7 @@ export function SpaceBackground({ intensity = 1 }: { intensity?: number }) {
     let lives: Live[] = [];
     let sun: Live | null = null;
     let moon: Live | null = null;
+    let corona: HTMLCanvasElement | null = null;
     let mx = 0, my = 0, tx = 0, ty = 0;
     let ready = 0; // плавное появление планет после генерации текстур
     let resizeTimer = 0;
@@ -143,7 +138,13 @@ export function SpaceBackground({ intensity = 1 }: { intensity?: number }) {
       const sc = Math.max(0.7, w / 1400);
       lives = BODIES.map((b) => mkLive(b, Math.max(4, Math.round(b.size * sc * 1.25))));
       sun = mkLive({ kind: 'sun', name: 'Солнце', spinRate: 0.01 }, Math.round(34 * sc));
-      moon = mkLive({ kind: 'moon', name: 'Луна', spinRate: 0.01 }, Math.max(3, Math.round(4.5 * sc)));
+      moon = mkLive({ kind: 'moon', name: 'Луна', spinRate: 0.01 }, Math.max(3, Math.round(5.5 * sc)));
+      const cc = document.createElement('canvas');
+      cc.width = cc.height = 384;
+      const ci = new ImageData(384, 384);
+      genCorona(384, ci.data);
+      cc.getContext('2d')!.putImageData(ci, 0, 0);
+      corona = cc;
     };
     build();
     void ensureTextures(['sun', 'earth', 'moon', 'jupiter', 'saturn', 'mars', 'venus', 'mercury', 'uranus', 'neptune'], () => alive);
@@ -220,15 +221,19 @@ export function SpaceBackground({ intensity = 1 }: { intensity?: number }) {
               ctx.fillRect(x - r * 1.3, y - r * 1.3, r * 2.6, r * 2.6);
               ctx.globalCompositeOperation = 'source-over';
             }
+            // Луна обходит Землю по той же плоской орбите: дальняя половина — ЗА Землёй (скрыта диском), ближняя — перед ней
+            const drawMoon = (): void => {
+              if (!b.moon || !moon) return;
+              const mp = moonPlacement(t * 0.5, r, TILT, 3.1);
+              refresh(moon, now, light);
+              const mr = moon.geom.r * persp * mp.scale;
+              ctx.drawImage(moon.canvas, x + mp.dx - mr - 1, y + mp.dy - mr - 1, (mr + 1) * 2, (mr + 1) * 2);
+            };
+            const moonBehind = b.moon ? moonPlacement(t * 0.5, r, TILT, 3.1).behind : false;
+            if (moonBehind) drawMoon();
             ctx.drawImage(l.canvas, x - r - 2 * persp, y - r - 2 * persp, (r + 2 * persp) * 2, (r + 2 * persp) * 2);
             if (b.ring) drawRing(ctx, x, y, r, b.tilt ?? 0, false);
-            if (b.moon && moon) {
-              const ma = t * 0.9;
-              const mxp = x + Math.cos(ma) * r * 2.4, myp = y + Math.sin(ma) * r * 0.7;
-              refresh(moon, now, light);
-              const mr = moon.geom.r * persp;
-              ctx.drawImage(moon.canvas, mxp - mr - 1, myp - mr - 1, (mr + 1) * 2, (mr + 1) * 2);
-            }
+            if (!moonBehind) drawMoon();
             ctx.globalAlpha = 1;
           },
         });
@@ -247,29 +252,20 @@ export function SpaceBackground({ intensity = 1 }: { intensity?: number }) {
           halo.addColorStop(1, 'rgba(255,100,30,0)');
           ctx.fillStyle = halo;
           ctx.fillRect(cx - sr * 11, cy - sr * 11, sr * 22, sr * 22);
-          // корона: лучи разной длины, медленно «дышат»
-          ctx.save();
-          ctx.translate(cx, cy);
-          for (let i = 0; i < 28; i++) {
-            const ang = (i / 28) * Math.PI * 2 + hash(i, 3) * 0.1;
-            const len = sr * (2.4 + hash(i, 4) * 3.8) * (0.85 + 0.15 * Math.sin(t * 0.6 + i));
+          // корона: мягкая текстура (размытые языки пламени), медленно вращается и «дышит»
+          if (corona) {
             ctx.save();
-            ctx.rotate(ang);
-            const g = ctx.createLinearGradient(sr * 0.9, 0, len, 0);
-            g.addColorStop(0, 'rgba(255,225,170,0.2)');
-            g.addColorStop(1, 'rgba(255,200,120,0)');
-            ctx.fillStyle = g;
-            ctx.fillRect(sr * 0.9, -sr * 0.05 - hash(i, 5) * sr * 0.08, len - sr * 0.9, sr * 0.1 + hash(i, 5) * sr * 0.16);
+            ctx.translate(cx, cy);
+            ctx.rotate(t * 0.004);
+            const cs = sr * 9 * (1 + 0.015 * Math.sin(t * 0.5));
+            ctx.globalAlpha = 0.9;
+            ctx.drawImage(corona, -cs, -cs, cs * 2, cs * 2);
+            ctx.rotate(-t * 0.009);
+            ctx.globalAlpha = 0.45;
+            ctx.drawImage(corona, -cs * 0.7, -cs * 0.7, cs * 1.4, cs * 1.4);
             ctx.restore();
+            ctx.globalAlpha = 1;
           }
-          // горизонтальный анаморфный блик
-          const st = ctx.createLinearGradient(-sr * 9, 0, sr * 9, 0);
-          st.addColorStop(0, 'rgba(255,190,110,0)');
-          st.addColorStop(0.5, 'rgba(255,225,170,0.32)');
-          st.addColorStop(1, 'rgba(255,190,110,0)');
-          ctx.fillStyle = st;
-          ctx.fillRect(-sr * 9, -sr * 0.07, sr * 18, sr * 0.14);
-          ctx.restore();
           ctx.globalCompositeOperation = 'source-over';
           if (sun && texCache.has('sun')) {
             refresh(sun, now, [0, 0, 1], true);
@@ -287,17 +283,6 @@ export function SpaceBackground({ intensity = 1 }: { intensity?: number }) {
           core.addColorStop(1, 'rgba(255,200,120,0)');
           ctx.fillStyle = core;
           ctx.fillRect(cx - sr * 1.6, cy - sr * 1.6, sr * 3.2, sr * 3.2);
-          // блики объектива вдоль линии «Солнце → центр экрана»
-          const vx = w / 2 - cx, vy = h / 2 - cy;
-          for (const [k, rad, col] of [[0.35, 14, '120,170,255'], [0.6, 26, '255,170,90'], [0.9, 10, '170,255,200'], [1.25, 34, '255,120,160']] as const) {
-            const gx = cx + vx * k, gy = cy + vy * k;
-            const gg = ctx.createRadialGradient(gx, gy, 0, gx, gy, rad * sc);
-            gg.addColorStop(0, `rgba(${col},0.07)`);
-            gg.addColorStop(0.8, `rgba(${col},0.04)`);
-            gg.addColorStop(1, `rgba(${col},0)`);
-            ctx.fillStyle = gg;
-            ctx.fillRect(gx - rad * sc, gy - rad * sc, rad * sc * 2, rad * sc * 2);
-          }
           ctx.globalCompositeOperation = 'source-over';
         },
       });

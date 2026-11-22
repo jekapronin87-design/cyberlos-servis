@@ -174,7 +174,7 @@ export function genTexture(kind: BodyKind, w = 256, h = 128): Texture {
         case 'sun': {
           const gran = fbm(u * 40, v * 20, 4, seed, 40);
           const big = fbm(u * 8, v * 4, 4, seed + 2, 8);
-          const t = clamp01(0.55 + (gran - 0.5) * 1.1 + (big - 0.5) * 0.5);
+          const t = clamp01(0.64 + (gran - 0.5) * 0.62 + (big - 0.5) * 0.4);
           c = mix3([232, 120, 24], [255, 238, 150], t);
           const spot = smooth(0.7, 0.78, fbm(u * 6, v * 5, 3, seed + 9, 6)) * (1 - smooth(0.3, 0.45, lat));
           c = mix3(c, [90, 30, 8], spot * 0.8);
@@ -369,4 +369,40 @@ export function genStars(count: number, w: number, h: number, angle: number): St
     out.push({ x, y, mag: m, rgb });
   }
   return out;
+}
+
+// ---------------- Луна вокруг Земли ----------------
+
+/** Положение Луны относительно Земли на экране при виде сверху под малым углом (tilt — то же сплющивание, что у орбит планет). */
+export function moonPlacement(angle: number, earthR: number, tilt = 0.25, dist = 3.1): { dx: number; dy: number; behind: boolean; scale: number } {
+  const s = Math.sin(angle);
+  return { dx: Math.cos(angle) * earthR * dist, dy: s * earthR * dist * tilt, behind: s < 0, scale: 1 + 0.18 * s };
+}
+
+// ---------------- Корона Солнца ----------------
+
+/** Мягкая корона: радиальное свечение, промодулированное шумом по углу (получаются размытые «языки», а не лучи-полоски). RGBA, квадрат size×size. */
+export function genCorona(size: number, out: Uint8ClampedArray): void {
+  const c = size / 2;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = (x + 0.5 - c) / c, dy = (y + 0.5 - c) / c;
+      const r = Math.hypot(dx, dy);
+      const i = (y * size + x) * 4;
+      if (r >= 1) {
+        out[i + 3] = 0;
+        continue;
+      }
+      const ang = Math.atan2(dy, dx);
+      // угловая неоднородность: плавная (низкие частоты), плюс мелкая рябь, затухающая к краю
+      const lobes = fbm(Math.cos(ang) * 1.6 + 3, Math.sin(ang) * 1.6 + 3, 4, 91);
+      const ripple = fbm(Math.cos(ang) * 5 + r * 3, Math.sin(ang) * 5 + r * 2, 3, 17);
+      const mod = 0.45 + 1.1 * lobes + 0.3 * (ripple - 0.5) * (1 - r);
+      const I = (0.75 * Math.exp(-r / 0.075) + 0.26 * Math.exp(-r / 0.28) + 0.09 * Math.pow(1 - r, 2.6) * mod) * smooth(1, 0.82, r);
+      out[i] = 255;
+      out[i + 1] = 170 + 60 * Math.exp(-r / 0.2);
+      out[i + 2] = 90 + 110 * Math.exp(-r / 0.12);
+      out[i + 3] = Math.min(255, 255 * I * (0.55 + 0.45 * mod));
+    }
+  }
 }

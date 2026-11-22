@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fbm, genMilkyWay, genStars, genTexture, makeSphereGeom, shadeSphere, vnoise } from '../src/renderer/hud/spaceGen';
+import { genCorona, moonPlacement, fbm, genMilkyWay, genStars, genTexture, makeSphereGeom, shadeSphere, vnoise } from '../src/renderer/hud/spaceGen';
 
 describe('космос: процедурные текстуры', () => {
   it('шум детерминирован и замкнут по долготе', () => {
@@ -57,5 +57,43 @@ describe('космос: процедурные текстуры', () => {
     const stars = genStars(2000, 1000, 600, -0.5);
     expect(stars.length).toBeGreaterThan(1500);
     expect(stars.filter((s) => s.mag > 0.5).length).toBeLessThan(stars.length * 0.1);
+  });
+});
+
+describe('Луна и корона', () => {
+  it('Луна обходит Землю: за Землёй (дальняя половина орбиты) и перед ней, орбита сплюснута как у планет', () => {
+    const r = 20;
+    let behind = 0, front = 0;
+    for (let a = 0; a < Math.PI * 2; a += 0.1) (moonPlacement(a, r).behind ? behind++ : front++);
+    expect(Math.abs(behind - front)).toBeLessThan(4);
+    const far = moonPlacement(-Math.PI / 2, r);
+    expect(far.behind).toBe(true);
+    expect(Math.abs(far.dx)).toBeLessThan(1);
+    expect(far.dy).toBeLessThan(0); // дальняя точка — выше центра Земли
+    expect(Math.abs(far.dy)).toBeLessThan(r); // за диском Земли: Луна скрыта
+    const near = moonPlacement(Math.PI / 2, r);
+    expect(near.behind).toBe(false);
+    expect(near.dy).toBeGreaterThan(0);
+    expect(near.scale).toBeGreaterThan(far.scale); // ближняя половина крупнее
+    expect(Math.abs(moonPlacement(0, r).dy)).toBeLessThan(1); // у края — на уровне Земли
+  });
+  it('корона плавная: яркость убывает от центра, без резких «лучей»; за краем прозрачно', () => {
+    const size = 128;
+    const buf = new Uint8ClampedArray(size * size * 4);
+    genCorona(size, buf);
+    const a = (x: number, y: number) => buf[(y * size + x) * 4 + 3]!;
+    const c = size / 2;
+    expect(a(c, c)).toBeGreaterThan(a(c + 20, c));
+    expect(a(c + 20, c)).toBeGreaterThan(a(c + 55, c));
+    expect(a(0, 0)).toBe(0);
+    // соседние по углу точки на одном радиусе отличаются умеренно (плавность)
+    let maxJump = 0;
+    for (let k = 0; k < 360; k += 2) {
+      const t1 = (k * Math.PI) / 180, t2 = ((k + 2) * Math.PI) / 180;
+      const v1 = a(Math.round(c + Math.cos(t1) * 32), Math.round(c + Math.sin(t1) * 32));
+      const v2 = a(Math.round(c + Math.cos(t2) * 32), Math.round(c + Math.sin(t2) * 32));
+      maxJump = Math.max(maxJump, Math.abs(v1 - v2));
+    }
+    expect(maxJump).toBeLessThan(40);
   });
 });
