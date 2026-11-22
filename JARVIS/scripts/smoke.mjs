@@ -40,7 +40,7 @@ try {
     api: Object.keys(window.jarvis).sort().join(','),
   }));
   assert.equal(isolation.node, false, 'в рендерере не должно быть Node');
-  assert.equal(isolation.api, 'agents,app,apps,attachments,audit,camera,chat,computer,confirm,conversations,crm,gateway,jobs,kb,memory,mentor,models,profile,secrets,settings,telegram,telephony,update,voice');
+  assert.equal(isolation.api, 'agents,app,apps,attachments,audit,camera,chat,computer,confirm,conversations,crm,gateway,jobs,kb,memory,mentor,models,profile,secrets,settings,telegram,telephony,update,voice,youtube');
   step('рендерер изолирован, API узкий');
 
   // 2. Демо-режим

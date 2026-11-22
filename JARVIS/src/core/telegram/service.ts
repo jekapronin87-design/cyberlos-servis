@@ -235,7 +235,19 @@ export class TelegramService {
   }
 
   private async handle(u: TgUpdate): Promise<void> {
-    const m = u.message;
+    // Бота добавили администратором в канал или группу — запоминаем чат, чтобы в него можно было публиковать (по подтверждению).
+    const mc = u.my_chat_member;
+    if (mc && mc.chat.type !== 'private') {
+      const st = mc.new_chat_member?.status ?? '';
+      if (['administrator', 'member', 'creator'].includes(st)) {
+        this.upsertChat({ message_id: 0, chat: mc.chat, date: 0 });
+        this.d.audit.record({ actor: 'system', action: 'telegram.chat_joined', target: mc.chat.type, decision: 'info' });
+      } else if (['left', 'kicked'].includes(st)) {
+        this.d.db.prepare('DELETE FROM tg_chats WHERE chat_id = ? AND is_owner = 0').run(mc.chat.id);
+      }
+      return;
+    }
+    const m = u.message ?? u.channel_post;
     if (!m || !m.text || m.from?.is_bot) return;
     const chat = this.upsertChat(m);
     const text = m.text.trim();
@@ -379,6 +391,14 @@ export class TelegramService {
     this.d.audit.record({ actor: opts.limited ? 'assistant' : 'user', action: 'telegram.send', target: String(chatId), decision: 'info', details: { chars: t.length } });
   }
 
+  private chatKind(ref: string | number): string {
+    try {
+      return this.resolveChat(ref).kind;
+    } catch {
+      return 'private';
+    }
+  }
+
   private resolveChat(ref: string | number): ChatRow {
     const all = this.d.db.prepare('SELECT * FROM tg_chats').all() as unknown as ChatRow[];
     const s = String(ref).trim().toLowerCase().replace(/^@/, '');
@@ -399,7 +419,7 @@ export class TelegramService {
       inputSchema: { type: 'object', properties: {} },
       describe: () => 'Показать чаты Telegram',
       execute: () =>
-        this.listChats().map((c) => `${c.chatId} · ${c.name}${c.username ? ` (@${c.username})` : ''}${c.isOwner ? ' · ВЛАДЕЛЕЦ' : ''}${c.unread ? ` · непрочитано: ${c.unread}` : ''}${c.needsHuman ? ' · ждёт человека' : ''}`).join('\n') || 'Чатов пока нет.',
+        this.listChats().map((c) => `${c.chatId} · ${c.name}${c.username ? ` (@${c.username})` : ''}${c.kind === 'channel' ? ' · КАНАЛ' : c.kind !== 'private' ? ' · ГРУППА' : ''}${c.isOwner ? ' · ВЛАДЕЛЕЦ' : ''}${c.unread ? ` · непрочитано: ${c.unread}` : ''}${c.needsHuman ? ' · ждёт человека' : ''}`).join('\n') || 'Чатов пока нет.',
     });
     tools.register<{ chat: string; limit?: number }>({
       name: 'telegram_read',
@@ -422,6 +442,8 @@ export class TelegramService {
       risk: 'medium',
       mutates: true,
       domain: 'local',
+      // Публикация в канал или группу видна всем подписчикам — это уровень «высокий»: с телефона и из фона запрещено, с компьютера — с явным подтверждением.
+      assess: (i) => (this.chatKind(i.chat) !== 'private' ? { risk: 'high', warning: 'Это ПУБЛИКАЦИЯ в канал или группу: сообщение увидят все участники.' } : undefined),
       inputSchema: { type: 'object', properties: { chat: { type: 'string', description: 'Номер чата или имя' }, text: { type: 'string' } }, required: ['chat', 'text'] },
       describe: (i) => {
         let who = String(i.chat);
@@ -430,7 +452,7 @@ export class TelegramService {
         } catch {
           /* покажем как есть */
         }
-        return `Отправить в Telegram «${who}»:\n${String(i.text).slice(0, 600)}`;
+        return `${this.chatKind(i.chat) !== 'private' ? 'ОПУБЛИКОВАТЬ в канале/группе' : 'Отправить в Telegram'} «${who}»:\n${String(i.text).slice(0, 600)}`;
       },
       execute: async (i) => {
         const c = this.resolveChat(i.chat);

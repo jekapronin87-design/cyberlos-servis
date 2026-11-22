@@ -22,9 +22,18 @@ export interface TgMessage {
   date: number;
   text?: string;
 }
+export interface TgMemberUpdate {
+  chat: TgChat;
+  from?: TgUser;
+  new_chat_member?: { status: string; user?: TgUser };
+}
 export interface TgUpdate {
   update_id: number;
   message?: TgMessage;
+  /** Пост в канале, где бот — администратор. */
+  channel_post?: TgMessage;
+  /** Бота добавили в канал/группу или убрали из неё. */
+  my_chat_member?: TgMemberUpdate;
 }
 
 export class TelegramApiError extends Error {
@@ -78,7 +87,7 @@ export class TelegramApi {
 
   /** Длинный опрос: ждёт новые сообщения до timeoutSec секунд. */
   getUpdates(offset: number, timeoutSec: number, signal: AbortSignal): Promise<TgUpdate[]> {
-    return this.call<TgUpdate[]>('getUpdates', { offset, timeout: timeoutSec, allowed_updates: ['message'] }, signal, (timeoutSec + 15) * 1000);
+    return this.call<TgUpdate[]>('getUpdates', { offset, timeout: timeoutSec, allowed_updates: ['message', 'channel_post', 'my_chat_member'] }, signal, (timeoutSec + 15) * 1000);
   }
 
   sendMessage(chatId: number, text: string): Promise<TgMessage> {

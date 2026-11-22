@@ -272,3 +272,56 @@ describe('Telegram: инструменты ассистента', () => {
     await h.core.close();
   });
 });
+
+describe('Telegram: каналы и группы', () => {
+  const join = (tg: FakeTelegram, chatId: number, title: string, type: 'channel' | 'supergroup' = 'channel') =>
+    tg.updates.push({ update_id: tg.updates.length + 1, my_chat_member: { chat: { id: chatId, type, title }, new_chat_member: { status: 'administrator' } } });
+
+  it('бот, добавленный администратором в канал, запоминает его; посты канала сохраняются, но ответов нет', async () => {
+    const { h, tg } = await setup(scripted(() => [{ type: 'text', text: 'x' } as ProviderEvent]));
+    h.core.updateSettings({ telegramAutoReply: true });
+    join(tg, -1001, 'Мой канал');
+    tg.updates.push({ update_id: 99, channel_post: { message_id: 5, date: 0, text: 'Новый пост', chat: { id: -1001, type: 'channel', title: 'Мой канал' } } });
+    await poll(h);
+    const ch = h.core.telegramChats().find((c) => c.chatId === -1001)!;
+    expect(ch).toMatchObject({ name: 'Мой канал', kind: 'channel' });
+    expect(h.core.telegramMessages(-1001)[0]!.text).toBe('Новый пост');
+    expect(tg.sent).toHaveLength(0);
+    // удалили из канала — чат забыт
+    tg.updates.push({ update_id: 100, my_chat_member: { chat: { id: -1001, type: 'channel', title: 'Мой канал' }, new_chat_member: { status: 'kicked' } } });
+    await poll(h);
+    expect(h.core.telegramChats().find((c) => c.chatId === -1001)).toBeUndefined();
+    await h.core.close();
+  });
+
+  it('публикация в канал — «высокий» риск: окно подтверждения с пометкой; отказ — не отправляет; из фона и с телефона запрещено', async () => {
+    const { h, tg } = await setup();
+    join(tg, -1001, 'Мой канал');
+    await poll(h);
+    const ex = (input: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+      h.core.executor.execute({ type: 'tool_use', id: 'x', name: 'telegram_send', input }, { runId: 'r', conversationId: h.core.createConversation().id, signal: new AbortController().signal, actor: 'assistant', ...extra });
+    h.autoAnswer.value = false;
+    const denied = await ex({ chat: 'Мой канал', text: 'Новое видео!' });
+    expect(denied.denied).toBe(true);
+    expect(tg.sent).toHaveLength(0);
+    expect(h.confirms[0]!.risk).toBe('high');
+    expect(h.confirms[0]!.description).toContain('ОПУБЛИКОВАТЬ');
+    expect(h.confirms[0]!.reason + JSON.stringify(h.confirms[0])).toContain('ПУБЛИКАЦИЯ');
+    // фон: без окна, отказ
+    const before = h.confirms.length;
+    const bg = await ex({ chat: 'Мой канал', text: 'x' }, { background: true });
+    expect(bg.denied).toBe(true);
+    expect(h.confirms.length).toBe(before);
+    // телефон: высокий риск запрещён всегда
+    h.core.updateSettings({ gatewayAllowActions: true });
+    const remote = await ex({ chat: 'Мой канал', text: 'x' }, { remoteDevice: 'Телефон' });
+    expect(remote.denied).toBe(true);
+    expect(tg.sent).toHaveLength(0);
+    // человек подтвердил на компьютере
+    h.autoAnswer.value = true;
+    const ok = await ex({ chat: 'Мой канал', text: 'Новое видео!' });
+    expect(ok.isError).toBeFalsy();
+    expect(tg.sent).toEqual([{ chat_id: -1001, text: 'Новое видео!' }]);
+    await h.core.close();
+  });
+});

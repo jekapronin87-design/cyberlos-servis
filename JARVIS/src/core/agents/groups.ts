@@ -3,6 +3,7 @@ import type { ToolRegistry } from '../tools/registry';
 
 /** Какие инструменты входят в группу прав. Агент получает ТОЛЬКО инструменты выбранных групп (плюс безобидные «время» и «чтение памяти»). */
 const GROUP_TOOLS: Record<AgentGroupId, RegExp> = {
+  youtube: /^youtube_/,
   web: /^(browser_(open|search|read|scroll|back|click|type|press|screenshot|close))$/,
   files: /^fs_/,
   apps: /^app_/,

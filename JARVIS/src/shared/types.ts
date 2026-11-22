@@ -10,7 +10,7 @@ export type RiskLevel = 'safe' | 'low' | 'medium' | 'high' | 'critical';
 export type DataDomain = 'local' | 'training' | 'production';
 
 /** Модули JARVIS: каждый можно отключить целиком (инструменты, вкладки). */
-export type ModuleId = 'computer' | 'dev' | 'crm' | 'mentor' | 'scheduler' | 'telephony' | 'gateway' | 'telegram' | 'agents';
+export type ModuleId = 'computer' | 'dev' | 'crm' | 'mentor' | 'scheduler' | 'telephony' | 'gateway' | 'telegram' | 'agents' | 'youtube';
 export const MODULES: { id: ModuleId; title: string; description: string }[] = [
   { id: 'computer', title: 'Управление компьютером', description: 'Файлы, программы, браузер, снимок экрана, камера' },
   { id: 'dev', title: 'ИИ-программист', description: 'Проекты, правка кода, тесты, Git, субагенты' },
@@ -21,6 +21,7 @@ export const MODULES: { id: ModuleId; title: string; description: string }[] = [
   { id: 'gateway', title: 'Доступ с телефона', description: 'Управление JARVIS с мобильного' },
   { id: 'telegram', title: 'Telegram', description: 'Бот: переписка, автоответчик, управление из Telegram' },
   { id: 'agents', title: 'Агенты', description: 'Свои ИИ-агенты: роль, права, расписание, отчёты' },
+  { id: 'youtube', title: 'YouTube', description: 'Поиск, каналы, видео, комментарии (только чтение, по API-ключу)' },
 ];
 
 export type ProviderChoice = 'auto' | 'demo' | 'anthropic';
@@ -111,6 +112,8 @@ export interface Settings {
   uiVolume: number;
   /** Тихий фоновый «гул космоса». */
   uiAmbient: boolean;
+  /** Сколько «единиц квоты» YouTube Data API разрешено тратить в сутки (у Google бесплатный лимит 10 000). */
+  youtubeDailyUnits: number;
   /** Открывать на весь экран (F11 — переключить). */
   fullscreen: boolean;
   /** Имя ассистента (на него он откликается голосом; «Джарвис» остаётся запасным именем). */
@@ -158,6 +161,7 @@ export const DEFAULT_SETTINGS: Settings = {
   systemVoice: '',
   cameraEnabled: false,
   fullscreen: true,
+  youtubeDailyUnits: 3000,
   voiceSessionSec: 120,
   uiSounds: true,
   uiVolume: 70,
@@ -575,10 +579,11 @@ export interface TelegramMessageDto {
 
 // ---------- Агенты ----------
 
-export type AgentGroupId = 'web' | 'files' | 'apps' | 'crm' | 'dev' | 'telegram' | 'knowledge' | 'images' | 'screen';
+export type AgentGroupId = 'youtube' | 'web' | 'files' | 'apps' | 'crm' | 'dev' | 'telegram' | 'knowledge' | 'images' | 'screen';
 
 export const AGENT_GROUPS: { id: AgentGroupId; title: string; description: string; risky?: boolean }[] = [
   { id: 'web', title: 'Интернет (браузер)', description: 'Поиск, открыть сайт, прочитать, прокрутить, нажать, ввести текст' },
+  { id: 'youtube', title: 'YouTube (только чтение)', description: 'Поиск видео и каналов, статистика, описания, комментарии' },
   { id: 'crm', title: 'CRM (только чтение)', description: 'Заявки, воронки, задачи, команда, производство, отчёты' },
   { id: 'knowledge', title: 'База знаний и обучение', description: 'Поиск по утверждённым документам, курсы, прогресс' },
   { id: 'telegram', title: 'Telegram', description: 'Читать переписку бота, отправлять сообщения (с подтверждением)', risky: true },
@@ -632,4 +637,10 @@ export interface AgentRunDto {
 export interface AgentTemplateDto {
   key: string;
   input: AgentInputDto;
+}
+
+export interface YoutubeStatusDto {
+  hasKey: boolean;
+  usedToday: number;
+  limit: number;
 }

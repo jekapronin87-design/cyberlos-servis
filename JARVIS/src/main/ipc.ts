@@ -156,6 +156,10 @@ export function registerIpc(opts: {
   handle(IPC.appsStartMenu, () => core.startMenuApps());
   handle(IPC.appsSetStartMenu, (_e, on) => core.setStartMenuAccess(on === true));
   handle(IPC.appsLaunch, (_e, q) => core.launchAppByName(str(q, 'query', 100)));
+  handle(IPC.ytStatus, () => core.youtubeStatus());
+  handle(IPC.ytSetKey, (_e, key) => core.setYoutubeKey(str(key, 'key', 400)));
+  handle(IPC.ytClearKey, () => core.clearYoutubeKey());
+  handle(IPC.ytTest, () => core.testYoutube());
   handle(IPC.agentsList, () => core.listAgents());
   handle(IPC.agentsTemplates, () => core.agentTemplates());
   handle(IPC.agentsSave, (_e, input) => {

@@ -55,6 +55,14 @@ export function TelegramView(props: { settings: Settings; onUpdate: (p: Partial<
   };
 
   const current = chats.find((c) => c.chatId === open) ?? null;
+  const sendNow = async (): Promise<void> => {
+    if (!current || !text.trim()) return;
+    if (current.kind !== 'private' && !window.confirm(`Опубликовать в «${current.name}»? Сообщение увидят все участники.`)) return;
+    await run(async () => {
+      setMsgs(await window.jarvis.telegram.send(current.chatId, text));
+      setText('');
+    });
+  };
 
   return (
     <section className="page" style={{ maxWidth: 1100 }}>
@@ -129,11 +137,11 @@ export function TelegramView(props: { settings: Settings; onUpdate: (p: Partial<
           <div className="card" style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 14 }}>
             <div>
               <h2>Чаты</h2>
-              {chats.length === 0 && <p className="muted small">Пока никто не писал боту.</p>}
+              {chats.length === 0 && <p className="muted small">Пока никто не писал боту. Чтобы публиковать в свой канал: добавьте бота в канал администратором (с правом публикации) — канал появится здесь сам.</p>}
               <ul className="list">
                 {chats.map((c) => (
                   <li key={c.chatId} className={`list-item ${open === c.chatId ? 'active' : ''}`} style={{ cursor: 'pointer', display: 'block' }} onClick={() => { setOpen(c.chatId); void window.jarvis.telegram.messages(c.chatId).then(setMsgs); }}>
-                    <strong>{c.name}</strong> {c.isOwner && <span className="tag">вы</span>} {c.unread > 0 && <span className="tag">{c.unread} нов.</span>} {c.needsHuman && <span className="tag">ждёт человека</span>}
+                    <strong>{c.name}</strong> {c.kind === 'channel' && <span className="tag">канал</span>}{c.kind !== 'channel' && c.kind !== 'private' && <span className="tag">группа</span>} {c.isOwner && <span className="tag">вы</span>} {c.unread > 0 && <span className="tag">{c.unread} нов.</span>} {c.needsHuman && <span className="tag">ждёт человека</span>}
                     <div className="muted small">{c.lastText}</div>
                   </li>
                 ))}
@@ -164,8 +172,8 @@ export function TelegramView(props: { settings: Settings; onUpdate: (p: Partial<
                     ))}
                   </div>
                   <div className="row">
-                    <input style={{ flex: 1 }} value={text} placeholder="Написать от имени бота…" onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && text.trim() && void run(async () => { setMsgs(await window.jarvis.telegram.send(current.chatId, text)); setText(''); })} />
-                    <button className="btn btn-primary" disabled={busy || !text.trim()} onClick={() => void run(async () => { setMsgs(await window.jarvis.telegram.send(current.chatId, text)); setText(''); })}>Отправить</button>
+                    <input style={{ flex: 1 }} value={text} placeholder="Написать от имени бота…" onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && text.trim() && void sendNow()} />
+                    <button className="btn btn-primary" disabled={busy || !text.trim()} onClick={() => void sendNow()}>{current.kind === 'channel' ? 'Опубликовать' : 'Отправить'}</button>
                   </div>
                 </>
               )}

@@ -44,6 +44,11 @@ export function validateSettingsPatch(patch: unknown): Partial<Settings> {
     if (typeof n !== 'number' || !Number.isFinite(n) || n < 0 || n > 100) throw new Error('Громкость: число от 0 до 100');
     out.uiVolume = Math.round(n);
   }
+  if ('youtubeDailyUnits' in p) {
+    const n = p.youtubeDailyUnits;
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < 100 || n > 9500) throw new Error('Лимит YouTube: целое число от 100 до 9500 единиц в сутки');
+    out.youtubeDailyUnits = n;
+  }
   if ('routingMode' in p) {
     if (!['smart', 'claude', 'free'].includes(p.routingMode as string)) throw new Error('Неизвестный режим выбора модели');
     out.routingMode = p.routingMode as Settings['routingMode'];
@@ -111,7 +116,7 @@ export function validateSettingsPatch(patch: unknown): Partial<Settings> {
     out.updateBranch = p.updateBranch;
   }
   if ('disabledModules' in p) {
-    const ids = ['computer', 'dev', 'crm', 'mentor', 'scheduler', 'telephony', 'gateway', 'telegram', 'agents'];
+    const ids = ['computer', 'dev', 'crm', 'mentor', 'scheduler', 'telephony', 'gateway', 'telegram', 'agents', 'youtube'];
     if (!Array.isArray(p.disabledModules) || p.disabledModules.some((m) => !ids.includes(m as string))) throw new Error('Неизвестный модуль');
     out.disabledModules = [...new Set(p.disabledModules as string[])] as Settings['disabledModules'];
   }

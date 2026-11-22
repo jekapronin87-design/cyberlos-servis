@@ -27,6 +27,7 @@ import { Gateway } from './gateway/server';
 import { registerImageTool } from './media/images';
 import { TelegramService, type TelegramEvent } from './telegram/service';
 import { AgentService, AGENT_TEMPLATES, type AgentEvent } from './agents/service';
+import { YoutubeService, SECRET_YOUTUBE_KEY } from './youtube/service';
 import { TelephonyService } from './telephony/service';
 import { ProviderHttpError } from './providers/types';
 import { describeProviderHttp } from './providers/openai';
@@ -84,6 +85,8 @@ export interface CoreOptions {
   schedulerTimeoutMs?: number;
   /** Результат запуска агента по расписанию (в Electron — системное уведомление и сообщение окну). */
   onAgent?: (e: AgentEvent) => void;
+  /** Для тестов: подмена сети YouTube. */
+  youtubeFetch?: typeof fetch;
   /** Событие Telegram (входящее, передача человеку, ошибка) — для уведомлений. */
   onTelegram?: (e: TelegramEvent) => void;
   /** Для тестов: подмена сети Telegram. */
@@ -132,6 +135,7 @@ export class JarvisCore {
   readonly telephony: TelephonyService;
   readonly telegram: TelegramService;
   readonly agents: AgentService;
+  readonly youtube: YoutubeService;
   readonly devices: DeviceRepo;
   readonly pairing: PairingCodes;
   readonly gateway: Gateway;
@@ -265,6 +269,8 @@ export class JarvisCore {
       now: opts.schedulerNow,
       timeoutMs: opts.schedulerTimeoutMs,
     });
+    this.youtube = new YoutubeService({ db: this.db, secrets: opts.secrets, audit: this.audit, getSettings: () => this.settings.get(), fetchImpl: opts.youtubeFetch, now: opts.schedulerNow });
+    this.youtube.registerTools(this.tools);
     this.agents = new AgentService({
       db: this.db,
       runner,
@@ -594,6 +600,28 @@ export class JarvisCore {
   revokeDevice(id: number): void {
     this.devices.revoke(id);
     this.audit.record({ actor: 'user', action: 'gateway.device_revoked', target: String(id), decision: 'info' });
+  }
+
+  // ----- YouTube -----
+  private youtubeOn(): YoutubeService {
+    if (this.settings.get().disabledModules.includes('youtube')) throw new Error('Модуль «YouTube» отключён в настройках.');
+    return this.youtube;
+  }
+  youtubeStatus() {
+    return this.youtubeOn().status();
+  }
+  setYoutubeKey(key: string) {
+    this.opts.secrets.set(SECRET_YOUTUBE_KEY, validateApiKey(key));
+    this.audit.record({ actor: 'user', action: 'secrets.youtube_key_set', decision: 'info' });
+    return this.youtubeOn().status();
+  }
+  clearYoutubeKey() {
+    this.opts.secrets.delete(SECRET_YOUTUBE_KEY);
+    this.audit.record({ actor: 'user', action: 'secrets.youtube_key_cleared', decision: 'info' });
+    return this.youtubeOn().status();
+  }
+  testYoutube() {
+    return this.youtubeOn().test();
   }
 
   // ----- агенты -----

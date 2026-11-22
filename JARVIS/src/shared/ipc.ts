@@ -18,6 +18,7 @@ import type {
   GatewayDeviceDto,
   FreeProviderId,
   TelegramStatusDto,
+  YoutubeStatusDto,
   AgentDto,
   AgentInputDto,
   AgentRunDto,
@@ -82,6 +83,10 @@ export const IPC = {
   appsStartMenu: 'apps:startmenu',
   appsSetStartMenu: 'apps:startmenu:set',
   appsLaunch: 'apps:launch',
+  ytStatus: 'yt:status',
+  ytSetKey: 'yt:key:set',
+  ytClearKey: 'yt:key:clear',
+  ytTest: 'yt:test',
   agentsList: 'agents:list',
   agentsTemplates: 'agents:templates',
   agentsSave: 'agents:save',
@@ -226,6 +231,13 @@ export interface JarvisApi {
     setStartMenu(on: boolean): Promise<ComputerAccess>;
     /** Голосовая команда «открой …»: matched=false — не нашли, пусть разбирается модель. */
     launch(query: string): Promise<{ matched: boolean; ok: boolean; message: string }>;
+  };
+  youtube: {
+    status(): Promise<YoutubeStatusDto>;
+    setKey(key: string): Promise<YoutubeStatusDto>;
+    clearKey(): Promise<YoutubeStatusDto>;
+    /** Проверка ключа (тратит 1 единицу квоты). */
+    test(): Promise<string>;
   };
   agents: {
     list(): Promise<AgentDto[]>;

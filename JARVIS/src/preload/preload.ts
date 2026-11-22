@@ -73,6 +73,12 @@ const api: JarvisApi = {
     setStartMenu: (on) => invoke(IPC.appsSetStartMenu, on),
     launch: (query) => invoke(IPC.appsLaunch, query),
   },
+  youtube: {
+    status: () => invoke(IPC.ytStatus),
+    setKey: (key) => invoke(IPC.ytSetKey, key),
+    clearKey: () => invoke(IPC.ytClearKey),
+    test: () => invoke(IPC.ytTest),
+  },
   agents: {
     list: () => invoke(IPC.agentsList),
     templates: () => invoke(IPC.agentsTemplates),

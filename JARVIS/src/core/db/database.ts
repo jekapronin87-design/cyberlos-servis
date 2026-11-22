@@ -249,6 +249,10 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX idx_agent_runs ON agent_runs (agent_id, id);
   `,
+  // 11: расход квоты YouTube Data API по дням
+  `
+  CREATE TABLE yt_usage (day TEXT PRIMARY KEY, units INTEGER NOT NULL DEFAULT 0);
+  `,
 ];
 
 export function openDatabase(path: string): Db {

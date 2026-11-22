@@ -10,6 +10,7 @@ const PREFIX: [RegExp, ModuleId][] = [
   [/^(call_|telephony_)/, 'telephony'],
   [/^telegram_/, 'telegram'],
   [/^agent_/, 'agents'],
+  [/^youtube_/, 'youtube'],
 ];
 
 export function moduleOfTool(name: string): ModuleId | null {

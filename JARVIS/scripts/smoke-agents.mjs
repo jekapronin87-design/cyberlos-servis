@@ -25,7 +25,7 @@ try {
   await page.waitForSelector('.hud');
   await page.click('.nav-item:has-text("Агенты")');
   await page.waitForSelector('#agent-templates');
-  assert.ok((await page.locator('#agent-templates button').count()) >= 6);
+  assert.ok((await page.locator('#agent-templates button').count()) >= 8);
   step('раздел «Агенты» открыт, заготовки на месте');
 
   await page.click('#agent-templates button:has-text("Аналитик CRM")');
@@ -74,9 +74,30 @@ try {
   await page.waitForSelector('[data-agent="Мой помощник"]', { state: 'detached' });
   step('агента можно удалить');
 
+  // заготовки для YouTube и Telegram
+  await page.click('#agent-templates button:has-text("YouTube-аналитик")');
+  await page.waitForSelector('#agent-editor #agent-instructions');
+  assert.equal(await page.locator('[data-group=youtube]').isChecked(), true);
+  assert.equal(await page.locator('[data-group=telegram]').isChecked(), false);
+  assert.equal(await page.inputValue('#agent-mode'), 'read');
+  await page.click('#agent-templates button:has-text("Контент YouTube и Telegram")');
+  assert.equal(await page.locator('[data-group=youtube]').isChecked(), true);
+  assert.equal(await page.locator('[data-group=telegram]').isChecked(), true);
+  assert.equal(await page.inputValue('#agent-mode'), 'act');
+  await page.screenshot({ path: join(shots, 'a2-youtube-agent.png') });
+  step('заготовки «YouTube-аналитик» (только чтение) и «Контент YouTube и Telegram» (с подтверждением) на месте');
+
+  // карточка YouTube в настройках
+  await page.click('.nav-item:has-text("Настройки")');
+  await page.waitForSelector('#youtube-card');
+  assert.match(await page.textContent('#youtube-card'), /YouTube Data API v3/);
+  await page.fill('#yt-key', '123');
+  await page.click('#yt-save');
+  await page.waitForSelector('#youtube-card .banner-err:has-text("Ключ выглядит некорректно")');
+  step('карточка YouTube: инструкция по ключу, неверный ключ отвергается');
+
   const log = JSON.stringify(await page.evaluate(() => window.jarvis.audit.list(200)));
   assert.ok(log.includes('agent.create') && log.includes('agent.delete'));
-  await page.click('.nav-item:has-text("Настройки")');
   await page.waitForSelector('#modules-card');
   await page.locator('#modules-card label:has-text("Свои ИИ-агенты") input').click();
   await page.waitForFunction(() => ![...document.querySelectorAll('.nav-item')].some((n) => n.textContent.includes('Агенты')));
