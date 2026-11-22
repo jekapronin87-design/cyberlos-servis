@@ -112,6 +112,19 @@ export function isEndPhrase(text: string): boolean {
   return /^((все|ну|ладно|хорошо|системно|джарвис)\s+)*(отбой|пока|до свидания|до связи|свободен|отдыхай|можешь отдыхать|спи|отключись|закончили|на сегодня все|спасибо пока|спасибо все|все спасибо)(\s+(спасибо|системно|джарвис|пока))*$/.test(t);
 }
 
+/**
+ * Это распознано собственное слово ассистента (эхо колонок), а не ваша речь? Сравниваем слова с тем, что он говорил последние секунды:
+ * если почти все слова фразы уже звучали из колонок — это эхо.
+ */
+export function isEchoOfSpeech(transcript: string, spokenRecently: string): boolean {
+  const words = normalizeSpeech(transcript).split(' ').filter((w) => w.length >= 3);
+  if (words.length < 4) return false;
+  const spoken = new Set(normalizeSpeech(spokenRecently).split(' ').filter((w) => w.length >= 3));
+  if (spoken.size === 0) return false;
+  const hit = words.filter((w) => spoken.has(w)).length;
+  return hit / words.length >= 0.75;
+}
+
 export type NavIntent = 'analytics' | 'city' | 'home' | 'agents';
 
 /**

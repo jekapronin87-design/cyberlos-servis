@@ -42,6 +42,13 @@ export const isSpeaking = (): boolean => {
   return speaking;
 };
 export const speechState = (): { speakingSince: number | null; lastSpokeEnd: number } => ({ speakingSince, lastSpokeEnd });
+
+/** Что ассистент произносил недавно (для отсева эха по смыслу). */
+const spokenLog: { t: number; text: string }[] = [];
+export const recentSpoken = (windowMs = 45_000): string => {
+  const now = performance.now();
+  return spokenLog.filter((s) => now - s.t < windowMs).map((s) => s.text).join(' ');
+};
 export const onSpeaking = (cb: Listener): (() => void) => {
   listeners.add(cb);
   return () => listeners.delete(cb);
@@ -218,6 +225,8 @@ export class SpeechSession {
     this.emitted = true;
     const text = textForSpeech(sentence, 600);
     if (!text) return;
+    spokenLog.push({ t: performance.now(), text });
+    while (spokenLog.length > 40) spokenLog.shift();
     setSpeaking(true);
     if (this.o.mode === 'api') {
       // Запрос стартует сразу (параллельно), воспроизведение — строго по порядку.

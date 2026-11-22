@@ -6,6 +6,7 @@ import { CrmCard } from '../components/CrmCard';
 import { GatewayCard } from '../components/GatewayCard';
 import { ModelsCard } from '../components/ModelsCard';
 import { YoutubeCard } from '../components/YoutubeCard';
+import { MicTest } from '../components/MicTest';
 import { UpdateCard } from '../components/UpdateCard';
 import { listSystemVoices, speak } from '../voice/speech';
 
@@ -200,6 +201,7 @@ export function SettingsView(props: {
             <strong>Разрешить использование микрофона</strong> (главный выключатель; после запуска приложения прослушивание всегда выключено)
           </span>
         </label>
+        <MicTest micEnabled={s.micEnabled} />
         <label className="field">
           <span>Беседа: сколько секунд слушать без слова-имени после обращения</span>
           <input id="voice-session" type="number" min={10} max={900} defaultValue={s.voiceSessionSec} onBlur={(e) => { const n = Number(e.target.value); if (n !== s.voiceSessionSec) void run(() => props.onUpdate({ voiceSessionSec: n }), 'Сохранено'); }} style={{ maxWidth: 140 }} />

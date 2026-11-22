@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Settings } from '../../shared/types';
-import { isEndPhrase, isJunkTranscript, isLikelyEcho, parseVoiceCommand, type UtteranceMeta } from '../../shared/voice';
+import { isEchoOfSpeech, isEndPhrase, isJunkTranscript, parseVoiceCommand, type UtteranceMeta } from '../../shared/voice';
 import { VoiceListener, type ListenerState } from './listener';
-import { cancelSpeech, isSpeaking, speak, speechState } from './speech';
+import { cancelSpeech, isSpeaking, recentSpoken, speak, speechState } from './speech';
 
 export type VoiceUiState = 'idle' | 'listening' | 'hearing' | 'transcribing';
 
@@ -63,11 +63,7 @@ export function useVoice(p: {
   const handleUtterance = useCallback(
     async (blob: Blob, meta: UtteranceMeta): Promise<void> => {
       const cur = pRef.current;
-      // Своя речь из колонок (эхо) — не команда: длинную фразу, пересекающуюся с речью Системно, не отправляем на распознавание.
-      if (isLikelyEcho(meta, speechState())) {
-        say('Слышу свою собственную речь из колонок — пропускаю. Если мешает, используйте наушники.');
-        return;
-      }
+      void meta; // эхо колонок отсеивает сам захват звука (см. listener: gate) и проверка по смыслу ниже
       setTranscribing((n) => n + 1);
       try {
         const bytes = new Uint8Array(await blob.arrayBuffer());
@@ -79,7 +75,11 @@ export function useVoice(p: {
           }),
         ]).finally(() => window.clearTimeout(timer));
         const wake = cur.settings.voiceMode === 'wake';
-        if (isJunkTranscript(text)) return; // «Продолжение следует…» и прочие выдумки распознавания на шуме
+        if (isJunkTranscript(text)) return;
+        if (isEchoOfSpeech(text, recentSpoken())) {
+          say('Это слова самого ассистента из колонок — пропускаю. С наушниками такого не будет.');
+          return;
+        } // «Продолжение следует…» и прочие выдумки распознавания на шуме
         if (wake && awaitingRef.current && isEndPhrase(text)) {
           setAwait(false);
           say('Хорошо, я на связи. Позовите по имени, когда понадоблюсь.');
@@ -148,6 +148,11 @@ export function useVoice(p: {
         continuous: cur.settings.voiceMode === 'wake',
         onState: setListenState,
         onLevel: setLevel,
+        gate: () => {
+          const s = speechState();
+          return { speaking: isSpeaking(), lastEnd: s.lastSpokeEnd };
+        },
+        onDropped: (why) => say(why === 'echo' ? 'Пока я говорил, микрофон слышал мой голос из колонок — это пропущено. Говорите после того, как я закончу (с наушниками можно перебивать).' : 'Слишком короткая фраза после моей речи — не расслышал. Повторите.', 'warn'),
         onUtterance: (b, meta) => {
           queue.current = queue.current.then(() => handleUtterance(b, meta));
         },

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateVoiceBaseUrl } from '../src/core/db/repositories';
 import { MAX_AUDIO_BYTES, OpenAiCompatibleStt, OpenAiCompatibleTts, SECRET_VOICE_KEY } from '../src/core/voice/service';
-import { isEndPhrase, isJunkTranscript, parseAppIntent, parseNavIntent, isStopPhrase, isWakeWord, parseVoiceCommand, textForSpeech } from '../src/shared/voice';
+import { isEchoOfSpeech, isEndPhrase, isJunkTranscript, parseAppIntent, parseNavIntent, isStopPhrase, isWakeWord, parseVoiceCommand, textForSpeech } from '../src/shared/voice';
 import { makeCore } from './helpers';
 
 describe('разбор голосовых команд', () => {
@@ -205,5 +205,16 @@ describe('беседа: конец разговора и мусор распоз
   it('выдумки модели распознавания на тишине отбрасываются, обычные фразы — нет', () => {
     for (const t of ['Продолжение следует...', 'Субтитры сделал DimaTorzok', 'Спасибо за просмотр!', 'Редактор субтитров А.Семкин', 'да да да да да', 'а', '']) expect(isJunkTranscript(t), t).toBe(true);
     for (const t of ['Доброе утро', 'Который час?', 'Открой аналитику', 'Спасибо, это то, что нужно']) expect(isJunkTranscript(t), t).toBe(false);
+  });
+});
+
+describe('эхо колонок по смыслу', () => {
+  const said = 'Да, Евгений, я здесь. Если надо, спросите — я отвечу на ваш вопрос.';
+  it('слова самого ассистента — эхо; ваша речь — нет', () => {
+    expect(isEchoOfSpeech('Евгений я здесь если надо спросите я отвечу', said)).toBe(true);
+    expect(isEchoOfSpeech('Системно открой мне аналитику по заявкам', said)).toBe(false);
+    expect(isEchoOfSpeech('какая сегодня погода в Москве', said)).toBe(false);
+    expect(isEchoOfSpeech('да я здесь', said)).toBe(false); // слишком коротко, чтобы судить
+    expect(isEchoOfSpeech('что-то длинное и совсем другое', '')).toBe(false);
   });
 });

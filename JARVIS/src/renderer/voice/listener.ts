@@ -1,6 +1,7 @@
 // Захват речи с микрофона и выделение фраз по паузам (VAD по громкости).
 // Звук пишется «как есть» (PCM) в кольцевой буфер, поэтому в начале фразы сохраняется 0,6 с ДО того, как сработал детектор:
 // начало слова («Си-» в «Системно») не обрезается. Готовая фраза кодируется в WAV 16 кГц и отдаётся вызывающему коду; сам модуль звук никуда не отправляет.
+import { applyEchoGate } from './gate';
 import { concat, downsample, encodeWav, TARGET_RATE } from './wav';
 
 export type ListenerState = 'idle' | 'listening' | 'hearing';
@@ -12,6 +13,13 @@ export interface ListenerOptions {
   onLevel(level: number): void;
   onUtterance(blob: Blob, meta: { startedAt: number; endedAt: number }): void;
   onError(message: string): void;
+  /**
+   * Что сейчас говорит сам ассистент: чтобы не принимать его голос из колонок за вашу речь.
+   * speaking — говорит прямо сейчас; lastEnd — когда закончил (performance.now()).
+   */
+  gate?: () => { speaking: boolean; lastEnd: number };
+  /** Диагностика: фраза отброшена (причина). */
+  onDropped?: (reason: 'echo' | 'short') => void;
   /** Для тестов. */
   minSpeechMs?: number;
   silenceMs?: number;
@@ -21,6 +29,12 @@ export interface ListenerOptions {
 const NO_SPEECH_TIMEOUT_MS = 8000;
 const PRE_ROLL_MS = 600;
 const BUFFER = 2048;
+interface Chunk {
+  /** Момент окончания куска (performance.now()). */
+  t: number;
+  d: Float32Array;
+  ms: number;
+}
 
 export class VoiceListener {
   private stream: MediaStream | null = null;
@@ -31,10 +45,10 @@ export class VoiceListener {
   private startedAt = 0;
   private noiseFloor = 0.006;
   /** Кольцо последних кусков звука (до начала фразы). */
-  private pre: Float32Array[] = [];
+  private pre: Chunk[] = [];
   private preMs = 0;
   /** Текущая фраза. */
-  private rec: Float32Array[] | null = null;
+  private rec: Chunk[] | null = null;
   private recMs = 0;
   private speechMs = 0;
   private silenceMs = 0;
@@ -119,9 +133,11 @@ export class VoiceListener {
 
     // Порог с гистерезисом: начать фразу труднее, чем продолжить (тихие хвосты слов не теряются). Нижняя граница — чтобы тихий голос не пропадал.
     const startThr = Math.max(0.006, this.noiseFloor * 2.6);
-    const keepThr = Math.max(0.004, this.noiseFloor * 1.8);
+    // Внутри фразы порог растёт вместе с её громкостью (≥10% от пика): ровный фоновый шум, который автоусиление микрофона «раздувает» в паузах, не удерживает запись бесконечно.
+    const keepThr = Math.max(0.004, this.noiseFloor * 1.8, this.rec ? this.peak * 0.1 : 0);
     const speaking = level > (this.rec ? keepThr : startThr);
     if (!speaking && !this.rec) this.noiseFloor = this.noiseFloor * 0.97 + level * 0.03; // подстраиваемся под шум
+    if (this.rec && this.heard && level < this.peak * 0.35) this.noiseFloor = Math.min(0.05, this.noiseFloor * 0.985 + level * 0.015); // шум меняется и во время фразы
 
     const minSpeech = this.o.minSpeechMs ?? 160;
     const silenceLimit = this.o.silenceMs ?? 850;
@@ -129,9 +145,9 @@ export class VoiceListener {
 
     if (!this.rec) {
       // ждём речь; параллельно держим «предисторию»
-      this.pre.push(chunk);
+      this.pre.push({ t: performance.now(), d: chunk, ms });
       this.preMs += ms;
-      while (this.preMs > PRE_ROLL_MS && this.pre.length > 1) this.preMs -= (this.pre.shift()!.length / this.ctx.sampleRate) * 1000;
+      while (this.preMs > PRE_ROLL_MS && this.pre.length > 1) this.preMs -= this.pre.shift()!.ms;
       if (speaking) {
         this.rec = [...this.pre];
         this.recMs = this.preMs;
@@ -149,7 +165,7 @@ export class VoiceListener {
       return;
     }
 
-    this.rec.push(chunk);
+    this.rec.push({ t: performance.now(), d: chunk, ms });
     this.recMs += ms;
     if (speaking) {
       this.speechMs += ms;
@@ -180,7 +196,11 @@ export class VoiceListener {
     this.reset();
     this.o.onState('listening');
     if (rec && !quiet) {
-      const wav = encodeWav(downsample(concat(rec), rate, TARGET_RATE), Math.min(rate, TARGET_RATE));
+      const r = applyEchoGate(rec, meta, this.o.gate?.());
+      if ('drop' in r) return void this.o.onDropped?.(r.drop);
+      const chunks = r.chunks;
+      meta.startedAt = r.startedAt;
+      const wav = encodeWav(downsample(concat(chunks.map((c) => c.d)), rate, TARGET_RATE), Math.min(rate, TARGET_RATE));
       this.o.onUtterance(new Blob([wav as BlobPart], { type: 'audio/wav' }), meta);
     }
     if (!this.o.continuous) this.stop();
