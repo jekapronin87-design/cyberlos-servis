@@ -7,11 +7,33 @@ const clean = (e: unknown): string =>
 export function ComputerAccessCard() {
   const [acc, setAcc] = useState<ComputerAccess | null>(null);
   const [host, setHost] = useState('');
+  const [menuApps, setMenuApps] = useState<string[]>([]);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
-    void window.jarvis.computer.get().then(setAcc);
+    void window.jarvis.computer.get().then((a) => {
+      setAcc(a);
+      if (a.startMenu) void window.jarvis.apps.startMenu().then(setMenuApps);
+    });
   }, []);
+
+  const toggleMenu = async (on: boolean): Promise<void> => {
+    if (
+      on &&
+      !window.confirm(
+        'Разрешить ассистенту запускать программы из меню «Пуск» по названию («открой Хром», «запусти Excel»)?\n\nОн сможет запускать только обычные программы и только без параметров. Командная строка, PowerShell, редактор реестра, планировщик, службы и подобное исключены. Каждый запуск записывается в журнал.',
+      )
+    )
+      return;
+    try {
+      const a = await window.jarvis.apps.setStartMenu(on);
+      setAcc(a);
+      setMenuApps(on ? await window.jarvis.apps.startMenu() : []);
+      setMsg({ ok: true, text: on ? 'Программы из меню «Пуск» разрешены' : 'Запуск из меню «Пуск» выключен' });
+    } catch (e) {
+      setMsg({ ok: false, text: clean(e) });
+    }
+  };
 
   const act = async (fn: () => Promise<ComputerAccess | null>, ok: string): Promise<void> => {
     try {
@@ -75,6 +97,12 @@ export function ComputerAccessCard() {
       <button className="btn" onClick={() => void act(() => window.jarvis.computer.addApp(), 'Программа добавлена')}>
         + Добавить программу…
       </button>
+      <label className="check" style={{ marginTop: 10 }}>
+        <input id="startmenu-toggle" type="checkbox" checked={acc?.startMenu === true} onChange={(e) => void toggleMenu(e.target.checked)} />
+        <span>
+          <strong>Разрешить все программы из меню «Пуск»</strong> <span className="muted small">— тогда можно просто сказать «открой Хром / Excel / Телеграм». {acc?.startMenu ? `Найдено программ: ${menuApps.length}.` : ''}</span>
+        </span>
+      </label>
 
       <h3>Внутренние адреса для браузера</h3>
       <p className="muted small">

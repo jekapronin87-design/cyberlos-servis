@@ -68,6 +68,11 @@ const api: JarvisApi = {
     runs: (id) => invoke(IPC.jobsRuns, id),
     onResult: subscribe(IPC.evtJob),
   },
+  apps: {
+    startMenu: () => invoke(IPC.appsStartMenu),
+    setStartMenu: (on) => invoke(IPC.appsSetStartMenu, on),
+    launch: (query) => invoke(IPC.appsLaunch, query),
+  },
   telegram: {
     status: () => invoke(IPC.tgStatus),
     connect: (token) => invoke(IPC.tgConnect, token),

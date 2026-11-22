@@ -153,6 +153,9 @@ export function registerIpc(opts: {
     if (typeof v !== 'string' || !FREE_PROVIDER_PRESETS.some((p) => p.id === v)) throw new Error('Неизвестная модель');
     return v as FreeProviderId;
   };
+  handle(IPC.appsStartMenu, () => core.startMenuApps());
+  handle(IPC.appsSetStartMenu, (_e, on) => core.setStartMenuAccess(on === true));
+  handle(IPC.appsLaunch, (_e, q) => core.launchAppByName(str(q, 'query', 100)));
   handle(IPC.tgStatus, () => core.telegramStatus());
   handle(IPC.tgConnect, (_e, token) => core.telegramConnect(str(token, 'token', 200)));
   handle(IPC.tgDisconnect, () => core.telegramDisconnect());

@@ -58,6 +58,21 @@ try {
   await page.screenshot({ path: join(shots, 'c1-settings.png'), fullPage: false });
   assert.deepEqual((await page.evaluate(() => window.jarvis.computer.get())).folders, [work]);
   step('папка разрешена через окно выбора и видна в настройках');
+
+  // 2б. Меню «Пуск» и браузер: переключатели есть, по умолчанию выключены, включаются с подтверждением
+  assert.equal(await page.locator('#startmenu-toggle').isChecked(), false);
+  assert.equal(await page.locator('#browser-auto').isChecked(), false);
+  page.once('dialog', (d) => d.accept());
+  await page.locator('#startmenu-toggle').click();
+  await page.waitForSelector('#computer-access .banner-ok:has-text("меню «Пуск» разрешены")');
+  await page.locator('#browser-auto').click();
+  await page.waitForFunction(() => document.querySelector('#browser-auto')?.checked === true);
+  assert.equal((await page.evaluate(() => window.jarvis.settings.get())).browserAutoApprove, true);
+  await page.locator('#browser-auto').click();
+  await page.waitForFunction(() => document.querySelector('#browser-auto')?.checked === false);
+  await page.locator('#startmenu-toggle').click();
+  await page.waitForSelector('#computer-access .banner-ok:has-text("выключен")');
+  step('«программы из меню Пуск» и «браузер без лишних подтверждений» — выключены по умолчанию, включаются осознанно');
   await page.click('.nav-item:has-text("Чат")');
 
   // 3. Чтение — без подтверждения

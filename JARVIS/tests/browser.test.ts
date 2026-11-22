@@ -15,6 +15,7 @@ let port = 0;
 let otherPort = 0;
 const hits: string[] = [];
 
+const LONG = `<!doctype html><title>Длинная</title><body style="margin:0"><a href="#">Верхняя ссылка</a><div style="height:3000px"></div><button id="low">Нижняя кнопка</button><button>Оплатить заказ</button></body>`;
 const PAGE = `<!doctype html><html><head><title>Тестовая страница</title></head><body>
 <h1>Заявка №42</h1>
 <p id="out">пусто</p>
@@ -40,6 +41,7 @@ beforeAll(async () => {
   otherPort = (other.address() as { port: number }).port;
   srv = createServer((req, res) => {
     res.setHeader('content-type', 'text/html; charset=utf-8');
+    if (req.url === '/long') return void res.end(LONG);
     res.end(req.url === '/second' ? '<title>Вторая</title><h1>Вторая страница</h1>' : PAGE.replaceAll('__OTHER__', String(otherPort)));
   });
   await new Promise<void>((r) => srv.listen(0, '127.0.0.1', r));
@@ -50,8 +52,9 @@ afterAll(() => {
   other.close();
 });
 
-const make = (hosts: string[]) =>
+const make = (hosts: string[], auto = false) =>
   new BrowserController({
+    getAutoApprove: () => auto,
     userDataDir: mkdtempSync(join(tmpdir(), 'jv-br-')),
     getAccess: () => ({ folders: [], apps: [], browserHosts: hosts }),
     executablePath: CHROME,
@@ -146,7 +149,7 @@ describe.skipIf(!hasChrome)('браузер ассистента (настоящ
     registerBrowserTools(reg, b);
     try {
       const risks = Object.fromEntries(reg.list().map((t) => [t.name, t.risk]));
-      expect(risks).toEqual({ browser_open: 'medium', browser_read: 'low', browser_click: 'medium', browser_type: 'medium', lesson_show: 'low', browser_close: 'low' });
+      expect(risks).toEqual({ browser_open: 'medium', browser_search: 'medium', browser_read: 'low', browser_click: 'low', browser_type: 'low', browser_scroll: 'low', browser_back: 'low', browser_press: 'low', browser_screenshot: 'low', lesson_show: 'low', browser_close: 'low' });
       expect(reg.get('browser_open')!.external).toBe(true);
       const out = await reg.get('browser_open')!.execute({ url: `http://127.0.0.1:${port}/` }, { conversationId: 1, runId: 'r', signal: new AbortController().signal });
       expect(String(out)).toContain('[1]');
@@ -155,4 +158,59 @@ describe.skipIf(!hasChrome)('браузер ассистента (настоящ
       await b.close();
     }
   }, 40000);
+});
+
+describe.skipIf(!hasChrome)('браузер: прокрутка, назад, клавиши, снимок, поиск', () => {
+  it('прокрутка открывает элементы внизу длинной страницы; назад и клавиши работают', async () => {
+    const b = make([`127.0.0.1:${port}`]);
+    try {
+      const first = await b.open(`http://127.0.0.1:${port}/long`);
+      expect(first.elements.map((e) => e.label)).toContain('Верхняя ссылка');
+      expect(first.elements.map((e) => e.label)).not.toContain('Нижняя кнопка');
+      const bottom = await b.scroll('bottom');
+      expect(bottom.elements.map((e) => e.label)).toContain('Нижняя кнопка');
+      expect((await b.scroll('top')).elements.map((e) => e.label)).toContain('Верхняя ссылка');
+      await b.open(`http://127.0.0.1:${port}/second`);
+      expect((await b.back()).url).toContain('/long');
+      await expect(b.press('F12')).rejects.toThrow(/не разрешена/);
+      await expect(b.press('PageDown')).resolves.toBeTruthy();
+      const shot = await b.screenshot();
+      expect(shot.mime).toBe('image/jpeg');
+      expect(shot.base64.length).toBeGreaterThan(1000);
+    } finally {
+      await b.close();
+    }
+  });
+
+  it('адрес поиска строится безопасно', () => {
+    const b = make([]);
+    expect(b.searchUrl('отели в Сочи & цены')).toBe('https://html.duckduckgo.com/html/?q=' + encodeURIComponent('отели в Сочи & цены'));
+    expect(() => b.searchUrl('   ')).toThrow(/Пустой/);
+  });
+
+  it('режим «не спрашивать»: обычные клики без подтверждения, а оплата/отправка/важные сайты — всегда с подтверждением', async () => {
+    for (const auto of [false, true]) {
+      const b = make([`127.0.0.1:${port}`], auto);
+      const reg = registerBrowserTools(new ToolRegistry(), b) as unknown;
+      void reg;
+      const r = new ToolRegistry();
+      registerBrowserTools(r, b);
+      try {
+        const snap = await b.open(`http://127.0.0.1:${port}/long`);
+        const pay = snap.elements.length ? (await b.scroll('bottom')).elements.find((e) => e.label.includes('Оплатить'))! : null;
+        const link = (await b.scroll('top')).elements.find((e) => e.label === 'Верхняя ссылка')!;
+        const click = r.get('browser_click')!;
+        const risk = (id: number) => click.assess!({ id })?.risk ?? 'low';
+        expect(risk(link.id)).toBe(auto ? 'low' : 'medium');
+        await b.scroll('bottom');
+        expect(risk(pay!.id)).toBe('medium');
+        const type = r.get('browser_type')!;
+        expect(type.assess!({ id: link.id, text: 'x', submit: true })?.risk).toBe('medium');
+        expect(type.assess!({ id: link.id, text: 'x' })?.risk ?? 'low').toBe(auto ? 'low' : 'medium');
+        expect(r.get('browser_press')!.assess!({ key: 'Enter' })?.risk).toBe('medium');
+      } finally {
+        await b.close();
+      }
+    }
+  });
 });

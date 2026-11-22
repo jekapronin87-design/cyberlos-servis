@@ -75,6 +75,9 @@ export const IPC = {
   jobsRunNow: 'jobs:run-now',
   jobsRuns: 'jobs:runs',
   evtJob: 'evt:job',
+  appsStartMenu: 'apps:startmenu',
+  appsSetStartMenu: 'apps:startmenu:set',
+  appsLaunch: 'apps:launch',
   tgStatus: 'tg:status',
   tgConnect: 'tg:connect',
   tgDisconnect: 'tg:disconnect',
@@ -203,6 +206,13 @@ export interface JarvisApi {
     runs(id: number): Promise<{ startedAt: string; status: string; summary: string | null }[]>;
     /** Задача по расписанию завершилась (не приходит, если итог «всё спокойно»). */
     onResult(cb: (r: JobResultDto) => void): () => void;
+  };
+  apps: {
+    /** Названия программ из меню Пуск (если разрешено). */
+    startMenu(): Promise<string[]>;
+    setStartMenu(on: boolean): Promise<ComputerAccess>;
+    /** Голосовая команда «открой …»: matched=false — не нашли, пусть разбирается модель. */
+    launch(query: string): Promise<{ matched: boolean; ok: boolean; message: string }>;
   };
   telegram: {
     status(): Promise<TelegramStatusDto>;

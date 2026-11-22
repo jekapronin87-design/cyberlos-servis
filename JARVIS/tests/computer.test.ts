@@ -82,7 +82,7 @@ describe('этап 3 в чате (демо-провайдер)', () => {
     expect(launched).toEqual([exe]);
     const { id } = await chat(h, 'Открой программу cmd');
     expect(launched).toHaveLength(1);
-    expect(textOf(h.core.messages(id).find((m) => m.role === 'tool')!.content)).toMatch(/не в списке/);
+    expect(textOf(h.core.messages(id).find((m) => m.role === 'tool')!.content)).toMatch(/не найдена среди разрешённых/);
   });
 
   it('в журнал попадают добавленные папки и программы', () => {
@@ -195,7 +195,7 @@ describe('политика этапа 3', () => {
     const risks = Object.fromEntries(h.core.tools.list().map((t) => [t.name, t.risk]));
     expect(risks).toMatchObject({
       fs_list: 'safe', fs_read: 'low', fs_mkdir: 'low', fs_write: 'medium', fs_move: 'medium', fs_open: 'medium', fs_overwrite: 'high', fs_delete: 'high',
-      app_list: 'safe', app_open: 'medium', browser_open: 'medium', browser_read: 'low', browser_click: 'medium', browser_type: 'medium', screen_capture: 'high',
+      app_list: 'safe', app_open: 'low', browser_open: 'medium', browser_read: 'low', browser_click: 'low', browser_type: 'low', screen_capture: 'high',
     });
   });
   it('разрешения нельзя изменить через общий updateSettings', () => {

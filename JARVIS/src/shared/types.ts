@@ -102,6 +102,8 @@ export interface Settings {
   telegramAutoReply: boolean;
   /** Что можно рассказывать собеседникам (цены, график, контакты, FAQ). Автоответчик знает ТОЛЬКО это. */
   telegramReplyInstructions: string;
+  /** Браузер ассистента: не спрашивать подтверждение на обычные клики и ввод (отправка, оплата, удаление — всегда спрашивать). */
+  browserAutoApprove: boolean;
   /** Открывать на весь экран (F11 — переключить). */
   fullscreen: boolean;
   /** Имя ассистента (на него он откликается голосом; «Джарвис» остаётся запасным именем). */
@@ -147,6 +149,7 @@ export const DEFAULT_SETTINGS: Settings = {
   systemVoice: '',
   cameraEnabled: false,
   fullscreen: true,
+  browserAutoApprove: false,
   telegramEnabled: false,
   telegramAutoReply: false,
   telegramReplyInstructions: '',
@@ -270,6 +273,8 @@ export interface ComputerAccess {
   apps: AllowedApp[];
   /** Дополнительные «внутренние» адреса (localhost, тестовый CRM), которые браузеру ассистента можно открывать. */
   browserHosts: string[];
+  /** Разрешён запуск программ из меню Пуск (кроме оболочек, реестра, планировщика и т. п.). */
+  startMenu?: boolean;
 }
 
 // ---------- Досье о пользователе ----------

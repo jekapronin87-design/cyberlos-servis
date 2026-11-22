@@ -9,6 +9,8 @@ export interface HostServices {
   openPath?(path: string): Promise<string>;
   /** Запустить программу из белого списка (без аргументов, без оболочки). */
   launchApp?(exePath: string): Promise<void>;
+  /** Ярлыки программ из меню Пуск (только Windows). */
+  listStartMenu?(): Promise<{ name: string; path: string }[]>;
   /** Снимок экрана (основной монитор), JPEG в base64. */
   /** Кадр с веб-камеры (делается в окне приложения; только если пользователь включил камеру). */
   captureCamera?(): Promise<{ mime: string; base64: string; width: number; height: number }>;

@@ -353,6 +353,20 @@ export function SettingsView(props: {
 
       <ComputerAccessCard />
 
+      <div className="card" id="browser-card">
+        <h2>Браузер ассистента</h2>
+        <p className="muted small">
+          Ассистент работает в отдельном окне браузера со своим профилем: один раз войдите там в нужные сайты сами (пароли JARVIS не вводит) — вход сохранится. Он умеет искать, открывать страницы, читать, прокручивать, нажимать, вводить текст и делать снимок страницы.
+        </p>
+        <label className="check">
+          <input id="browser-auto" type="checkbox" checked={s.browserAutoApprove} onChange={(e) => run(() => props.onUpdate({ browserAutoApprove: e.target.checked }), 'Сохранено')} />
+          <span>
+            <strong>Не спрашивать подтверждение на обычные клики и ввод</strong>{' '}
+            <span className="muted small">— быстрее, без окон на каждый шаг. Всё равно спрашивает: открытие нового сайта и поиск, нажатие Enter, кнопки «оплатить / отправить / удалить / подтвердить / опубликовать», банки и платёжные сайты. Пароли, карты и коды он не вводит никогда.</span>
+          </span>
+        </label>
+      </div>
+
       <div className="card">
         <h2>Безопасность</h2>
         <label className="field">

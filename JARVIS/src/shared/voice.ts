@@ -108,6 +108,26 @@ export function parseNavIntent(text: string): NavIntent | null {
   return null;
 }
 
+/**
+ * «Открой хром», «запусти блокнот» → название программы. Не срабатывает на сайты, файлы, папки, документы и слишком длинные фразы —
+ * их разбирает модель. Решение «такая программа есть и она одна» принимает ядро (resolveApp).
+ */
+export function parseAppIntent(text: string): string | null {
+  if (/[\p{L}\d-]+\.[a-z]{2,}/iu.test(text) || /https?:|www\./i.test(text)) return null;
+  const t = normalizeSpeech(text);
+  const m = /^(открой|открыть|запусти|запустить|включи|стартани|давай)\s+(.+)$/.exec(t);
+  if (!m) return null;
+  let x = m[2]!;
+  if (m[1] === 'давай') {
+    const m2 = /^(откроем|запустим|включим)\s+(.+)$/.exec(x);
+    if (!m2) return null;
+    x = m2[2]!;
+  }
+  if (x.split(' ').length > 3) return null;
+  if (/^(сайт|страниц|ссылк|файл|папк|документ|проект|диалог|чат|настройк|память|журнал|досье|аналитик|статистик|город|бизнес|карточк|камер|микрофон|звук)/.test(x)) return null;
+  return x;
+}
+
 /** Подготовка ответа к озвучке: без служебной разметки и слишком длинных текстов. */
 export function textForSpeech(text: string, maxChars = 800): string {
   const clean = text

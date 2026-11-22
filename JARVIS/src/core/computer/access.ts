@@ -56,6 +56,7 @@ export class ComputerAccessRepo {
       folders,
       apps: [...builtinApps(this.ctx.env, this.ctx.platform as NodeJS.Platform), ...custom],
       browserHosts: this.read<string[]>('browserHosts', []),
+      startMenu: this.read<boolean>('startMenu', false) === true,
     };
   }
 
@@ -85,6 +86,10 @@ export class ComputerAccessRepo {
   removeApp(name: string): AllowedApp[] {
     this.write('apps', this.read<AllowedApp[]>('apps', []).filter((a) => a.name !== name));
     return this.get().apps;
+  }
+
+  setStartMenu(on: boolean): void {
+    this.write('startMenu', on === true);
   }
 
   addBrowserHost(host: string): string[] {

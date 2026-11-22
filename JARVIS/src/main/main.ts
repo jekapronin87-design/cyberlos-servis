@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { JarvisCore } from '../core/app';
 import { OsEncryptedSecretStore } from '../core/security/secrets';
+import { scanStartMenu, startMenuRoots } from '../core/computer/startmenu';
 import { registerIpc } from './ipc';
 
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;
@@ -195,8 +196,13 @@ if (!app.requestSingleInstanceLock()) {
           }),
         trashItem: (p) => shell.trashItem(p),
         openPath: (p) => shell.openPath(p),
+        listStartMenu: async () => (process.platform === 'win32' ? scanStartMenu(startMenuRoots(process.env)) : []),
         launchApp: (exe) =>
-          new Promise<void>((resolve, reject) => {
+          /\.lnk$/i.test(exe)
+            ? shell.openPath(exe).then((err) => {
+                if (err) throw new Error('Не удалось запустить: ' + err);
+              })
+            : new Promise<void>((resolve, reject) => {
             // Без оболочки и без аргументов; процесс отвязан от JARVIS.
             const child = spawn(exe, [], { detached: true, stdio: 'ignore', shell: false });
             child.once('error', reject);

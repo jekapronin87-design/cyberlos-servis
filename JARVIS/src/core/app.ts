@@ -36,7 +36,8 @@ import { ToolExecutor } from './chat/executor';
 import { openDatabase, type Db } from './db/database';
 import { AttachmentRepo, ConversationRepo, MemoryRepo, SettingsRepo } from './db/repositories';
 import { ComputerAccessRepo } from './computer/access';
-import { registerAppTools } from './computer/apps';
+import { AppCatalog, registerAppTools } from './computer/apps';
+import { resolveApp } from './computer/startmenu';
 import { BrowserController, registerBrowserTools, type BrowserOptions } from './computer/browser';
 import { registerFileTools } from './computer/files';
 import type { HostServices } from './computer/host';
@@ -131,6 +132,7 @@ export class JarvisCore {
   readonly pairing: PairingCodes;
   readonly gateway: Gateway;
   readonly computer: ComputerAccessRepo;
+  readonly apps: AppCatalog;
   readonly browser: BrowserController;
   readonly executor: ToolExecutor;
   private orchestrator: ChatOrchestrator;
@@ -159,10 +161,12 @@ export class JarvisCore {
     this.browser = new BrowserController({
       userDataDir: join(opts.dataDir, 'browser-profile'),
       getAccess: () => this.computer.get(),
+      getAutoApprove: () => this.settings.get().browserAutoApprove,
       ...opts.browser,
     });
     registerFileTools(this.tools, this.computer, host);
-    registerAppTools(this.tools, this.computer, host);
+    this.apps = new AppCatalog(this.computer, host);
+    registerAppTools(this.tools, this.apps, host);
     registerBrowserTools(this.tools, this.browser);
     registerScreenTool(this.tools, host);
     registerCameraTool(this.tools, host, () => this.settings.get());
@@ -660,6 +664,33 @@ export class JarvisCore {
   }
   deleteCallTranscript(id: number) {
     this.telephonyOn().deleteTranscript(id);
+  }
+
+  // ----- запуск программ -----
+  /** Пользователь разрешил/запретил запуск программ из меню Пуск (вызывается из окна настроек). */
+  setStartMenuAccess(on: boolean): ComputerAccess {
+    this.computer.setStartMenu(on);
+    this.apps.invalidate();
+    this.audit.record({ actor: 'user', action: on ? 'computer.startmenu_enabled' : 'computer.startmenu_disabled', risk: 'high', decision: 'info' });
+    return this.computer.get();
+  }
+  async startMenuApps(): Promise<string[]> {
+    return (await this.apps.list()).filter((a) => a.source === 'startmenu').map((a) => a.name);
+  }
+  /**
+   * Голосовая/текстовая команда «открой …»: ищет программу по названию и запускает через общий исполнитель (политика, журнал).
+   * matched=false — подходящей программы нет или их несколько: тогда решает модель.
+   */
+  async launchAppByName(query: string): Promise<{ matched: boolean; ok: boolean; message: string }> {
+    if (this.settings.get().disabledModules.includes('computer')) return { matched: false, ok: false, message: '' };
+    const all = await this.apps.list();
+    const app = resolveApp(query, all);
+    if (!app) return { matched: false, ok: false, message: '' };
+    const r = await this.executor.execute(
+      { type: 'tool_use', id: 'voice-launch', name: 'app_open', input: { name: app.name } },
+      { runId: randomUUID(), conversationId: 0, signal: new AbortController().signal, actor: 'user' },
+    );
+    return { matched: true, ok: !r.isError && !r.denied, message: r.isError || r.denied ? r.content : `Запускаю ${app.name}.` };
   }
 
   // ----- расписание -----

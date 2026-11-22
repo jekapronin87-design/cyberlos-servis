@@ -10,7 +10,7 @@ import { AuditView } from './views/AuditView';
 import { ChatView } from './views/ChatView';
 import { CrmView } from './views/CrmView';
 import { JobsView } from './views/JobsView';
-import { parseNavIntent } from '../shared/voice';
+import { parseAppIntent, parseNavIntent } from '../shared/voice';
 import { MentorView } from './views/MentorView';
 import { CallsView } from './views/CallsView';
 import { TelegramView } from './views/TelegramView';
@@ -240,8 +240,25 @@ export function App() {
     return true;
   };
 
+  /** «Открой хром»: запуск программы без обращения к модели. Если программа не найдена — разберётся модель. */
+  const launchByIntent = async (text: string): Promise<boolean> => {
+    const q = parseAppIntent(text);
+    if (!q || parseNavIntent(text)) return false;
+    try {
+      const r = await window.jarvis.apps.launch(q);
+      if (!r.matched) return false;
+      const st = settingsRef.current;
+      setJobToast({ title: r.ok ? 'Программа' : 'Не удалось запустить', summary: r.message, ok: r.ok });
+      if (st.ttsMode !== 'off') void speak(r.ok ? r.message : 'Не получилось запустить.', st.ttsMode, { systemVoice: st.systemVoice, speed: st.ttsSpeed }).catch(() => undefined);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const send = async (text: string): Promise<void> => {
     if (navigateByIntent(text)) return;
+    if (await launchByIntent(text)) return;
     try {
       let id = activeId;
       if (id === null) {
@@ -311,7 +328,7 @@ export function App() {
       // Голосовая команда: отвечаем голосом, по мере того как ответ генерируется
       const st = settingsRef.current;
       session.current = new SpeechSession({ mode: st.ttsMode, systemVoice: st.systemVoice, speed: st.ttsSpeed, onError: setError });
-      if (parseNavIntent(text)) return void send(text);
+      if (parseNavIntent(text) || parseAppIntent(text)) return void send(text);
       setView((v) => (v === 'settings' || v === 'audit' || v === 'memory' || v === 'space' ? 'hud' : v));
       void send(text);
     },
