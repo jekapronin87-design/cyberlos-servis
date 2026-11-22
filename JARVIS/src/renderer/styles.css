@@ -156,12 +156,12 @@ th { background: var(--panel-solid); position: sticky; top: 0; font-family: var(
 
 /* ========== HUD: главный экран ========== */
 .hud { --h: 76, 194, 255; position: relative; flex: 1; min-height: 0; overflow: hidden; color: #e8f3ff;
-  background: radial-gradient(ellipse at 50% 42%, #0b1f44 0%, #060c20 52%, #02040b 100%); }
+  background: radial-gradient(ellipse at 50% 38%, rgba(10, 30, 70, 0.28) 0%, rgba(2, 4, 12, 0) 60%); }
 .hud[data-state='thinking'] { --h: 160, 140, 255; }
 .hud::before, .hud::after { content: ''; position: absolute; width: 46px; height: 46px; pointer-events: none; border: 1px solid rgba(var(--h), 0.5); z-index: 3; }
 .hud::before { top: 14px; left: 14px; border-right: 0; border-bottom: 0; }
 .hud::after { bottom: 14px; right: 14px; border-left: 0; border-top: 0; }
-.hud-grid { position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
+.hud-grid { position: absolute; inset: 0; pointer-events: none; opacity: 0.18;
   background-image: linear-gradient(rgba(var(--h), 0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(var(--h), 0.07) 1px, transparent 1px);
   background-size: 52px 52px; -webkit-mask-image: radial-gradient(ellipse at 50% 50%, #000 15%, transparent 72%); mask-image: radial-gradient(ellipse at 50% 50%, #000 15%, transparent 72%); }
 .hud-scan { position: absolute; inset: 0; pointer-events: none; z-index: 2;

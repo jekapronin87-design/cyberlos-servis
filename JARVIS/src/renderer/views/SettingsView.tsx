@@ -123,6 +123,14 @@ export function SettingsView(props: {
           </div>
         </label>
         <label className="check">
+          <input id="ui-sounds" type="checkbox" checked={s.uiSounds} onChange={(e) => run(() => props.onUpdate({ uiSounds: e.target.checked }), 'Сохранено')} />
+          <span>Звуки интерфейса <span className="muted small">(клики, переключатели, «пробуждение» на имя, начало ответа)</span></span>
+        </label>
+        <label className="check">
+          <input id="ui-ambient" type="checkbox" checked={s.uiAmbient} disabled={!s.uiSounds} onChange={(e) => run(() => props.onUpdate({ uiAmbient: e.target.checked }), 'Сохранено')} />
+          <span>Тихий фон — «гул космоса»</span>
+        </label>
+        <label className="check">
           <input type="checkbox" checked={s.fullscreen} onChange={(e) => run(() => props.onUpdate({ fullscreen: e.target.checked }), 'Сохранено')} />
           <span>Открывать на весь экран <span className="muted small">(F11 — переключить в любой момент)</span></span>
         </label>
@@ -142,13 +150,13 @@ export function SettingsView(props: {
           </span>
         </label>
         <label className="check">
-          <input type="checkbox" checked={s.launchAtLogin} onChange={(e) => run(() => props.onUpdate({ launchAtLogin: e.target.checked }), e.target.checked ? 'JARVIS будет запускаться вместе с Windows' : 'Автозапуск выключен')} />
-          <span>Запускать JARVIS вместе с Windows</span>
+          <input type="checkbox" checked={s.launchAtLogin} onChange={(e) => run(() => props.onUpdate({ launchAtLogin: e.target.checked }), e.target.checked ? 'Системно будет запускаться вместе с Windows' : 'Автозапуск выключен')} />
+          <span>Запускать Системно вместе с Windows</span>
         </label>
         <label className="check">
-          <input type="checkbox" checked={s.autoListen} onChange={(e) => run(() => props.onUpdate({ autoListen: e.target.checked }), e.target.checked ? 'При запуске Джарвис сразу начнёт слушать слово «Джарвис»' : 'Автопрослушивание выключено')} />
+          <input type="checkbox" checked={s.autoListen} onChange={(e) => run(() => props.onUpdate({ autoListen: e.target.checked }), e.target.checked ? 'При запуске Системно сразу начнёт слушать слово «Системно»' : 'Автопрослушивание выключено')} />
           <span>
-            Сразу слушать своё имя при запуске <span className="muted small">(нужны разрешённый микрофон, режим «Джарвис» и ключ голоса; он поприветствует вас голосом)</span>
+            Сразу слушать своё имя при запуске <span className="muted small">(нужны разрешённый микрофон, режим «Системно» и ключ голоса; он поприветствует вас голосом)</span>
           </span>
         </label>
       </div>
@@ -166,7 +174,7 @@ export function SettingsView(props: {
           </span>
         </label>
         <p className="muted small">
-          Джарвис видит вас, только когда вы включили кнопку «Камера» (виден индикатор и превью) и попросили посмотреть: «Джарвис, что я сейчас делаю?».
+          Системно видит вас, только когда вы включили кнопку «Камера» (виден индикатор и превью) и попросили посмотреть: «Системно, что я сейчас делаю?».
           Кадр отправляется ИИ (Claude) один раз по запросу и хранится только до перезапуска приложения. Постоянного наблюдения нет.
         </p>
       </div>
@@ -200,7 +208,7 @@ export function SettingsView(props: {
           </select>
         </label>
         <label className="field">
-          <span>Голос Джарвиса (облачный)</span>
+          <span>Голос Системно (облачный)</span>
           <div className="row">
             <select value={OPENAI_VOICES.includes(s.ttsVoice) ? s.ttsVoice : 'onyx'} onChange={(e) => { setTtsVoice(e.target.value); void run(() => props.onUpdate({ ttsVoice: e.target.value }), 'Голос сохранён'); }}>
               {OPENAI_VOICES.map((v) => (
@@ -326,7 +334,7 @@ export function SettingsView(props: {
 
       <div className="card" id="modules-card">
         <h2>Модули</h2>
-        <p className="muted small">Отключённый модуль полностью убирается: у ассистента пропадают его инструменты, а вкладки скрываются. Удобно, когда JARVIS ставится в другой компании или нужно убрать лишнее.</p>
+        <p className="muted small">Отключённый модуль полностью убирается: у ассистента пропадают его инструменты, а вкладки скрываются. Удобно, когда Системно ставится в другой компании или нужно убрать лишнее.</p>
         {MODULES.map((m) => (
           <label key={m.id} className="check">
             <input
@@ -356,7 +364,7 @@ export function SettingsView(props: {
       <div className="card" id="browser-card">
         <h2>Браузер ассистента</h2>
         <p className="muted small">
-          Ассистент работает в отдельном окне браузера со своим профилем: один раз войдите там в нужные сайты сами (пароли JARVIS не вводит) — вход сохранится. Он умеет искать, открывать страницы, читать, прокручивать, нажимать, вводить текст и делать снимок страницы.
+          Ассистент работает в отдельном окне браузера со своим профилем: один раз войдите там в нужные сайты сами (пароли Системно не вводит) — вход сохранится. Он умеет искать, открывать страницы, читать, прокручивать, нажимать, вводить текст и делать снимок страницы.
         </p>
         <label className="check">
           <input id="browser-auto" type="checkbox" checked={s.browserAutoApprove} onChange={(e) => run(() => props.onUpdate({ browserAutoApprove: e.target.checked }), 'Сохранено')} />

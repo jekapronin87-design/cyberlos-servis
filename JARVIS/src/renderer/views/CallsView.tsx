@@ -158,7 +158,7 @@ export function CallsView() {
         <h2>{info?.real ? 'Учебный звонок' : 'Тренажёр звонка (симулятор)'}</h2>
         {!active ? (
           <>
-            <p className="muted small">Вы играете роль сотрудника: Джарвис «звонит», представляется и проводит урок. Так можно проверить сценарий до подключения настоящей связи.</p>
+            <p className="muted small">Вы играете роль сотрудника: Системно «звонит», представляется и проводит урок. Так можно проверить сценарий до подключения настоящей связи.</p>
             <div className="row">
               <select id="call-phone" value={pick.phone} onChange={(e) => setPick({ ...pick, phone: e.target.value })}>
                 <option value="">— кому звонить —</option>
@@ -177,7 +177,7 @@ export function CallsView() {
           <>
             <div ref={logRef} id="call-log" style={{ maxHeight: 320, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
               {active.lines.map((l, i) => (
-                <div key={i} className={`call-line call-${l.who}`}><strong>{l.who === 'jarvis' ? 'Джарвис (ИИ)' : l.who === 'employee' ? 'Сотрудник' : '—'}:</strong> {l.text}</div>
+                <div key={i} className={`call-line call-${l.who}`}><strong>{l.who === 'jarvis' ? 'Системно (ИИ)' : l.who === 'employee' ? 'Сотрудник' : '—'}:</strong> {l.text}</div>
               ))}
             </div>
             {active.finished ? (

@@ -1,8 +1,8 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title JARVIS launcher
-echo ================== JARVIS ==================
+title SISTEMNO launcher
+echo ================= SISTEMNO =================
 where node >nul 2>nul
 if errorlevel 1 (
   echo.

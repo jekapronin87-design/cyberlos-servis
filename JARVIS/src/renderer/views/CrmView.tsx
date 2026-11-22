@@ -54,7 +54,7 @@ export function CrmView(props: { onAsk: (text: string) => void; onOpenSettings: 
           {busy ? 'Загружаю…' : 'Обновить'}
         </button>
         <button className="btn btn-primary" onClick={() => props.onAsk('Сделай утреннюю сводку по CRM: что важно, где узкие места, кому нужна помощь, и предложи 3 конкретных улучшения.')}>
-          Спросить Джарвиса: сводка и выводы
+          Спросить ассистента: сводка и выводы
         </button>
         <button className="btn" onClick={() => props.onAsk('Покажи, каким сотрудникам нужно дополнительное обучение работе с CRM и по каким темам.')}>
           Кому нужно обучение
@@ -65,7 +65,7 @@ export function CrmView(props: { onAsk: (text: string) => void; onOpenSettings: 
           {err} <button className="link" onClick={props.onOpenSettings}>Настройки CRM</button>
         </div>
       )}
-      {d && d.missing.length > 0 && <div className="banner banner-demo">Нет доступа к разделам: {d.missing.join(', ')} — добавьте учётной записи JARVIS права «просмотр».</div>}
+      {d && d.missing.length > 0 && <div className="banner banner-demo">Нет доступа к разделам: {d.missing.join(', ')} — добавьте учётной записи Системно права «просмотр».</div>}
       {o && (
         <>
           <div className="tiles">

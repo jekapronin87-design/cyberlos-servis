@@ -10,8 +10,8 @@ import { registerIpc } from './ipc';
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 const isDev = !!DEV_URL && !app.isPackaged;
 
-app.setName('JARVIS');
-// Голос Джарвиса должен воспроизводиться без предварительного клика (приветствие, ответы на голосовые команды).
+app.setName('JARVIS'); // внутреннее имя: от него зависит папка данных пользователя — менять нельзя (потеряются ключи и история)
+// Голос Системно должен воспроизводиться без предварительного клика (приветствие, ответы на голосовые команды).
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 // Позволяет тестам и переносной установке указать каталог данных.
 if (process.env.JARVIS_DATA_DIR) app.setPath('userData', process.env.JARVIS_DATA_DIR);
@@ -29,7 +29,7 @@ function csp(): string {
     `script-src ${script}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
-    "media-src 'self' blob:", // звук ответов Джарвиса (blob:) и превью камеры
+    "media-src 'self' blob:", // звук ответов Системно (blob:) и превью камеры
     `connect-src ${connect}`,
     "object-src 'none'",
     "base-uri 'none'",
@@ -60,7 +60,7 @@ function createWindow(): void {
     height: 780,
     minWidth: 760,
     minHeight: 520,
-    title: 'JARVIS',
+    title: 'Системно',
     backgroundColor: '#0b1020',
     show: false,
     // Полный экран по умолчанию; при тестовой папке данных (JARVIS_DATA_DIR) не включается, чтобы окно можно было менять.
@@ -153,9 +153,9 @@ if (!app.requestSingleInstanceLock()) {
       dataDir,
       installDir: app.isPackaged ? undefined : app.getAppPath(),
       onJobResult: (e) => {
-        // Системное уведомление Windows + сообщение окну JARVIS
+        // Системное уведомление Windows + сообщение окну Системно
         try {
-          if (Notification.isSupported()) new Notification({ title: `JARVIS: ${e.job.title}`, body: e.summary.slice(0, 220) }).show();
+          if (Notification.isSupported()) new Notification({ title: `Системно: ${e.job.title}`, body: e.summary.slice(0, 220) }).show();
         } catch {
           /* уведомления недоступны */
         }
@@ -180,17 +180,17 @@ if (!app.requestSingleInstanceLock()) {
       host: {
         captureCamera: () =>
           new Promise((resolve, reject) => {
-            if (!ipc || !win) return reject(new Error('Окно JARVIS недоступно'));
+            if (!ipc || !win) return reject(new Error('Окно Системно недоступно'));
             const id = randomUUID();
             const timer = setTimeout(() => {
               cameraWaiters.delete(id);
-              reject(new Error('Камера не ответила. Включите кнопку «Камера» в окне JARVIS.'));
+              reject(new Error('Камера не ответила. Включите кнопку «Камера» в окне Системно.'));
             }, 8000);
             cameraWaiters.set(id, (f) => {
               clearTimeout(timer);
               cameraWaiters.delete(id);
               if (f) resolve(f);
-              else reject(new Error('Камера выключена. Попросите пользователя нажать кнопку «Камера» в окне JARVIS.'));
+              else reject(new Error('Камера выключена. Попросите пользователя нажать кнопку «Камера» в окне Системно.'));
             });
             ipc.sendCameraRequest(id);
           }),
@@ -203,7 +203,7 @@ if (!app.requestSingleInstanceLock()) {
                 if (err) throw new Error('Не удалось запустить: ' + err);
               })
             : new Promise<void>((resolve, reject) => {
-            // Без оболочки и без аргументов; процесс отвязан от JARVIS.
+            // Без оболочки и без аргументов; процесс отвязан от Системно.
             const child = spawn(exe, [], { detached: true, stdio: 'ignore', shell: false });
             child.once('error', reject);
             child.once('spawn', () => {

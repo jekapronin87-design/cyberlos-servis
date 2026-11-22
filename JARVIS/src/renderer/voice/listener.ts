@@ -4,7 +4,7 @@
 export type ListenerState = 'idle' | 'listening' | 'hearing';
 
 export interface ListenerOptions {
-  /** true — слушать постоянно (режим «Джарвис»); false — одна фраза и остановка. */
+  /** true — слушать постоянно (режим «Системно»); false — одна фраза и остановка. */
   continuous: boolean;
   onState(s: ListenerState): void;
   onLevel(level: number): void;
@@ -57,7 +57,7 @@ export class VoiceListener {
       this.o.onError(
         name === 'NotFoundError'
           ? 'Микрофон не найден. Подключите микрофон и попробуйте снова.'
-          : 'Нет доступа к микрофону. Проверьте, что он включён в настройках JARVIS и разрешён в Windows (Параметры → Конфиденциальность → Микрофон).',
+          : 'Нет доступа к микрофону. Проверьте, что он включён в настройках Системно и разрешён в Windows (Параметры → Конфиденциальность → Микрофон).',
       );
       return;
     }

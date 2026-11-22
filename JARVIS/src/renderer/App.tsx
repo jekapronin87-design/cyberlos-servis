@@ -15,7 +15,8 @@ import { MentorView } from './views/MentorView';
 import { CallsView } from './views/CallsView';
 import { TelegramView } from './views/TelegramView';
 import { SpaceView, type SpaceMode } from './views/SpaceView';
-import { Starfield } from './hud/Starfield';
+import { SpaceBackground } from './hud/SpaceBackground';
+import { ambient, installUiSounds, uiSounds } from './audio/uiSounds';
 import { MemoryView } from './views/MemoryView';
 import { ProfileView } from './views/ProfileView';
 import { SettingsView } from './views/SettingsView';
@@ -184,7 +185,7 @@ export function App() {
         if (e.status === 'error' && e.error) setError(e.error);
         void refreshConvs();
         void refreshMemory();
-        // Озвучка: дочитываем остаток и после ответа даём поговорить дальше без слова «Джарвис»
+        // Озвучка: дочитываем остаток и после ответа даём поговорить дальше без слова «Системно»
         const s = session.current;
         session.current = null;
         if (s) {
@@ -233,6 +234,7 @@ export function App() {
       setView('hud');
       say('Возвращаюсь.');
     } else {
+      uiSounds.play('open');
       setSpaceMode(intent);
       setView('space');
       say(intent === 'city' ? 'Открываю город бизнеса.' : 'Открываю аналитику.');
@@ -248,6 +250,7 @@ export function App() {
       const r = await window.jarvis.apps.launch(q);
       if (!r.matched) return false;
       const st = settingsRef.current;
+      uiSounds.play(r.ok ? 'success' : 'error');
       setJobToast({ title: r.ok ? 'Программа' : 'Не удалось запустить', summary: r.message, ok: r.ok });
       if (st.ttsMode !== 'off') void speak(r.ok ? r.message : 'Не получилось запустить.', st.ttsMode, { systemVoice: st.systemVoice, speed: st.ttsSpeed }).catch(() => undefined);
       return true;
@@ -390,7 +393,7 @@ export function App() {
 
   return (
     <div className="app">
-      <Starfield />
+      <SpaceBackground intensity={view === 'hud' || view === 'space' ? 1 : 0.38} />
       <nav className="rail" aria-label="Разделы">
         <div className="rail-brand" aria-hidden="true">
           <span className="brand-mark" />
@@ -432,7 +435,7 @@ export function App() {
         )}
         {updateAvail && view !== 'settings' && (
           <div className="banner banner-demo" role="status">
-            Доступно обновление JARVIS: {updateAvail}
+            Доступно обновление Системно: {updateAvail}
             <button className="link" onClick={() => setView('settings')}>
               Открыть настройки обновления
             </button>

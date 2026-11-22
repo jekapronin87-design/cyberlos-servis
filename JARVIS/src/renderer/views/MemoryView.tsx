@@ -22,7 +22,7 @@ export function MemoryView(props: {
   return (
     <section className="page">
       <h1>Память</h1>
-      <p className="muted">Что Джарвис помнит о вас. Вы можете добавлять и удалять записи; ассистент тоже может сохранять их по вашей просьбе.</p>
+      <p className="muted">Что Системно помнит о вас. Вы можете добавлять и удалять записи; ассистент тоже может сохранять их по вашей просьбе.</p>
       <form
         className="card row"
         onSubmit={async (e) => {

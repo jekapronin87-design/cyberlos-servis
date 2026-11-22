@@ -1,4 +1,4 @@
-// Озвучка ответов Джарвиса: потоковая (по предложениям), с уровнем громкости для анимации шара.
+// Озвучка ответов Системно: потоковая (по предложениям), с уровнем громкости для анимации шара.
 //  • «api»    — облачный синтез речи, предложения запрашиваются заранее параллельно и играются по очереди;
 //  • «system» — голоса Windows (бесплатно).
 import type { TtsMode } from '../../shared/types';
@@ -33,7 +33,7 @@ const setSpeaking = (v: boolean): void => {
 };
 
 /**
- * Говорит ли Джарвис сейчас. Содержит «сторожа»: если озвучка зависла (известная проблема голосов Windows —
+ * Говорит ли Системно сейчас. Содержит «сторожа»: если озвучка зависла (известная проблема голосов Windows —
  * событие окончания не приходит), сбрасывает состояние, чтобы он не оставался «говорящим» навсегда
  * и не игнорировал ваши фразы.
  */
@@ -103,7 +103,7 @@ function pickVoice(voices: SpeechSynthesisVoice[], wanted: string): SpeechSynthe
     const w = ru.find((v) => v.name === wanted);
     if (w) return w;
   }
-  // Для Джарвиса предпочитаем мужской «естественный» голос; на Windows это обычно Microsoft Pavel/Dmitry.
+  // Для Системно предпочитаем мужской «естественный» голос; на Windows это обычно Microsoft Pavel/Dmitry.
   return ru.find((v) => /natural|online/i.test(v.name) && /pavel|dmitry|male/i.test(v.name)) ?? ru.find((v) => /pavel|dmitry|yuri|male/i.test(v.name)) ?? ru.find((v) => /natural|online/i.test(v.name)) ?? ru[0];
 }
 
@@ -135,7 +135,7 @@ export function takeSentences(buffer: string, final: boolean): { sentences: stri
 }
 
 /**
- * Чтобы Джарвис начинал говорить раньше: если первое предложение длинное и ещё не закончилось,
+ * Чтобы Системно начинал говорить раньше: если первое предложение длинное и ещё не закончилось,
  * отдаём первую часть по запятой/двоеточию/тире (после ≥ 30 символов).
  */
 export function takeEarlyChunk(buffer: string): { chunk: string; rest: string } | null {

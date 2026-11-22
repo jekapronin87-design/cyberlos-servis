@@ -104,7 +104,7 @@ export function HudView(props: {
         <div className="hud-brand">
           <span className="hud-brand-mark" aria-hidden="true" />
           <div>
-            <div className="hud-title">J.A.R.V.I.S.</div>
+            <div className="hud-title">{props.settings.assistantName.toUpperCase()}</div>
             <div className="hud-sub">
               {props.info?.mode === 'live' ? `Claude · ${props.info.model}` : 'ДЕМО-РЕЖИМ'} · {STATE_LABEL[props.orbState]}
             </div>

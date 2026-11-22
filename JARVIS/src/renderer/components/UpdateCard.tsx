@@ -28,7 +28,7 @@ export function UpdateCard({ branch, onBranch }: { branch: string; onBranch: (b:
   };
 
   const apply = async (): Promise<void> => {
-    if (!window.confirm('Скачать и установить обновление JARVIS?\n\nФайлы приложения будут заменены новыми (ваши данные, ключи и история не затрагиваются). После установки нужно перезапустить программу.')) return;
+    if (!window.confirm('Скачать и установить обновление Системно?\n\nФайлы приложения будут заменены новыми (ваши данные, ключи и история не затрагиваются). После установки нужно перезапустить программу.')) return;
     setErr('');
     setLog([]);
     setBusy(true);
@@ -44,7 +44,7 @@ export function UpdateCard({ branch, onBranch }: { branch: string; onBranch: (b:
 
   return (
     <div className="card" id="update-card">
-      <h2>Обновление JARVIS</h2>
+      <h2>Обновление Системно</h2>
       <p className="muted">Новые возможности ставятся одной кнопкой — скачивать архивы и заменять папки больше не нужно.</p>
       {err && <div className="banner banner-err">{err}</div>}
       {st && !st.canUpdate && <div className="banner banner-demo">{st.reason}</div>}
@@ -71,7 +71,7 @@ export function UpdateCard({ branch, onBranch }: { branch: string; onBranch: (b:
         )}
         {done && (
           <button className="btn btn-primary" onClick={() => void window.jarvis.update.restart()}>
-            Перезапустить JARVIS
+            Перезапустить Системно
           </button>
         )}
       </div>

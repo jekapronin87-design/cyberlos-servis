@@ -104,6 +104,10 @@ export interface Settings {
   telegramReplyInstructions: string;
   /** Браузер ассистента: не спрашивать подтверждение на обычные клики и ввод (отправка, оплата, удаление — всегда спрашивать). */
   browserAutoApprove: boolean;
+  /** Звуки интерфейса (клики, переключатели, пробуждение). */
+  uiSounds: boolean;
+  /** Тихий фоновый «гул космоса». */
+  uiAmbient: boolean;
   /** Открывать на весь экран (F11 — переключить). */
   fullscreen: boolean;
   /** Имя ассистента (на него он откликается голосом; «Джарвис» остаётся запасным именем). */
@@ -149,6 +153,8 @@ export const DEFAULT_SETTINGS: Settings = {
   systemVoice: '',
   cameraEnabled: false,
   fullscreen: true,
+  uiSounds: true,
+  uiAmbient: false,
   browserAutoApprove: false,
   telegramEnabled: false,
   telegramAutoReply: false,

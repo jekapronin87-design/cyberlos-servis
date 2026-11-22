@@ -1,4 +1,4 @@
-/** Страница JARVIS для телефона (PWA без зависимостей). Скрипт и стили отдаются отдельными файлами — так работает строгий CSP. */
+/** Страница Системно для телефона (PWA без зависимостей). Скрипт и стили отдаются отдельными файлами — так работает строгий CSP. */
 
 export const INDEX_HTML = `<!doctype html>
 <html lang="ru"><head>
@@ -7,19 +7,19 @@ export const INDEX_HTML = `<!doctype html>
 <meta name="theme-color" content="#050b14">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="stylesheet" href="/app.css">
-<title>JARVIS</title></head>
+<title>Системно</title></head>
 <body>
 <main id="pair" hidden>
   <div class="orb"></div>
-  <h1>JARVIS</h1>
-  <p>Откройте на компьютере JARVIS → Настройки → «Доступ с телефона» → «Показать код» и введите 6 цифр.</p>
+  <h1>Системно</h1>
+  <p>Откройте на компьютере Системно → Настройки → «Доступ с телефона» → «Показать код» и введите 6 цифр.</p>
   <input id="code" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="off">
   <input id="devname" maxlength="40" placeholder="Название телефона">
   <button id="pairBtn">Подключить</button>
   <p id="pairErr" class="err"></p>
 </main>
 <main id="app" hidden>
-  <header><span class="dot" id="dot"></span><b>JARVIS</b><span id="mode"></span><button id="mute" title="Озвучка ответов">🔊</button><button id="logout" title="Отключить этот телефон">⎋</button></header>
+  <header><span class="dot" id="dot"></span><b>Системно</b><span id="mode"></span><button id="mute" title="Озвучка ответов">🔊</button><button id="logout" title="Отключить этот телефон">⎋</button></header>
   <section id="log" aria-live="polite"></section>
   <p id="note"></p>
   <form id="form"><button type="button" id="mic" title="Голос">🎤</button><input id="text" placeholder="Сообщение…" autocomplete="off"><button id="send">➤</button><button type="button" id="stop" hidden>■</button></form>
@@ -28,8 +28,8 @@ export const INDEX_HTML = `<!doctype html>
 </body></html>`;
 
 export const MANIFEST = JSON.stringify({
-  name: 'JARVIS',
-  short_name: 'JARVIS',
+  name: 'Системно',
+  short_name: 'Системно',
   start_url: '/',
   display: 'standalone',
   background_color: '#050b14',

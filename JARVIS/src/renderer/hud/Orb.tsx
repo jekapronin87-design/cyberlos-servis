@@ -4,7 +4,7 @@ export type OrbState = 'idle' | 'listening' | 'thinking' | 'speaking';
 
 interface Props {
   state: OrbState;
-  /** Возвращает текущую громкость 0..1 (микрофон или голос Джарвиса). */
+  /** Возвращает текущую громкость 0..1 (микрофон или голос Системно). */
   getLevel: () => number;
 }
 
@@ -15,8 +15,12 @@ const PALETTE: Record<OrbState, [number, number, number]> = {
   speaking: [120, 240, 255],
 };
 
-const N = 700;
+const N = 3400;
 const GOLD = Math.PI * (3 - Math.sqrt(5));
+const rnd = (i: number, k = 0): number => {
+  const x = Math.sin(i * 127.1 + k * 311.7) * 43758.5453;
+  return x - Math.floor(x);
+};
 const POINTS = Array.from({ length: N }, (_, i) => {
   const y = 1 - (i / (N - 1)) * 2;
   const r = Math.sqrt(1 - y * y);
@@ -24,26 +28,99 @@ const POINTS = Array.from({ length: N }, (_, i) => {
   return { x: Math.cos(t) * r, y, z: Math.sin(t) * r, seed: (i * 37) % 100 };
 });
 
-/** Голографическая «голова»: та же сфера точек, деформированная в силуэт лица (y вниз: лоб — минус, подбородок — плюс). */
+// ---------- «лицо» из точек ----------
+// Координаты головы: x вправо, y вниз (лоб — минус, подбородок — плюс), z к зрителю. Линии не рисуются: облик создают плотность,
+// яркость и рельеф облака точек (освещение по нормали), как у голографического скана.
 const smooth = (a: number, b: number, v: number): number => {
   const t = Math.max(0, Math.min(1, (v - a) / (b - a)));
   return t * t * (3 - 2 * t);
 };
-const toHead = (x: number, y: number, z: number): [number, number, number] => {
-  const hx = x * 0.78 * (1 - 0.32 * smooth(0.05, 1, y));
-  const hy = y * 1.08;
-  let hz = z * 0.86;
-  if (z > 0.3 && Math.abs(x) < 0.14 && y > -0.12 && y < 0.28) hz += 0.2 * (1 - Math.abs(x) / 0.14); // нос
-  if (z > 0.3 && y > -0.34 && y < -0.1 && Math.abs(Math.abs(x) - 0.3) < 0.14) hz -= 0.08; // глазницы
-  return [hx, hy, hz];
-};
-/** Передняя поверхность головы в точке (x, y) — чтобы черты лица «лежали» на ней. */
-const faceZ = (x: number, y: number): number => {
-  const sx = 0.78 * (1 - 0.32 * smooth(0.05, 1, y / 1.08));
-  const k = 1 - (x / sx) ** 2 - (y / 1.08) ** 2;
-  return 0.86 * Math.sqrt(Math.max(0, k)) + 0.02;
-};
-const HEAD_POINTS = POINTS.map((p) => toHead(p.x, p.y, p.z));
+const gauss = (x: number, y: number, cx: number, cy: number, sx: number, sy: number, amp: number): number => amp * Math.exp(-(((x - cx) / sx) ** 2) - ((y - cy) / sy) ** 2);
+const HA = 0.74, HB = 1.05, HC = 0.86;
+const halfW = (y: number): number => HA * (1 - 0.3 * smooth(0.1, 1, y / HB));
+/** Рельеф лица: нос, глазницы, брови, скулы, губы, подбородок. */
+function relief(x: number, y: number): number {
+  const ax = Math.abs(x);
+  return (
+    gauss(ax, y, 0, 0.12, 0.075, 0.28, 0.28) + // спинка носа
+    gauss(ax, y, 0, 0.28, 0.14, 0.06, 0.11) + // кончик и крылья
+    -gauss(ax, y, 0.3, -0.2, 0.14, 0.075, 0.2) + // глазницы
+    gauss(ax, y, 0.3, -0.37, 0.2, 0.05, 0.11) + // брови
+    gauss(ax, y, 0.46, 0.14, 0.15, 0.15, 0.07) + // скулы
+    gauss(ax, y, 0, 0.47, 0.2, 0.04, 0.11) + // верхняя губа
+    gauss(ax, y, 0, 0.59, 0.18, 0.045, 0.1) + // нижняя губа
+    -gauss(ax, y, 0, 0.53, 0.22, 0.012, 0.05) + // линия рта
+    gauss(ax, y, 0, 0.86, 0.14, 0.09, 0.07) + // подбородок
+    gauss(ax, y, 0, -0.62, 0.35, 0.18, 0.03) // лоб
+  );
+}
+function faceZ(x: number, y: number): number {
+  const k = 1 - (x / halfW(y)) ** 2 - (y / HB) ** 2;
+  if (k <= 0) return 0;
+  const root = Math.sqrt(k);
+  return HC * root + relief(x, y) * smooth(0, 0.35, root);
+}
+const LIGHT = (() => {
+  const l = [-0.45, -0.55, 0.7];
+  const n = Math.hypot(l[0]!, l[1]!, l[2]!);
+  return l.map((v) => v / n) as [number, number, number];
+})();
+function shade(x: number, y: number): number {
+  const e = 0.012;
+  const dzx = (faceZ(x + e, y) - faceZ(x - e, y)) / (2 * e);
+  const dzy = (faceZ(x, y + e) - faceZ(x, y - e)) / (2 * e);
+  const nl = Math.hypot(dzx, dzy, 1);
+  const d = (-dzx * LIGHT[0] - dzy * LIGHT[1] + LIGHT[2]) / nl;
+  return 0.08 + 0.92 * Math.pow(Math.max(0, d), 1.25);
+}
+
+interface Pt {
+  /** позиция на сфере */
+  sx: number; sy: number; sz: number;
+  /** цель в форме головы */
+  hx: number; hy: number; hz: number;
+  /** яркость от освещения/признак «особая» точка (глаз, рот…) */
+  lit: number;
+  feat: number; // 0 — кожа, 1 — глаза/брови/нос, 2 — рот
+  delay: number;
+  seed: number;
+}
+const CLOUD: Pt[] = [];
+for (let i = 0; i < N; i++) {
+  const p = POINTS[i]!;
+  // сфера → эллипсоид головы
+  let hx = p.x * HA * (1 - 0.3 * smooth(0.1, 1, p.y));
+  let hy = p.y * HB;
+  let hz = p.z * HC;
+  let lit = 0.3;
+  if (p.z > 0) {
+    hz = faceZ(hx, hy);
+    lit = shade(hx, hy);
+  }
+  CLOUD.push({ sx: p.x, sy: p.y, sz: p.z, hx, hy, hz, lit, feat: 0, delay: rnd(i, 1) * 0.5, seed: p.seed });
+}
+/** Дополнительные точки на чертах лица (глаза, брови, нос, губы) — плотные «созвездия», а не линии. */
+function addBlob(count: number, feat: 1 | 2, gen: (k: number) => [number, number]): void {
+  for (let k = 0; k < count; k++) {
+    const [x, y] = gen(k);
+    const i = CLOUD.length;
+    const t = rnd(i, 5) * Math.PI * 2;
+    const u = rnd(i, 6) * 2 - 1;
+    const r = Math.sqrt(1 - u * u);
+    CLOUD.push({ sx: Math.cos(t) * r, sy: u, sz: Math.abs(Math.sin(t) * r), hx: x, hy: y, hz: faceZ(x, y) + 0.03, lit: 1, feat, delay: rnd(i, 7) * 0.5, seed: (i * 13) % 100 });
+  }
+}
+const J = (i: number, k: number, a: number): number => (rnd(i, k) - 0.5) * a;
+for (const sgn of [-1, 1]) {
+  addBlob(60, 1, (k) => { const a = rnd(k, 11 + sgn) * Math.PI * 2; const rr = Math.sqrt(rnd(k, 12 + sgn)); return [sgn * 0.3 + Math.cos(a) * 0.13 * rr, -0.2 + Math.sin(a) * 0.045 * rr]; }); // глаз
+  addBlob(10, 1, (k) => [sgn * 0.3 + J(k, 13 + sgn, 0.03), -0.2 + J(k, 14, 0.03)]); // зрачок
+  addBlob(30, 1, (k) => { const f = k / 33; return [sgn * (0.12 + f * 0.34) + J(k, 21, 0.03), -0.36 - Math.sin(f * Math.PI) * 0.05 + J(k, 15, 0.035)]; }); // бровь
+  addBlob(7, 1, (k) => [sgn * 0.075 + J(k, 16, 0.02), 0.31 + J(k, 17, 0.02)]); // ноздря
+}
+addBlob(12, 1, (k) => [J(k, 18, 0.07), -0.1 + (k / 11) * 0.38 + J(k, 24, 0.05)]); // спинка носа
+addBlob(55, 2, (k) => { const f = k / 69; return [-0.26 + f * 0.52 + J(k, 22, 0.02), 0.47 - Math.sin(f * Math.PI) * 0.025 + J(k, 19, 0.03)]; }); // верхняя губа
+addBlob(50, 2, (k) => { const f = k / 59; return [-0.24 + f * 0.48 + J(k, 23, 0.02), 0.52 + Math.sin(f * Math.PI) * 0.055 + J(k, 20, 0.035)]; }); // нижняя губа
+const MOUTH_START = CLOUD.length - 50; // индексы нижней губы — смещаются, когда рот «открывается»
 
 /**
  * Голографический шар: облако точек на сфере, меридианы и параллели, вращающиеся кольца и светящееся ядро.
@@ -194,66 +271,51 @@ export function Orb({ state, getLevel }: Props) {
         ctx.stroke();
       }
 
-      // облако точек (с «дыханием» поверхности от громкости)
-      for (let i = 0; i < POINTS.length; i++) {
-        const pt = POINTS[i]!;
-        const hp = HEAD_POINTS[i]!;
-        const wob = 1 + Math.sin(time * (2 + energy * 3) + pt.seed) * (0.015 + level * 0.12 * (1 - morph * 0.7)) + level * 0.05 * (1 - morph);
-        const mx = pt.x + (hp[0] - pt.x) * morph;
-        const my = pt.y + (hp[1] - pt.y) * morph;
-        const mz = pt.z + (hp[2] - pt.z) * morph;
-        const p = project(mx * wob, my * wob, mz * wob);
-        const front = (p.d + 1) / 2; // 0 — сзади, 1 — спереди
-        const a = 0.12 + front * front * 0.85;
-        const size = 0.6 + front * 1.6 + level * 0.6;
-        ctx.fillStyle = rgba(a);
+      // облако точек: шар → (пульсируя) лицо. Каждая точка «перелетает» со своей задержкой, поэтому лицо проступает роем.
+      const open = level * 0.13; // рот открывается от громкости голоса
+      const scanY = Math.sin(time * 0.9) * 0.95; // голографическая «линия сканирования» скользит по лицу
+      const faceAlpha = smooth(0.15, 0.7, morph);
+      for (let i = 0; i < CLOUD.length; i++) {
+        const pt = CLOUD[i]!;
+        const m = smooth(pt.delay, pt.delay + 0.5, morph);
+        if (pt.feat > 0 && m < 0.02) continue;
+        let hy = pt.hy;
+        if (pt.feat === 2 && i >= MOUTH_START) hy += open; // нижняя губа
+        else if (pt.feat === 0 && pt.hy > 0.55 && Math.abs(pt.hx) < 0.35 && pt.hz > 0.3) hy += open * smooth(0.55, 0.95, pt.hy) * 0.9; // подбородок следует за губой
+        const blink = pt.feat === 1 && pt.hy > -0.25 && pt.hy < -0.12 && Math.sin(time * 0.9) > 0.996 ? 0.3 : 1;
+        const eyeY = blink < 1 ? -0.2 + (hy + 0.2) * 0.2 : hy;
+        const pulse = 1 + Math.sin(time * (2 + energy * 3) + pt.seed) * (0.012 + level * 0.1 * (1 - m * 0.8)) + level * 0.04 * (1 - m);
+        // волна голоса по лицу
+        const wave = m > 0.5 ? Math.sin(hy * 9 - time * 10) * level * 0.045 : 0;
+        const x = (pt.sx + (pt.hx - pt.sx) * m) * pulse;
+        const y = (pt.sy + ((blink < 1 ? eyeY : hy) - pt.sy) * m) * pulse;
+        const z = (pt.sz + (pt.hz - pt.sz) * m) * pulse + wave;
+        const p = project(x, y, z);
+        const front = (p.d + 1) / 2;
+        let a = 0.12 + front * front * 0.85;
+        let size = 0.45 + front * 1.15 + level * 0.45;
+        if (m > 0.02) {
+          // освещение рельефа: светлые и тёмные участки лепят лицо
+          const light = pt.lit * (0.55 + 0.45 * (1 - (1 - m)));
+          const scan = Math.exp(-(((hy - scanY) / 0.09) ** 2)) * 0.6 * m;
+          a = (a * (1 - m) + (0.1 + light * 0.9) * (0.25 + 0.75 * Math.max(0.3, front)) * m) + scan;
+          if (pt.feat > 0) {
+            a = Math.min(1, a + 0.18 * m * faceAlpha);
+            size += 0.2 * m;
+          }
+        }
+        if (pt.feat > 0) a *= faceAlpha;
+        if (a < 0.02) continue;
+        ctx.fillStyle = rgba(Math.min(1, a));
         ctx.beginPath();
         ctx.arc(p.px, p.py, size, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // черты лица: глаза, брови, нос, рот (рот открывается от громкости голоса)
-      if (morph > 0.25) {
-        const fa = Math.min(1, (morph - 0.25) / 0.6);
-        const P = (x: number, y: number) => project(x, y, faceZ(x, y) + 0.015);
-        const line = (pts: [number, number][], alpha: number, wd = 1.6, close = false): void => {
-          ctx.beginPath();
-          pts.forEach(([x, y], i) => {
-            const q = P(x, y);
-            i === 0 ? ctx.moveTo(q.px, q.py) : ctx.lineTo(q.px, q.py);
-          });
-          if (close) ctx.closePath();
-          ctx.setLineDash([]);
-          ctx.lineWidth = wd;
-          ctx.strokeStyle = rgba(alpha * fa);
-          ctx.stroke();
-        };
-        const blink = Math.sin(time * 0.9) > 0.985 ? 0.15 : 1;
-        for (const sx of [-1, 1]) {
-          const eye: [number, number][] = [];
-          for (let i = 0; i < 12; i++) {
-            const a = (i / 12) * Math.PI * 2;
-            eye.push([sx * 0.3 + Math.cos(a) * 0.15, -0.2 + Math.sin(a) * 0.055 * blink]);
-          }
-          line(eye, 0.95, 1.8, true);
-          const q = P(sx * 0.3, -0.2);
-          ctx.fillStyle = `rgba(255,255,255,${0.9 * fa})`;
-          ctx.beginPath();
-          ctx.arc(q.px, q.py, R * 0.035, 0, Math.PI * 2);
-          ctx.fill();
-          line([[sx * 0.14, -0.36], [sx * 0.3, -0.4], [sx * 0.46, -0.35]], 0.55);
-        }
-        line([[0, -0.15], [-0.03, 0.12], [-0.1, 0.24], [0, 0.27], [0.1, 0.24], [0.03, 0.12]], 0.5);
-        const open = 0.02 + level * 0.16;
-        line([[-0.27, 0.5], [-0.12, 0.47 - open * 0.15], [0, 0.46], [0.12, 0.47 - open * 0.15], [0.27, 0.5]], 0.9, 1.8);
-        line([[-0.27, 0.5], [-0.14, 0.5 + open], [0, 0.52 + open], [0.14, 0.5 + open], [0.27, 0.5]], 0.8, 1.8);
-        line([[-0.55, 0.15], [-0.52, 0.45], [-0.3, 0.8], [0, 0.95], [0.3, 0.8], [0.52, 0.45], [0.55, 0.15]], 0.3, 1.2);
-      }
-
       // ядро
       const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * (0.45 + level * 0.25));
-      core.addColorStop(0, `rgba(255,255,255,${(0.55 + level * 0.4) * (1 - morph * 0.75)})`);
-      core.addColorStop(0.25, rgba(0.45 + level * 0.3));
+      core.addColorStop(0, `rgba(255,255,255,${(0.55 + level * 0.4) * (1 - morph)})`);
+      core.addColorStop(0.25, rgba((0.45 + level * 0.3) * (1 - morph * 0.85)));
       core.addColorStop(1, rgba(0));
       ctx.fillStyle = core;
       ctx.beginPath();
