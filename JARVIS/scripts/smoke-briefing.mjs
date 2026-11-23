@@ -36,8 +36,9 @@ const live = createServer((req, res) => {
   if (p === 'city/summary') return res.end(JSON.stringify({ ok: true, data: { tasks: { open: 14, overdue: 3 }, production: { ordersByStatus: [], materialsBelowMinimum: [] } } }));
   if (p === 'production/orders') return list([{ id: 'o1', number: 57, productName: 'Сайберлос 15', status: 'IN_PROGRESS', plannedFor: iso(72), stages: [] }]);
   if (p === 'tasks' || p === 'employees') return list([]);
+  if (p === 'club/funnel') return res.end(JSON.stringify({ ok: true, data: { total: 120, withAccessNow: 9, paying: 11, paidTotalRub: 33000, byStep: [{ step: 'watch', count: 70, avgDaysInStep: 6.4, stuckOver3Days: 52 }, { step: 'PAYMENT_PENDING', count: 30, avgDaysInStep: 3, stuckOver3Days: 12 }, { step: 'paid', count: 9, avgDaysInStep: 12, stuckOver3Days: 0 }], last7Days: { joined: 14, paid: 2 } } }));
   if (p === 'club/members') return list([{ step: 'START', createdAt: iso(24 * 9) }, { step: 'PAYMENT_PENDING', updatedAt: iso(24 * 5) }, { step: 'PAYMENT_PENDING', updatedAt: iso(2) }, { step: 'PAID', paidTotalRub: 9900, accessUntil: new Date(Date.now() + 30 * 86400000).toISOString() }]);
-  if (p === 'messages') return list([{ conversationId: 'c1', channel: 'telegram', direction: 'IN', text: 'Когда приедет монтаж?', contactName: 'Алексей', createdAt: iso(6) }, { conversationId: 'c2', channel: 'max', direction: 'IN', text: 'Пришлите счёт', contactName: 'Ольга', createdAt: iso(1) }]);
+  if (p === 'messages') return list([{ id: 'm1', threadId: 'c1', channel: 'TELEGRAM', direction: 'IN', text: 'Когда приедет монтаж?', contact: { id: 'k1', fullName: 'Алексей' }, assignee: { fullName: 'Мария' }, answeredAt: null, createdAt: iso(6) }, { id: 'm2', threadId: 'c2', channel: 'MAX', direction: 'IN', text: 'Пришлите счёт', contact: { id: 'k2', fullName: 'Ольга' }, answeredAt: null, createdAt: iso(1) }]);
   res.statusCode = 404; res.end('{}');
 });
 await new Promise((r) => live.listen(0, '127.0.0.1', r));
@@ -72,7 +73,8 @@ try {
   assert.match(all, /без ответственного/);
   assert.match(all, /Telegram-бот: клуб/);
   assert.match(all, /Воронка бота/);
-  assert.match(all, /Ждут оплаты/);
+  assert.match(all, /Зашли за 7 дней/);
+  assert.match(all, /Смотрят материалы/);
   assert.match(all, /Рабочие чаты: без ответа/);
   assert.match(all, /Алексей/);
   assert.match(all, /Max/);

@@ -145,6 +145,8 @@ export interface ClubStatsDto {
   paying: number;
   paidRub: number;
   byStep: { step: string; count: number; stuck: number }[];
+  /** За последние 7 дней (есть только в ответе club/funnel). */
+  last7Days?: { joined: number; paid: number };
 }
 
 export interface MailItemDto {
@@ -196,7 +198,17 @@ export function buildBriefingDeck(b: BriefingData, alerts: AlertDto[]): DeckDto 
   if (b.dash) slides.push(...buildStatsDeck(b.dash).slides.filter((s) => s.kind !== 'title' && !(s.kind === 'text' && s.title.startsWith('Главное'))));
   if (b.club) {
     const c = b.club;
-    slides.push({ kind: 'kpis', title: 'Telegram-бот: клуб', items: [{ label: 'Всего зашло', value: c.total }, { label: 'Платящих', value: c.paying, tone: 'good' }, { label: 'С доступом сейчас', value: c.withAccess, tone: 'good' }, { label: 'Оплачено', value: c.paidRub, unit: ' ₽', tone: 'good' }] });
+    slides.push({
+      kind: 'kpis',
+      title: 'Telegram-бот: клуб',
+      items: [
+        { label: 'Всего зашло', value: c.total },
+        ...(c.last7Days ? [{ label: 'Зашли за 7 дней', value: c.last7Days.joined }, { label: 'Оплатили за 7 дней', value: c.last7Days.paid, tone: 'good' as Tone }] : []),
+        { label: 'Платящих', value: c.paying, tone: 'good' },
+        { label: 'С доступом сейчас', value: c.withAccess, tone: 'good' },
+        { label: 'Оплачено', value: c.paidRub, unit: ' ₽', tone: 'good' },
+      ],
+    });
     const steps = c.byStep.filter((x) => x.count > 0);
     if (steps.length) slides.push({ kind: 'funnel', title: 'Воронка бота: кто на каком этапе', subtitle: '⚠ — застрявшие дольше 3 дней, красным — этапы, где они есть', stages: steps.map((x) => ({ label: `${x.step}${x.stuck ? ` (⚠ ${x.stuck})` : ''}`, value: x.count, tone: x.stuck > 0 ? ('bad' as Tone) : undefined })) });
   }

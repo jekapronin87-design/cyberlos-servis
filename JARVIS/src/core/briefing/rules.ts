@@ -14,11 +14,29 @@ const DAY = 86_400_000;
 // ---------- Telegram-бот клуба (CRM «Аквамастер», раздел club) ----------
 
 const STEP_RU: Record<string, string> = {
-  START: 'Запустили бота', STARTED: 'Запустили бота', NEW: 'Новые', REGISTERED: 'Зарегистрировались', SURVEY: 'Анкета', QUIZ: 'Тест',
+  WATCH: 'Смотрят материалы', START: 'Запустили бота', STARTED: 'Запустили бота', NEW: 'Новые', REGISTERED: 'Зарегистрировались', SURVEY: 'Анкета', QUIZ: 'Тест',
   PAYMENT: 'Оплата', PAYMENT_PENDING: 'Ждут оплаты', INVOICE: 'Выставлен счёт', PAID: 'Оплатили', ACTIVE: 'Активные', MEMBER: 'В клубе',
   EXPIRED: 'Доступ закончился', CANCELLED: 'Отменили', LEFT: 'Вышли',
 };
 const stepName = (s: string): string => STEP_RU[s.toUpperCase()] ?? s;
+
+/** Ответ club/funnel (CRM считает воронку сама): { total, withAccessNow, paying, paidTotalRub, byStep[{step,count,avgDaysInStep,stuckOver3Days}], last7Days }. */
+export function parseClubFunnel(dataIn: unknown): ClubStatsDto | null {
+  const d = obj(dataIn);
+  if (!Array.isArray(d['byStep']) && d['total'] === undefined) return null;
+  const l7 = obj(d['last7Days']);
+  return {
+    total: num(d['total']),
+    withAccess: num(d['withAccessNow']),
+    paying: num(d['paying']),
+    paidRub: num(d['paidTotalRub']),
+    byStep: (Array.isArray(d['byStep']) ? (d['byStep'] as unknown[]) : []).map((x) => {
+      const s = obj(x);
+      return { step: stepName(str(s['step'], 'Без этапа')), count: num(s['count']), stuck: num(s['stuckOver3Days']) };
+    }).sort((a, b) => b.count - a.count),
+    last7Days: d['last7Days'] ? { joined: num(l7['joined']), paid: num(l7['paid']) } : undefined,
+  };
+}
 /** Шаги, на которых «застрял» уже не считается (человек дошёл до конца или ушёл). */
 const FINAL_STEP = /^(PAID|ACTIVE|MEMBER|EXPIRED|CANCELLED|CANCELED|LEFT|DONE|COMPLETED)$/i;
 export const CLUB_STUCK_DAYS = 3;
@@ -62,29 +80,34 @@ const CHANNEL_RU: Record<string, string> = { telegram: 'Telegram', tg: 'Telegram
 /** Разбор сообщений: «без ответа» — если последнее сообщение в переписке входящее. */
 export function parseChats(rowsIn: unknown[], now: Date, windowHours = 36): ChatItemDto[] {
   const since = now.getTime() - windowHours * 3_600_000;
+  const when = (r: Row): number => Date.parse(str(first(r, ['createdAt', 'sentAt', 'at', 'date'])));
   const byConv = new Map<string, Row[]>();
   for (const x of rowsIn) {
     const r = obj(x);
-    const at = Date.parse(str(first(r, ['createdAt', 'sentAt', 'at', 'date'])));
+    const at = when(r);
     if (!Number.isFinite(at) || at < since) continue;
-    const conv = str(first(r, ['conversationId', 'chatId', 'dealId', 'contactId', 'threadId']), str(first(r, ['from', 'senderName', 'contactName']), 'unknown'));
+    const conv = str(first(r, ['threadId', 'conversationId', 'chatId', 'dealId']), str(obj(r['contact'])['id'], str(first(r, ['chatTitle', 'from', 'senderName', 'contactName']), 'unknown')));
     const list = byConv.get(conv) ?? [];
     list.push(r);
     byConv.set(conv, list);
   }
   const out: ChatItemDto[] = [];
   for (const list of byConv.values()) {
-    list.sort((a, b) => Date.parse(str(first(a, ['createdAt', 'sentAt', 'at', 'date']))) - Date.parse(str(first(b, ['createdAt', 'sentAt', 'at', 'date']))));
+    list.sort((a, b) => when(a) - when(b));
     const last = list[list.length - 1]!;
     const dir = str(first(last, ['direction', 'dir', 'type'])).toLowerCase();
     const outgoing = ['out', 'outgoing', 'outbound', 'sent'].includes(dir) || first(last, ['fromMe', 'isOutgoing', 'outgoing']) === true;
+    // Ответ мог быть дан и позже: если у входящего заполнено answeredAt, сотрудник уже отозвался
+    const answered = !outgoing && (!!last['answeredAt'] || list.some((m) => !!m['answeredAt'] && when(m) >= when(last)));
     const ch = str(first(last, ['channel', 'source', 'messenger', 'provider'])).toLowerCase();
+    const who = str(obj(last['contact'])['fullName'], str(first(last, ['chatTitle', 'contactName', 'senderName', 'from', 'authorName']), 'Клиент'));
+    const mgr = str(obj(last['assignee'])['fullName']);
     out.push({
       channel: CHANNEL_RU[ch] ?? (ch ? ch : 'Чат'),
-      from: str(first(last, ['contactName', 'senderName', 'from', 'authorName']), 'Клиент').slice(0, 60),
+      from: (mgr && !outgoing ? `${who} → ${mgr}` : who).slice(0, 70),
       text: str(first(last, ['text', 'body', 'content', 'message'])).replace(/\s+/g, ' ').slice(0, 140),
-      at: new Date(Date.parse(str(first(last, ['createdAt', 'sentAt', 'at', 'date'])))).toISOString(),
-      unanswered: !outgoing,
+      at: new Date(when(last)).toISOString(),
+      unanswered: !outgoing && !answered,
     });
   }
   return out.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));

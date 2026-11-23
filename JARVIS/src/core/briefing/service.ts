@@ -3,7 +3,7 @@ import type { AuditLog } from '../security/audit';
 import { briefingSpeech, buildBriefingDeck, type AlertDto, type BriefingData, type ChatItemDto, type ClubStatsDto } from '../../shared/deck';
 import type { BriefingConfigDto, BriefingPayloadDto, DeckDto } from '../../shared/deck';
 import type { CrmDashboardDto } from '../../shared/types';
-import { computeAlerts, parseChats, parseClub, zonedParts } from './rules';
+import { computeAlerts, parseChats, parseClub, parseClubFunnel, zonedParts } from './rules';
 import type { MailService } from './mail';
 
 export type BriefingConfig = BriefingConfigDto;
@@ -161,6 +161,13 @@ export class BriefingService {
     const get = this.deps.crmGet?.();
     if (!get) return null;
     try {
+      // Сначала готовая воронка от CRM (club/funnel); у старой версии CRM её нет — считаем сами по списку участников
+      try {
+        const f = parseClubFunnel(obj((await get('club/funnel')) as unknown)['data']);
+        if (f) return f;
+      } catch (e) {
+        if (status(e) !== 404) throw e;
+      }
       const rows: unknown[] = [];
       let cursor: string | null = null;
       for (let n = 0; n < 10; n++) {
@@ -239,5 +246,6 @@ export class BriefingService {
 }
 
 const prune = (seen: Record<string, number>, t: number): Record<string, number> => Object.fromEntries(Object.entries(seen).filter(([, v]) => t - v < 3 * 86_400_000));
+const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
 const status = (e: unknown): number | undefined => (e as { status?: number }).status;
 const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e)).slice(0, 160);

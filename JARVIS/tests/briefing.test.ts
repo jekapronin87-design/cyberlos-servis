@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeAlerts, parseChats, parseClub, scoreMail, zonedParts } from '../src/core/briefing/rules';
+import { computeAlerts, parseChats, parseClub, parseClubFunnel, scoreMail, zonedParts } from '../src/core/briefing/rules';
 import { buildBriefingDeck, briefingSpeech, sanitizeDeck } from '../src/shared/deck';
 import { parseNavIntent } from '../src/shared/voice';
 import { RECIPES } from '../src/renderer/audio/uiSounds';
@@ -32,6 +32,26 @@ describe('Сводка: время и правила', () => {
     expect(c.byStep.find((s) => s.step === 'Ждут оплаты')).toEqual({ step: 'Ждут оплаты', count: 2, stuck: 1 });
     expect(c.byStep.find((s) => s.step === 'Запустили бота')?.stuck).toBe(1);
     expect(c.byStep.find((s) => s.step === 'Оплатили')?.stuck).toBe(0);
+  });
+
+  it('воронка от CRM (club/funnel) читается как есть', () => {
+    const c = parseClubFunnel({ generatedAt: 'x', total: 120, withAccessNow: 9, paying: 11, paidTotalRub: 33000, byStep: [{ step: 'paid', count: 9, avgDaysInStep: 12.1, stuckOver3Days: 7 }, { step: 'watch', count: 70, avgDaysInStep: 6.4, stuckOver3Days: 52 }], last7Days: { joined: 14, paid: 2 } });
+    expect(c).toMatchObject({ total: 120, withAccess: 9, paying: 11, paidRub: 33000, last7Days: { joined: 14, paid: 2 } });
+    expect(c?.byStep[0]).toEqual({ step: 'Смотрят материалы', count: 70, stuck: 52 });
+    expect(parseClubFunnel('мусор')).toBeNull();
+  });
+
+  it('чаты в формате CRM «Аквамастер»: TELEGRAM/MAX, контакт, ответственный, answeredAt', () => {
+    const items = parseChats(
+      [
+        { id: '1', channel: 'TELEGRAM', direction: 'IN', text: 'Сколько стоит септик?', createdAt: ago(3), contact: { id: 'k1', fullName: 'Иван Тестов' }, assignee: { fullName: 'Мария' }, answeredAt: null, threadId: 't1' },
+        { id: '2', channel: 'MAX', direction: 'IN', text: 'Спасибо!', createdAt: ago(2), contact: { id: 'k2', fullName: 'Ольга' }, answeredAt: ago(1), threadId: 't2' },
+        { id: '3', channel: 'MAX', direction: 'OUT', text: 'Пожалуйста', createdAt: ago(1), contact: { id: 'k2', fullName: 'Ольга' }, answeredAt: null, threadId: 't2' },
+      ],
+      NOW,
+    );
+    expect(items.find((c) => c.from.startsWith('Иван'))).toMatchObject({ channel: 'Telegram', unanswered: true, from: 'Иван Тестов → Мария' });
+    expect(items.find((c) => c.from === 'Ольга')).toMatchObject({ channel: 'Max', unanswered: false });
   });
 
   it('клуб: непонятные поля не ломают разбор', () => {
@@ -96,13 +116,14 @@ describe('Сводка: время и правила', () => {
   });
 });
 
-function crmFake(opts: { messages?: boolean } = { messages: true }) {
+function crmFake(opts: { messages?: boolean; funnel?: boolean } = { messages: true, funnel: true }) {
   const calls: string[] = [];
   const f = (async (url: string) => {
     const p = new URL(url).pathname.replace('/api/readonly/', '');
     calls.push(p);
     const ok = (data: unknown) => new Response(JSON.stringify({ ok: true, count: 1, nextCursor: null, data }), { status: 200 });
     if (p === 'health') return ok({});
+    if (p === 'club/funnel' && opts.funnel !== false) return ok({ total: 120, withAccessNow: 9, paying: 11, paidTotalRub: 33000, byStep: [{ step: 'watch', count: 70, avgDaysInStep: 6.4, stuckOver3Days: 52 }], last7Days: { joined: 14, paid: 2 } });
     if (p === 'club/members') return ok([{ step: 'PAID', paidTotalRub: 3000 }, { step: 'PAYMENT_PENDING', updatedAt: ago(24 * 6) }]);
     if (p === 'messages' && opts.messages) return ok([{ conversationId: 'a', channel: 'telegram', direction: 'IN', text: 'Ответьте!', contactName: 'Иван', createdAt: ago(5) }]);
     if (p === 'city/summary') return ok({ tasks: { open: 3, overdue: 2 }, production: { materialsBelowMinimum: [] } });
@@ -168,6 +189,14 @@ describe('Сводка: сервис', () => {
     const last = p2.deck.slides[p2.deck.slides.length - 1]!;
     expect(JSON.stringify(last)).toContain('рабочие чаты');
     expect(JSON.stringify(last)).toContain('ещё не отдаёт сообщения');
+  });
+
+  it('если у CRM ещё нет club/funnel — воронка считается по списку участников', async () => {
+    const { h } = setup(crmFake({ messages: true, funnel: false }));
+    const d = await h.core.briefing.collect();
+    expect(d.club).toMatchObject({ total: 2, paying: 1 });
+    const { h: h2 } = setup();
+    expect((await h2.core.briefing.collect()).club).toMatchObject({ total: 120, last7Days: { joined: 14 } });
   });
 
   it('почта: пароль не в базе, ошибка входа объяснена понятно, один ящик не ломает остальные', async () => {
