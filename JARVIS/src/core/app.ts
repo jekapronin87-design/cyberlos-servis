@@ -60,6 +60,9 @@ import { RealtimeService } from './realtime/service';
 import { ShowService } from './show/service';
 import { VideoService } from './video/service';
 import { YoutubeUploader } from './youtube/upload';
+import { UsageService } from './usage/service';
+import type { UsageDto } from '../shared/types';
+import { TOPICS } from './tools/select';
 import { generateImage } from './media/images';
 import { registerBuiltinTools } from './tools/builtin';
 import { ToolRegistry } from './tools/registry';
@@ -146,6 +149,7 @@ export class JarvisCore {
   readonly show: ShowService;
   readonly video: VideoService;
   readonly ytUpload: YoutubeUploader;
+  readonly usage: UsageService;
   private authUrlListeners = new Set<(u: string | null) => void>();
   onYtAuthUrl(cb: (u: string | null) => void): () => void {
     this.authUrlListeners.add(cb);
@@ -181,6 +185,7 @@ export class JarvisCore {
     this.conversations = new ConversationRepo(this.db);
     this.memory = new MemoryRepo(this.db);
     this.audit = new AuditLog(this.db);
+    this.usage = new UsageService(this.db);
     this.voice = new VoiceService({
       getSettings: () => this.settings.get(),
       secrets: opts.secrets,
@@ -242,6 +247,20 @@ export class JarvisCore {
       onProgress: (p) => this.uploadListeners.forEach((l) => l(p)),
     });
     this.ytUpload.registerTools(this.tools);
+    this.tools.register<{ topic: string }>({
+      name: 'tools_more',
+      description: `Подключает нужные инструменты, если их сейчас нет в списке. Вызови с темой: ${TOPICS.map((t) => t.id).join(', ')}. Инструменты появятся на следующем шаге.`,
+      risk: 'low',
+      mutates: false,
+      domain: 'local',
+      inputSchema: { type: 'object', properties: { topic: { type: 'string', enum: TOPICS.map((t) => t.id) } }, required: ['topic'] },
+      describe: (i) => `Подключить инструменты: ${String(i.topic)}`,
+      execute: (i) => {
+        const t = TOPICS.find((x) => x.id === String(i.topic).toLowerCase());
+        if (!t) throw new Error(`Неизвестная тема. Доступно: ${TOPICS.map((x) => x.id).join(', ')}.`);
+        return `Инструменты темы «${t.id}» (${t.title}) подключены — используй их на следующем шаге.`;
+      },
+    });
     this.mentor = new MentorService(this.db, this.crm, this.audit, this.browser);
     registerMentorTools(this.tools, this.mentor);
     this.telephony = new TelephonyService(this.db, this.settings, this.audit, this.mentor, opts.telephonyNow, opts.telephonyHearTimeoutMs);
@@ -309,6 +328,7 @@ export class JarvisCore {
       crm: () => (this.crm.client.configured() ? { environment: this.crm.status().environment, maskPii: this.crm.maskPii() } : null),
       aqua: () => (this.aqua.status().configured ? { maskPii: this.aqua.status().maskPii } : null),
       memory: this.memory,
+      usage: this.usage,
       settings: this.settings,
       tools: this.tools,
       audit: this.audit,
@@ -875,6 +895,10 @@ export class JarvisCore {
   }
   aquaSection(kind: Parameters<AquaService['section']>[0], arg: { pipeline?: string; stage?: string }) {
     return this.aqua.section(kind, arg);
+  }
+  usageSummary(): UsageDto {
+    const s = this.settings.get();
+    return { ...this.usage.summary(s.dailyBudgetUsd), model: s.model };
   }
   aquaTest(): Promise<string> {
     return this.aqua.test();

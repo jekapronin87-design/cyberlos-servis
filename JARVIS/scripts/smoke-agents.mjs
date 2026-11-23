@@ -28,7 +28,7 @@ try {
   assert.ok((await page.locator('#agent-templates button').count()) >= 8);
   step('раздел «Агенты» открыт, заготовки на месте');
 
-  await page.click('#agent-templates button:has-text("Аналитик CRM")');
+  await page.locator('#agent-templates button').filter({ hasText: /Аналитик CRM(?!\s*Аква)/ }).first().click();
   await page.waitForSelector('#agent-editor #agent-instructions');
   assert.match(await page.inputValue('#agent-instructions'), /crm_overview/);
   assert.equal(await page.locator('[data-group=crm]').isChecked(), true);

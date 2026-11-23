@@ -14,6 +14,8 @@ import type { ToolDefinition, ToolRegistry } from '../tools/registry';
 import { ToolExecutor, type ToolResultBlock, type ToolUseBlock } from './executor';
 import { isToolEnabled } from '../modules';
 import { buildSystemPrompt } from './prompt';
+import { selectTools, TOPICS } from '../tools/select';
+import type { UsageService } from '../usage/service';
 
 export const MAX_USER_TEXT = 20_000;
 const MAX_TOOL_STEPS = 12;
@@ -34,6 +36,7 @@ export interface OrchestratorDeps {
   confirm: ConfirmationBroker;
   providers: ProviderManager;
   role: Role;
+  usage?: UsageService;
 }
 
 export { validateToolInput } from './executor';
@@ -68,7 +71,13 @@ export class ChatOrchestrator {
 
       emit({ type: 'run_started', runId, conversationId });
       const settings = this.d.settings.get();
-      const resolved = this.d.providers.resolve(settings);
+      let resolved = this.d.providers.resolve(settings);
+      // Дневной лимит расходов на Claude: достигнут — переходим на бесплатные модели (если настроены) или останавливаемся с понятным объяснением
+      if (this.d.usage && settings.dailyBudgetUsd > 0 && resolved.mode === 'live' && this.d.usage.todayUsd() >= settings.dailyBudgetUsd) {
+        const free = this.d.providers.resolve({ ...settings, routingMode: 'free' });
+        if (free.provider.id === 'router' || free.provider.id === 'routing') resolved = free;
+        else throw new Error(`Достигнут дневной лимит расходов на Claude ($${settings.dailyBudgetUsd}). Увеличьте его в «Настройки → Расходы на ИИ» или включите бесплатные модели в «Настройки → Модели».`);
+      }
 
       const isFirst = this.d.conversations.messages(conversationId).length === 0;
       const userMsg = this.d.conversations.addMessage(conversationId, 'user', [{ type: 'text', text }]);
@@ -86,6 +95,7 @@ export class ChatOrchestrator {
       const meta: { provider: string; model: string } = { provider: resolved.provider.id, model: resolved.mode === 'live' ? settings.model : 'demo' };
 
       const maxSteps = opts.maxSteps ?? MAX_TOOL_STEPS;
+      const extraTopics = new Set<string>(); // темы, которые модель попросила через tools_more
       for (let step = 0; step < maxSteps + 1; step++) {
         if (signal.aborted) return this.stopped(runId, conversationId, finish);
 
@@ -101,7 +111,16 @@ export class ChatOrchestrator {
         // Версия подсказки без личных данных — для сторонних облачных моделей.
         const systemLite = buildSystemPrompt({ settings: { ...settings, userName: '' }, folders: [], memory: [] });
         // На последнем шаге инструменты отключаются, чтобы цикл гарантированно завершился.
-        const tools = step < maxSteps ? this.d.tools.specs().filter((t) => isToolEnabled(t.name, settings.disabledModules)) : [];
+        let tools = step < maxSteps ? this.d.tools.specs().filter((t) => isToolEnabled(t.name, settings.disabledModules)) : [];
+        if (settings.smartTools && tools.length > 0) {
+          const recent = history.slice(-8);
+          tools = selectTools(tools, {
+            text,
+            recentText: recent.flatMap((m) => m.content.map((b) => (b.type === 'text' ? b.text : ''))).join('\n').slice(-1500),
+            recentTools: history.slice(-14).flatMap((m) => m.content.flatMap((b) => (b.type === 'tool_use' ? [b.name] : []))),
+            extra: extraTopics,
+          }).tools;
+        }
 
         let assistantText = '';
         const toolUses: ToolUseBlock[] = [];
@@ -114,6 +133,8 @@ export class ChatOrchestrator {
             if (ev.type === 'text') {
               assistantText += ev.text;
               emit({ type: 'delta', runId, conversationId, text: ev.text });
+            } else if (ev.type === 'usage') {
+              this.d.usage?.record(ev.model, ev);
             } else if (ev.type === 'route') {
               meta.provider = ev.provider;
               meta.model = ev.model;
@@ -140,6 +161,12 @@ export class ChatOrchestrator {
         if (aborted) return this.stopped(runId, conversationId, finish);
         if (toolUses.length === 0) return finish('done');
 
+        for (const use of toolUses) {
+          if (use.name === 'tools_more') {
+            const topic = String((use.input as { topic?: unknown }).topic ?? '').toLowerCase();
+            for (const t of TOPICS) if (t.id === topic || t.title.toLowerCase().includes(topic)) extraTopics.add(t.id);
+          }
+        }
         const results: ToolResultBlock[] = [];
         for (const use of toolUses) {
           results.push(await this.exec.execute(use, { runId, conversationId, signal, actor: 'assistant', background: opts.background, remoteDevice: opts.remoteDevice }));

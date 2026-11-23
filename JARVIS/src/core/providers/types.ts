@@ -33,7 +33,9 @@ export type ProviderEvent =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
   /** Служебное: какая модель реально отвечает (для интерфейса и журнала). */
-  | { type: 'route'; provider: string; model: string; reason: string };
+  | { type: 'route'; provider: string; model: string; reason: string }
+  /** Расход токенов (для счётчика расходов). */
+  | { type: 'usage'; model: string; input: number; output: number; cacheRead: number; cacheWrite: number };
 
 /**
  * Контракт ИИ-провайдера. Новые провайдеры (локальные модели, другие API) добавляются

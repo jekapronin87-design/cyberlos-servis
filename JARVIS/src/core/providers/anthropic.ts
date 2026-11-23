@@ -61,20 +61,25 @@ export class AnthropicProvider implements ChatProvider {
   }
 
   async *stream(req: ProviderRequest, signal: AbortSignal): AsyncIterable<ProviderEvent> {
-    const stream = this.client.messages.stream(
-      {
-        model: req.model,
-        max_tokens: req.maxTokens,
-        system: req.system,
-        messages: toAnthropicMessages(req.messages),
-        tools: req.tools.map((t) => ({
-          name: t.name,
-          description: t.description,
-          input_schema: t.inputSchema as Anthropic.Tool.InputSchema,
-        })),
-      },
-      { signal },
-    );
+    // Кэш подсказок: инструменты и системная подсказка почти не меняются между шагами и запросами, поэтому их повторное чтение стоит в 10 раз дешевле.
+    // «Сейчас: …» меняется каждую минуту — выносим из кэшируемой части.
+    const volatile = /^Сейчас: .*$/m.exec(req.system)?.[0] ?? '';
+    const stable = volatile ? req.system.replace(volatile, '').replace(/\n{3,}/g, '\n\n') : req.system;
+    const system: Anthropic.TextBlockParam[] = [{ type: 'text', text: stable, cache_control: { type: 'ephemeral' } }];
+    if (volatile) system.push({ type: 'text', text: volatile });
+    const tools: Anthropic.Tool[] = req.tools.map((t, i) => ({
+      name: t.name,
+      description: t.description,
+      input_schema: t.inputSchema as Anthropic.Tool.InputSchema,
+      ...(i === req.tools.length - 1 ? { cache_control: { type: 'ephemeral' as const } } : {}),
+    }));
+    const messages = toAnthropicMessages(req.messages);
+    const last = messages[messages.length - 1];
+    if (last && Array.isArray(last.content) && last.content.length) {
+      const lb = last.content[last.content.length - 1] as { cache_control?: { type: 'ephemeral' } };
+      lb.cache_control = { type: 'ephemeral' }; // история диалога до этого места читается из кэша на следующем шаге
+    }
+    const stream = this.client.messages.stream({ model: req.model, max_tokens: req.maxTokens, system, messages, tools }, { signal });
 
     const queue: ProviderEvent[] = [];
     let wake: (() => void) | null = null;
@@ -92,6 +97,8 @@ export class AnthropicProvider implements ChatProvider {
     stream
       .finalMessage()
       .then((msg) => {
+        const u = msg.usage as { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null } | undefined;
+        if (u) queue.push({ type: 'usage', model: req.model, input: u.input_tokens ?? 0, output: u.output_tokens ?? 0, cacheRead: u.cache_read_input_tokens ?? 0, cacheWrite: u.cache_creation_input_tokens ?? 0 });
         for (const b of msg.content) {
           if (b.type === 'tool_use') {
             queue.push({ type: 'tool_use', id: b.id, name: b.name, input: (b.input ?? {}) as Record<string, unknown> });

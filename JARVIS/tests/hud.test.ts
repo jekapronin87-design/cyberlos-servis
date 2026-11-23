@@ -146,7 +146,7 @@ describe('модули', () => {
     const h = makeCore({ liveProvider: p });
     h.secrets.set('anthropic.apiKey', 'sk-ant-test-key-1234567890');
     h.core.updateSettings({ disabledModules: ['computer', 'crm'] });
-    const { id } = await chat(h, 'привет');
+    const { id } = await chat(h, 'привет, найди в базе знаний регламент и прочитай файл');
     expect(offered).not.toContain('fs_read');
     expect(offered).not.toContain('crm_overview');
     expect(offered).toContain('remember');

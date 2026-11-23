@@ -26,6 +26,7 @@ import type {
   VideoSpecDto,
   VideoPlanDto,
   VideoArtResultDto,
+  UsageDto,
   YtUploadStatusDto,
   YtUploadResultDto,
   AquaStatusDto,
@@ -116,6 +117,7 @@ export const IPC = {
   videoOpen: 'video:open',
   videoStop: 'video:stop',
   videoArt: 'video:art',
+  usageGet: 'usage:get',
   ytuStatus: 'ytu:status',
   ytuSaveClient: 'ytu:client',
   ytuConnect: 'ytu:connect',
@@ -278,6 +280,10 @@ export interface JarvisApi {
     setStartMenu(on: boolean): Promise<ComputerAccess>;
     /** Голосовая команда «открой …»: matched=false — не нашли, пусть разбирается модель. */
     launch(query: string): Promise<{ matched: boolean; ok: boolean; message: string }>;
+  };
+  usage: {
+    /** Расходы на платные модели: сегодня, месяц, по моделям (ориентировочно). */
+    get(): Promise<UsageDto>;
   };
   ytUpload: {
     status(): Promise<YtUploadStatusDto>;

@@ -253,6 +253,19 @@ const MIGRATIONS: string[] = [
   `
   CREATE TABLE yt_usage (day TEXT PRIMARY KEY, units INTEGER NOT NULL DEFAULT 0);
   `,
+  // 12: расход токенов ИИ по дням и моделям (для счётчика расходов и дневного лимита)
+  `
+  CREATE TABLE ai_usage (
+    day TEXT NOT NULL,
+    model TEXT NOT NULL,
+    calls INTEGER NOT NULL DEFAULT 0,
+    input INTEGER NOT NULL DEFAULT 0,
+    output INTEGER NOT NULL DEFAULT 0,
+    cache_read INTEGER NOT NULL DEFAULT 0,
+    cache_write INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, model)
+  );
+  `,
 ];
 
 export function openDatabase(path: string): Db {

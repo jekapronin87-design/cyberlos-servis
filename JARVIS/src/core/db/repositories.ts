@@ -97,6 +97,15 @@ export function validateSettingsPatch(patch: unknown): Partial<Settings> {
     if (!['off', 'system', 'api'].includes(p.ttsMode as string)) throw new Error('Неизвестный режим озвучки');
     out.ttsMode = p.ttsMode as Settings['ttsMode'];
   }
+  if ('dailyBudgetUsd' in p) {
+    const n = Number(p.dailyBudgetUsd);
+    if (!Number.isFinite(n) || n < 0 || n > 10000) throw new Error('Дневной лимит расходов: число от 0 (без лимита) до 10000 долларов');
+    out.dailyBudgetUsd = Math.round(n * 100) / 100;
+  }
+  if ('smartTools' in p) {
+    if (typeof p.smartTools !== 'boolean') throw new Error('smartTools: да или нет');
+    out.smartTools = p.smartTools;
+  }
   if ('voiceHeadphones' in p) {
     if (typeof p.voiceHeadphones !== 'boolean') throw new Error('voiceHeadphones: да или нет');
     out.voiceHeadphones = p.voiceHeadphones;

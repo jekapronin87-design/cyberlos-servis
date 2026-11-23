@@ -54,6 +54,10 @@ export type TtsMode = 'off' | 'system' | 'api';
 export interface Settings {
   provider: ProviderChoice;
   routingMode: RoutingMode;
+  /** Дневной лимит расходов на платные модели (Claude), $; 0 — без лимита. Достигнут — запросы к Claude останавливаются. */
+  dailyBudgetUsd: number;
+  /** Отправлять модели только нужные группы инструментов (в разы дешевле); выключить — отправлять все. */
+  smartTools: boolean;
   freeProviders: FreeProviderConfig[];
   /** Модель для генерации картинок (ключ — тот же, что для голоса, OpenAI). */
   imageModel: string;
@@ -141,9 +145,11 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   provider: 'auto',
   routingMode: 'smart',
+  dailyBudgetUsd: 3,
+  smartTools: true,
   freeProviders: DEFAULT_FREE_PROVIDERS,
   imageModel: 'gpt-image-1',
-  model: 'claude-sonnet-5-5',
+  model: 'claude-haiku-5-5',
   theme: 'dark',
   customInstructions: '',
   confirmFrom: 'medium',
@@ -751,6 +757,14 @@ export interface VideoStatusDto {
   ffmpeg: boolean;
   hasVoiceKey: boolean;
   busy: boolean;
+}
+
+export interface UsageDto {
+  today: { usd: number; calls: number; tokens: number };
+  month: { usd: number; calls: number; tokens: number };
+  rows: { model: string; calls: number; input: number; output: number; cacheRead: number; cacheWrite: number; usd: number }[];
+  budgetUsd: number;
+  model: string;
 }
 
 export interface VideoArtResultDto {
