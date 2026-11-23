@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeAquaPath, validateAquaBaseUrl, validateAquaKey } from '../src/core/aqua/service';
+import { maskText, normalizeAquaPath, validateAquaBaseUrl, validateAquaKey } from '../src/core/aqua/service';
 import { toolsForAgent } from '../src/core/agents/groups';
 import { makeCore } from './helpers';
 
@@ -60,6 +60,16 @@ describe('Аквамастер: проверка ввода', () => {
     expect(() => normalizeAquaPath('../admin')).toThrow(/не подходит/);
     expect(() => normalizeAquaPath('deals/../../auth')).toThrow(/не подходит/);
     expect(() => normalizeAquaPath('deals;rm -rf')).toThrow(/не подходит/);
+  });
+});
+
+describe('Аквамастер: маскирование не портит даты', () => {
+  it('даты и время остаются, телефоны и почта скрываются', () => {
+    expect(maskText('2026-11-23T08:00:00.000Z')).toBe('2026-11-23T08:00:00.000Z');
+    expect(maskText('созвон 2026-11-20 в 10:00')).toBe('созвон 2026-11-20 в 10:00');
+    expect(maskText('2026-11-20 +7 912 345-67-89')).not.toContain('345-67-89');
+    expect(maskText('2026-11-20 +7 912 345-67-89')).toContain('2026-11-20');
+    expect(maskText('пишите ivan@mail.ru')).not.toContain('ivan@');
   });
 });
 

@@ -814,6 +814,9 @@ export class JarvisCore {
   aquaDisconnect(): AquaStatus {
     return this.aqua.disconnect();
   }
+  aquaDashboard() {
+    return this.aqua.dashboard();
+  }
   aquaTest(): Promise<string> {
     return this.aqua.test();
   }

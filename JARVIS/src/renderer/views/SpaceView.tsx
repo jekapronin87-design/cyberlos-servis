@@ -26,19 +26,38 @@ export function SpaceView(props: { mode: SpaceMode; onMode: (m: SpaceMode) => vo
 
   useEffect(() => {
     let alive = true;
-    window.jarvis.crm
-      .dashboard()
-      .then((d) => alive && (setData(d), setSample(false)))
-      .catch((e: unknown) => {
+    const clean = (e: unknown): string => (e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : '');
+    const load = async (): Promise<void> => {
+      let liveError = '';
+      // 1) живая CRM «Аквамастер» (по ключу), 2) CRM «Сайберлос», 3) пример
+      const a = await window.jarvis.aqua.get().catch(() => null);
+      if (a?.hasKey) {
+        try {
+          const d = await window.jarvis.aqua.dashboard();
+          if (alive) (setData(d), setSample(false), setNote(''));
+          return;
+        } catch (e) {
+          liveError = clean(e);
+        }
+      }
+      try {
+        const d = await window.jarvis.crm.dashboard();
+        if (alive) (setData(d), setSample(false), setNote(liveError ? `Живая CRM «Аквамастер» не ответила: ${liveError}` : ''));
+      } catch (e) {
         if (!alive) return;
         setData(SAMPLE_DASHBOARD);
         setSample(true);
-        setNote(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : '');
-      });
+        setNote(liveError ? `живая CRM «Аквамастер» не ответила: ${liveError}` : clean(e));
+      }
+    };
+    void load();
+    const t = setInterval(() => void load(), 90_000); // живые данные обновляются сами
     return () => {
       alive = false;
+      clearInterval(t);
     };
   }, []);
+  const live = data?.source === 'aqua';
 
   const o = data?.overview;
   const tile = (label: string, value: number, bad = false, i = 0) => (
@@ -72,11 +91,19 @@ export function SpaceView(props: { mode: SpaceMode; onMode: (m: SpaceMode) => vo
           ПРИМЕР ДАННЫХ — CRM не подключена{note ? ` (${note})` : ''}. Подключите её в «Настройки → CRM», и здесь появятся ваши цифры.
         </div>
       )}
+      {live && data && (
+        <div className="space-banner space-live" role="status" data-testid="space-live">
+          ЖИВЫЕ ДАННЫЕ · CRM «Аквамастер» · обновлено {new Date(data.at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+          {data.truncated ? ' · показаны не все сделки (лимит 1000)' : ''}
+          {data.missing.length ? ` · ключу не открыто: ${data.missing.join('; ')}` : ''}
+        </div>
+      )}
+      {!live && !sample && note && <div className="space-banner" role="status">{note}</div>}
       {!data && <div className="space-loading">Загружаю данные…</div>}
       {data && o && props.mode === 'city' && (
         <>
           <CityCanvas data={data} />
-          <div className="space-legend">Район — воронка · здание — стадия · высота — сделок в работе · <span className="hot">красный — нарушены сроки</span></div>
+          <div className="space-legend">Район — воронка · здание — стадия · высота — сделок в работе · <span className="hot">красный — {live ? `не менялись дольше ${7} дней` : 'нарушены сроки'}</span></div>
         </>
       )}
       {data && o && props.mode === 'analytics' && (
@@ -84,10 +111,11 @@ export function SpaceView(props: { mode: SpaceMode; onMode: (m: SpaceMode) => vo
           <div className="sp-row">
             {tile('Новых за сутки', o.newLast24h, false, 0)}
             {tile('Без ответственного', o.unassignedOpen, true, 1)}
-            {tile('Простаивают', o.stuck, true, 2)}
+            {tile(live ? 'Без движения 7+ дней' : 'Простаивают', o.stuck, true, 2)}
             {tile('Задач просрочено', o.tasksOverdue, true, 3)}
             {tile('Производство: просрочено', o.productionOverdue, true, 4)}
-            {tile('Ждут предоплату', o.awaitingPrepayment, true, 5)}
+            {!live && tile('Ждут предоплату', o.awaitingPrepayment, true, 5)}
+            {live && tile('Низкий остаток материалов', o.lowStock, true, 5)}
           </div>
           <div className="sp-card sp-wide" style={{ animationDelay: '0.45s' }}>
             <h3>Воронки</h3>

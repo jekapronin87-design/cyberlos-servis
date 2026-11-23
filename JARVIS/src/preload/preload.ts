@@ -78,6 +78,7 @@ const api: JarvisApi = {
     save: (cfg, key) => invoke(IPC.aquaSave, cfg, key),
     disconnect: () => invoke(IPC.aquaDisconnect),
     test: () => invoke(IPC.aquaTest),
+    dashboard: () => invoke(IPC.aquaDashboard),
   },
   youtube: {
     status: () => invoke(IPC.ytStatus),

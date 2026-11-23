@@ -3,6 +3,8 @@ import type { AuditLog } from '../security/audit';
 import type { SecretStore } from '../security/secrets';
 import type { ToolRegistry } from '../tools/registry';
 import { maskFreeText } from '../crm/mask';
+import { buildAquaDashboard } from './dashboard';
+import type { CrmDashboardDto } from '../../shared/types';
 
 export const SECRET_AQUA_KEY = 'aqua.key';
 export const AQUA_DEFAULT_URL = 'https://crm.aquamaster-septiki.ru';
@@ -112,12 +114,14 @@ export class AquaService {
     this.write('baseUrl', baseUrl);
     this.write('maskPii', cfg.maskPii !== false);
     if (key !== undefined && key !== '') this.secrets.set(SECRET_AQUA_KEY, validateAquaKey(key));
+    this.dash = null;
     this.audit.record({ actor: 'user', action: 'aqua.configured', risk: 'high', decision: 'info', details: { baseUrl, maskPii: cfg.maskPii !== false, keyChanged: !!key } });
     return this.status();
   }
 
   disconnect(): AquaStatus {
     this.secrets.delete(SECRET_AQUA_KEY);
+    this.dash = null;
     this.audit.record({ actor: 'user', action: 'aqua.disconnected', decision: 'info' });
     return this.status();
   }
@@ -164,6 +168,17 @@ export class AquaService {
     }
     this.audit.record({ actor: 'assistant', action: 'aqua.get', target: clean, decision: 'info' });
     return this.read('maskPii', true) ? maskStrings(json) : json;
+  }
+
+  private dash: { at: number; value: CrmDashboardDto } | null = null;
+
+  /** Сводка для «Города» и карточек из живых данных (кэш 60 с, чтобы не расходовать лимит CRM). */
+  async dashboard(force = false): Promise<CrmDashboardDto> {
+    if (!this.secrets.has(SECRET_AQUA_KEY)) throw new AquaError('CRM «Аквамастер» не подключена.');
+    if (!force && this.dash && Date.now() - this.dash.at < 60_000) return this.dash.value;
+    const value = await buildAquaDashboard((p, q) => this.get(p, q), new Date());
+    this.dash = { at: Date.now(), value };
+    return value;
   }
 
   /** Проверка подключения для кнопки в настройках. */
@@ -258,10 +273,18 @@ export class AquaService {
   }
 }
 
+/** Даты и время (2026-11-23, 2026-11-23T08:00:00.000Z) похожи на телефон по числу цифр — их маскирование ломало бы данные, поэтому на время маскирования они прячутся. */
+const DATE_RE = /\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?/g;
+export function maskText(t: string): string {
+  const saved: string[] = [];
+  const hidden = t.replace(DATE_RE, (m) => `\u0001${saved.push(m) - 1}\u0002`);
+  return maskFreeText(hidden).replace(/\u0001(\d+)\u0002/g, (_m, i: string) => saved[Number(i)] ?? '');
+}
+
 /** Прячет телефоны и e-mail в любых строковых значениях (числа и id не трогаем). */
 export function maskStrings(v: unknown, depth = 0): unknown {
   if (depth > 12) return v;
-  if (typeof v === 'string') return maskFreeText(v);
+  if (typeof v === 'string') return maskText(v);
   if (Array.isArray(v)) return v.map((x) => maskStrings(x, depth + 1));
   if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, maskStrings(x, depth + 1)]));
   return v;

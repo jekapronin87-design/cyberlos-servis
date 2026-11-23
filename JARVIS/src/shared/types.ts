@@ -357,6 +357,8 @@ export interface CrmTestDto {
 }
 
 export interface CrmDashboardDto {
+  /** Откуда данные: живая CRM «Аквамастер» (aqua) или CRM «Сайберлос» (по умолчанию). */
+  source?: 'aqua';
   overview: {
     pipelines: { name: string; slug: string; open: number; won: number; lost: number; byStage: { name: string; open: number; breaches: number }[] }[];
     newLast24h: number;

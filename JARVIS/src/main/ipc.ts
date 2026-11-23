@@ -249,6 +249,7 @@ export function registerIpc(opts: {
   });
   handle(IPC.aquaDisconnect, () => core.aquaDisconnect());
   handle(IPC.aquaTest, () => core.aquaTest());
+  handle(IPC.aquaDashboard, () => core.aquaDashboard());
   handle(IPC.crmGet, () => core.crmStatus());
   handle(IPC.crmSave, (_e, cfg, password) => {
     const c = cfg as { baseUrl?: unknown; environment?: unknown; email?: unknown; maskPii?: unknown; frontendUrl?: unknown };

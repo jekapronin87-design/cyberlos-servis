@@ -92,6 +92,7 @@ export const IPC = {
   aquaSave: 'aqua:save',
   aquaDisconnect: 'aqua:disconnect',
   aquaTest: 'aqua:test',
+  aquaDashboard: 'aqua:dashboard',
   agentsList: 'agents:list',
   agentsTemplates: 'agents:templates',
   agentsSave: 'agents:save',
@@ -243,6 +244,8 @@ export interface JarvisApi {
     save(cfg: { baseUrl: string; maskPii: boolean }, key?: string): Promise<AquaStatusDto>;
     disconnect(): Promise<AquaStatusDto>;
     test(): Promise<string>;
+    /** Сводка из живой CRM для «Города» и карточек. */
+    dashboard(): Promise<CrmDashboardDto>;
   };
   youtube: {
     status(): Promise<YoutubeStatusDto>;

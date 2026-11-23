@@ -285,3 +285,4 @@ th { background: var(--panel-solid); position: sticky; top: 0; font-family: var(
 
 .grid-checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 18px; margin-bottom: 8px; }
 @media (max-width: 1000px) { .grid-checks { grid-template-columns: 1fr; } }
+.space-banner.space-live { border-style: solid; border-color: rgba(120, 230, 170, 0.55); color: #a8f0c8; }
