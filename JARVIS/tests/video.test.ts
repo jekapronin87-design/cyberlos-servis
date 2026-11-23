@@ -162,6 +162,13 @@ describe('Видео-студия', () => {
     const art = await svc.channelArt({ name: 'Евгений Пронин и Системно', tagline: 'бизнес, ИИ и автоматизация' }, ctx.signal);
     expect(await probe(art.banner)).toMatchObject({ width: 2560, height: 1440 });
     expect(await probe(art.avatar)).toMatchObject({ width: 800, height: 800 });
+    expect(art.bannerData).toMatch(/^data:image\/png;base64,/);
+    for (const style of ['neon', 'minimal'] as const) {
+      const s = await svc.channelArt({ name: 'Очень длинное название канала про бизнес и ИИ', tagline: 'слоган', style }, ctx.signal);
+      expect(await probe(s.banner)).toMatchObject({ width: 2560, height: 1440 });
+      expect(s.banner).toContain(style);
+    }
+    await expect(svc.channelArt({ name: '   ' }, ctx.signal)).rejects.toThrow(/название/);
     const ai = await svc.channelArt({ name: 'Системно', ai: true }, ctx.signal);
     expect(await probe(ai.banner)).toMatchObject({ width: 2560, height: 1440 });
 

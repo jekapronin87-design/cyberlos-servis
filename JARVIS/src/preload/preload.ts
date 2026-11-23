@@ -94,6 +94,7 @@ const api: JarvisApi = {
     montage: (spec) => invoke(IPC.videoMontage, spec),
     open: (p) => invoke(IPC.videoOpen, p),
     stop: () => invoke(IPC.videoStop),
+    channelArt: (spec) => invoke(IPC.videoArt, spec),
     onPlan: subscribe(IPC.evtVideo),
   },
   show: {

@@ -753,6 +753,14 @@ export interface VideoStatusDto {
   busy: boolean;
 }
 
+export interface VideoArtResultDto {
+  dir: string;
+  banner: string;
+  avatar: string;
+  bannerData: string;
+  avatarData: string;
+}
+
 export interface YtUploadStatusDto {
   hasClient: boolean;
   connected: boolean;

@@ -58,6 +58,17 @@ try {
   await page.screenshot({ path: join(shots, 'st1-files.png') });
   step('студия: выбрана папка, видны два исходника с миниатюрами и длительностью');
 
+  // Оформление канала: три стиля, предпросмотр с безопасной зоной, файлы в «Оформление канала»
+  await page.click('[data-art=neon]');
+  await page.click('#art-go');
+  await page.waitForSelector('[data-testid=art-result] img', { timeout: 60000 });
+  await page.waitForSelector('.art-g-safe');
+  const artDir = join(folder, 'Оформление канала');
+  assert.ok(existsSync(artDir) && readdirSync(artDir).some((f) => f.startsWith('Шапка neon')) && readdirSync(artDir).some((f) => f.startsWith('Аватар neon')), 'шапка и аватар сохранены');
+  await page.locator('#art-card').scrollIntoViewIfNeeded();
+  await page.locator('#art-card').screenshot({ path: join(shots, 'st0-art.png') });
+  step('оформление канала: шапка и аватар (неон) сделаны, видна безопасная зона, файлы в «Оформление канала»');
+
   // YouTube: карточка настройки проверяет ввод и ведёт к входу (сам вход — в браузере, здесь не проверяется)
   await page.waitForSelector('#yt-upload-card');
   await page.fill('#yt-upload-card input[placeholder^="Client ID"]', 'не-тот-формат');

@@ -295,6 +295,11 @@ export function registerIpc(opts: {
     if (err) throw new Error(`Не удалось открыть: ${err}`);
   });
   handle(IPC.videoStop, () => core.video.stop());
+  handle(IPC.videoArt, async (_e, spec) => {
+    const s = spec as Record<string, unknown>;
+    const r = await core.video.channelArt({ name: str(s['name'], 'name', 80), tagline: typeof s['tagline'] === 'string' ? (s['tagline'] as string).slice(0, 100) : '', style: (['space', 'neon', 'minimal'].includes(String(s['style'])) ? s['style'] : 'space') as 'space', ai: s['ai'] === true, idea: typeof s['idea'] === 'string' ? (s['idea'] as string).slice(0, 500) : '' }, new AbortController().signal);
+    return { dir: core.video.folder() ? `${core.video.folder()}` : '', banner: r.banner, avatar: r.avatar, bannerData: r.bannerData, avatarData: r.avatarData };
+  });
   handle(IPC.ytuStatus, () => core.ytUpload.refreshStatus());
   handle(IPC.ytuSaveClient, (_e, id, secret) => core.ytUpload.saveClient(str(id, 'clientId', 300), secret ? str(secret, 'clientSecret', 300) : ''));
   handle(IPC.ytuConnect, () => core.ytUpload.connect());

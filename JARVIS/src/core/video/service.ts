@@ -9,6 +9,7 @@ import type { VoiceService } from '../voice/service';
 import { buildAss, buildCoverAss, chunkWords, defaultFont, fitSize, wrapTitle, type Word } from './ass';
 import { locateFfmpeg, probe, runFfmpeg, type MediaInfo } from './ffmpeg';
 import { planMontage } from './montage';
+import { ART_STYLES, avatarAss, avatarBackground, bannerAss, bannerBackground, type ArtStyle } from './art';
 
 const EXT = /\.(mp4|mov|m4v|mkv|webm|avi|mpg|mpeg|wmv)$/i;
 export const DONE_DIR = 'Готово';
@@ -406,8 +407,12 @@ export class VideoService {
   }
 
   // ---------- оформление канала ----------
-  /** Шапка 2560×1440 (текст в безопасной зоне 1546×423) и аватар 800×800. */
-  async channelArt(args: { name: string; tagline?: string; ai?: boolean; idea?: string }, signal: AbortSignal): Promise<{ banner: string; avatar: string }> {
+  /** Шапка 2560×1440 (текст в безопасной зоне 1546×423) и аватар 800×800 в трёх стилях; фон — процедурный (бесплатно) или от нейросети (платно). */
+  async channelArt(args: { name: string; tagline?: string; style?: ArtStyle; ai?: boolean; idea?: string }, signal: AbortSignal): Promise<{ banner: string; avatar: string; bannerData: string; avatarData: string }> {
+    const name = args.name.replace(/\s+/g, ' ').trim().slice(0, 40);
+    if (!name) throw new Error('Укажите название канала.');
+    const style: ArtStyle = ART_STYLES.includes(args.style as ArtStyle) ? (args.style as ArtStyle) : 'space';
+    const tag = (args.tagline ?? '').replace(/\s+/g, ' ').trim().slice(0, 70);
     const dir = join(this.need(), ART_DIR);
     mkdirSync(dir, { recursive: true });
     const tmp = mkdtempSync(join(tmpdir(), 'jarvis-art-'));
@@ -423,46 +428,20 @@ export class VideoService {
         bgInput = ['-i', img.file];
         bgFilter = `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},eq=brightness=-0.1`;
       } else {
-        // процедурный «космос»: тёмный градиент, свечение туманности и звёзды
         bgInput = ['-f', 'lavfi', '-i', `color=c=0x050a1c:s=${W}x${H}:d=1,format=rgb24`];
-        bgFilter = `geq=r='clip(8+90*exp(-pow((X-${W * 0.72})/${W * 0.35},2)-pow((Y-${H * 0.3})/${H * 0.45},2))+40*exp(-pow((X-${W * 0.2})/${W * 0.3},2)-pow((Y-${H * 0.8})/${H * 0.4},2))+if(gt(random(1),0.9992),230,0),0,255)':g='clip(14+70*exp(-pow((X-${W * 0.72})/${W * 0.35},2)-pow((Y-${H * 0.3})/${H * 0.45},2))+30*exp(-pow((X-${W * 0.2})/${W * 0.3},2)-pow((Y-${H * 0.8})/${H * 0.4},2))+if(gt(random(1),0.9992),230,0),0,255)':b='clip(34+170*exp(-pow((X-${W * 0.72})/${W * 0.35},2)-pow((Y-${H * 0.3})/${H * 0.45},2))+120*exp(-pow((X-${W * 0.2})/${W * 0.3},2)-pow((Y-${H * 0.8})/${H * 0.4},2))+if(gt(random(1),0.9992),230,0),0,255)'`;
+        bgFilter = bannerBackground(style, W, H);
       }
-      const name = args.name.slice(0, 40);
-      const tag = (args.tagline ?? '').slice(0, 70);
-      const nameRows = wrapTitle(name, 20);
-      const SAFE = 1546; // безопасная зона шапки YouTube по ширине
-      const nameSize = fitSize(Math.max(...nameRows.map((r) => r.length)), SAFE, nameRows.length > 1 ? 150 : 170, 1);
-      const tagSize = fitSize(tag.length || 1, SAFE, 64, 1);
-      const nameText = nameRows.map((r) => r.replace(/[{}\\]/g, '').toLocaleUpperCase('ru-RU')).join('\\N');
-      const ass = [
-        '[Script Info]', 'ScriptType: v4.00+', `PlayResX: ${W}`, `PlayResY: ${H}`, 'ScaledBorderAndShadow: yes', 'WrapStyle: 2', '',
-        '[V4+ Styles]',
-        'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-        `Style: Name,${font.name},${nameSize},&H00FFFFFF,&H00FFFFFF,&H00401808,&H64000000,${font.name === 'DejaVu Sans' ? -1 : 0},0,0,0,100,100,6,0,1,10,3,5,0,0,0,1`,
-        `Style: Tag,${font.name},${tagSize},&H00FFC85C,&H00FFC85C,&H00401808,&H64000000,${font.name === 'DejaVu Sans' ? -1 : 0},0,0,0,100,100,4,0,1,5,2,5,0,0,0,1`,
-        '', '[Events]', 'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
-        `Dialogue: 1,0:00:00.00,0:00:05.00,Name,,0,0,0,,{\\pos(${W / 2},${H / 2 - (tag ? 40 : 0)})}${nameText}`,
-        ...(tag ? [`Dialogue: 1,0:00:00.00,0:00:05.00,Tag,,0,0,0,,{\\pos(${W / 2},${H / 2 + nameSize * 0.55 * nameRows.length + 50})}${tag.replace(/[{}\\]/g, '').toLocaleUpperCase('ru-RU')}`] : []),
-      ].join('\n');
-      writeFileSync(join(tmp, 'banner.ass'), ass, 'utf8');
-      const banner = join(dir, 'Шапка 2560x1440.png');
+      writeFileSync(join(tmp, 'banner.ass'), bannerAss(style, name, tag, W, H).ass, 'utf8');
+      const banner = join(dir, `Шапка ${style} 2560x1440.png`);
       await runFfmpeg([...bgInput, '-frames:v', '1', '-vf', `${bgFilter},ass=banner.ass${fonts}`, banner], { bin: this.bin(), cwd: tmp, signal });
 
-      // аватар: круглая «планета» с инициалами
       const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toLocaleUpperCase('ru-RU') || 'С';
-      writeFileSync(
-        join(tmp, 'avatar.ass'),
-        ['[Script Info]', 'ScriptType: v4.00+', 'PlayResX: 800', 'PlayResY: 800', '', '[V4+ Styles]',
-          'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-          `Style: I,${font.name},330,&H00FFFFFF,&H00FFFFFF,&H00401808,&H64000000,${font.name === 'DejaVu Sans' ? -1 : 0},0,0,0,100,100,0,0,1,8,2,5,0,0,0,1`,
-          '', '[Events]', 'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
-          `Dialogue: 1,0:00:00.00,0:00:05.00,I,,0,0,0,,{\\pos(400,400)}${initials}`].join('\n'),
-        'utf8',
-      );
-      const avatar = join(dir, 'Аватар 800x800.png');
-      await runFfmpeg(['-f', 'lavfi', '-i', 'color=c=0x0a1740:s=800x800:d=1,format=rgb24', '-frames:v', '1', '-vf', `geq=r='clip(10+120*exp(-pow((X-300)/330,2)-pow((Y-260)/330,2)),0,255)':g='clip(20+160*exp(-pow((X-300)/330,2)-pow((Y-260)/330,2)),0,255)':b='clip(60+190*exp(-pow((X-300)/330,2)-pow((Y-260)/330,2)),0,255)',ass=avatar.ass${fonts}`, avatar], { bin: this.bin(), cwd: tmp, signal });
-      this.d.audit.record({ actor: 'assistant', action: 'video.channel_art', decision: 'info', details: { ai: !!args.ai } });
-      return { banner, avatar };
+      writeFileSync(join(tmp, 'avatar.ass'), avatarAss(style, initials), 'utf8');
+      const avatar = join(dir, `Аватар ${style} 800x800.png`);
+      await runFfmpeg(['-f', 'lavfi', '-i', 'color=c=0x0a1740:s=800x800:d=1,format=rgb24', '-frames:v', '1', '-vf', `${avatarBackground(style)},ass=avatar.ass${fonts}`, avatar], { bin: this.bin(), cwd: tmp, signal });
+      this.d.audit.record({ actor: 'assistant', action: 'video.channel_art', decision: 'info', details: { ai: !!args.ai, style } });
+      const data = (p: string): string => `data:image/png;base64,${readFileSync(p).toString('base64')}`;
+      return { banner, avatar, bannerData: data(banner), avatarData: data(avatar) };
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
@@ -528,16 +507,16 @@ export class VideoService {
       execute: async (i, ctx) => `Обложка сохранена: ${await this.makeCover({ video: i.video, title: i.title, ai: i.ai === true, idea: i.idea, style: (['bold', 'neon', 'clean'].includes(String(i.style)) ? i.style : 'bold') as 'bold' }, ctx.signal)}`,
     });
 
-    registry.register<{ name: string; tagline?: string; ai?: boolean; idea?: string }>({
+    registry.register<{ name: string; tagline?: string; style?: string; ai?: boolean; idea?: string }>({
       ...base,
       risk: 'medium',
       mutates: true,
       name: 'video_channel_art',
       description: 'Оформление YouTube-канала: шапка 2560×1440 (текст в безопасной зоне) и аватар 800×800 в папку «Оформление канала». ai=true — фон рисует нейросеть по описанию idea (платно); иначе рисуется космический фон.',
-      inputSchema: { type: 'object', properties: { name: { type: 'string' }, tagline: { type: 'string' }, ai: { type: 'boolean' }, idea: { type: 'string' } }, required: ['name'] },
+      inputSchema: { type: 'object', properties: { name: { type: 'string' }, tagline: { type: 'string' }, style: { type: 'string', enum: ['space', 'neon', 'minimal'], description: 'space — космос, neon — неоновая сетка, minimal — минимализм' }, ai: { type: 'boolean' }, idea: { type: 'string' } }, required: ['name'] },
       describe: (i) => `Сделать шапку и аватар канала «${String(i.name).slice(0, 40)}»${i.ai ? ' (платный запрос к OpenAI)' : ''}`,
       execute: async (i, ctx) => {
-        const r = await this.channelArt({ name: i.name, tagline: i.tagline, ai: i.ai === true, idea: i.idea }, ctx.signal);
+        const r = await this.channelArt({ name: i.name, tagline: i.tagline, style: i.style as ArtStyle, ai: i.ai === true, idea: i.idea }, ctx.signal);
         return `Готово. Шапка: ${r.banner}\nАватар: ${r.avatar}\nЗагрузите их в YouTube Studio → Настройка канала → Брендинг.`;
       },
     });

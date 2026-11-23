@@ -25,6 +25,7 @@ import type {
   VideoResultDto,
   VideoSpecDto,
   VideoPlanDto,
+  VideoArtResultDto,
   YtUploadStatusDto,
   YtUploadResultDto,
   AquaStatusDto,
@@ -114,6 +115,7 @@ export const IPC = {
   videoMontage: 'video:montage',
   videoOpen: 'video:open',
   videoStop: 'video:stop',
+  videoArt: 'video:art',
   ytuStatus: 'ytu:status',
   ytuSaveClient: 'ytu:client',
   ytuConnect: 'ytu:connect',
@@ -295,6 +297,8 @@ export interface JarvisApi {
     /** Открыть файл/папку результата в проводнике (только внутри папки студии). */
     open(path: string): Promise<void>;
     stop(): Promise<void>;
+    /** Оформление канала: шапка 2560×1440 и аватар 800×800 (style: space | neon | minimal; ai — фон от нейросети, платно). */
+    channelArt(spec: { name: string; tagline: string; style: string; ai: boolean; idea: string }): Promise<VideoArtResultDto>;
     onPlan(cb: (p: VideoPlanDto) => void): () => void;
   };
   show: {

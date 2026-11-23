@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { YtUploadResultDto, YtUploadStatusDto, VideoFileDto, VideoLayout, VideoPlanDto, VideoResultDto, VideoSpecDto, VideoStatusDto, VideoStepDto, VideoTrackDto } from '../../shared/types';
+import type { VideoArtResultDto, YtUploadResultDto, YtUploadStatusDto, VideoFileDto, VideoLayout, VideoPlanDto, VideoResultDto, VideoSpecDto, VideoStatusDto, VideoStepDto, VideoTrackDto } from '../../shared/types';
 
 const clean = (e: unknown): string => (e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'Ошибка');
 const mmss = (s: number): string => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -62,6 +62,86 @@ export function Timeline({ plan }: { plan: VideoPlanDto }) {
       </div>
       {plan.warnings.length > 0 && <div className="banner banner-demo">{plan.warnings.join(' ')}</div>}
       {plan.error && <div className="banner banner-err">Не получилось: {plan.error}</div>}
+    </div>
+  );
+}
+
+const ART_STYLES: { id: 'space' | 'neon' | 'minimal'; title: string; text: string; bg: string }[] = [
+  { id: 'space', title: 'Космос', text: 'туманность, звёзды, орбиты', bg: 'radial-gradient(circle at 75% 30%, #6a5acd, #1b1f6b 45%, #080c24)' },
+  { id: 'neon', title: 'Неон', text: 'сетка, розовый и голубой свет', bg: 'linear-gradient(120deg, #c026d3, #1a0f3a 50%, #22b0f5)' },
+  { id: 'minimal', title: 'Минимализм', text: 'глубокий синий, ничего лишнего', bg: 'linear-gradient(160deg, #0a1535, #2a5ab0)' },
+];
+
+/** Оформление канала: шапка и аватар в трёх стилях с показом «безопасной зоны» (что видно на телефоне и компьютере). */
+function ChannelArtCard() {
+  const [name, setName] = useState('Евгений Пронин и Системно');
+  const [tagline, setTagline] = useState('бизнес · ИИ · автоматизация');
+  const [style, setStyle] = useState<'space' | 'neon' | 'minimal'>('space');
+  const [ai, setAi] = useState(false);
+  const [idea, setIdea] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [res, setRes] = useState<VideoArtResultDto | null>(null);
+  const [guides, setGuides] = useState(true);
+
+  const go = async (): Promise<void> => {
+    if (ai && !window.confirm('Фон нарисует нейросеть OpenAI — это платный запрос. Продолжить?')) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      setRes(await window.jarvis.video.channelArt({ name, tagline, style, ai, idea }));
+    } catch (e) {
+      setMsg({ ok: false, text: clean(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card" id="art-card">
+      <h2>Оформление YouTube-канала</h2>
+      <p className="muted small">Шапка 2560×1440 и аватар 800×800 для вашего канала. Название и слоган подбираются по размеру и всегда попадают в «безопасную зону», которую видно на любом устройстве.</p>
+      {msg && <div className={`banner ${msg.ok ? 'banner-ok' : 'banner-err'}`}>{msg.text}</div>}
+      <div className="row">
+        <label className="field grow"><span>Название канала</span><input id="art-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} /></label>
+        <label className="field grow"><span>Слоган (необязательно)</span><input id="art-tag" value={tagline} onChange={(e) => setTagline(e.target.value)} maxLength={70} /></label>
+      </div>
+      <div className="studio-layouts">
+        {ART_STYLES.map((s) => (
+          <button key={s.id} className={`lay ${style === s.id ? 'on' : ''}`} onClick={() => setStyle(s.id)} aria-pressed={style === s.id} data-art={s.id}>
+            <span className="art-sw" style={{ background: s.bg }} aria-hidden="true" />
+            <strong>{s.title}</strong>
+            <small>{s.text}</small>
+          </button>
+        ))}
+      </div>
+      <label className="check"><input type="checkbox" checked={ai} onChange={(e) => setAi(e.target.checked)} /><span>Фон рисует нейросеть (платно, OpenAI) вместо готового стиля</span></label>
+      {ai && <label className="field"><span>Что нарисовать на фоне</span><input value={idea} onChange={(e) => setIdea(e.target.value)} maxLength={500} placeholder="Например: космическая станция над городом будущего, синие огни" /></label>}
+      <div className="row">
+        <button className="btn btn-primary rt-big" id="art-go" disabled={busy || !name.trim()} onClick={() => void go()}>{busy ? 'Рисую…' : res ? '↻ Ещё вариант' : '✨ Сделать оформление'}</button>
+      </div>
+      {res && (
+        <div className="art-result" data-testid="art-result">
+          <div className="art-prev">
+            <img src={res.bannerData} alt="Шапка канала" />
+            {guides && (
+              <>
+                <div className="art-g art-g-all" title="Телевизор: видно всю шапку" />
+                <div className="art-g art-g-desk" title="Компьютер: видна только полоса по центру" />
+                <div className="art-g art-g-safe" title="Безопасная зона: видна везде, в том числе на телефоне"><span>видно везде</span></div>
+              </>
+            )}
+          </div>
+          <label className="check"><input type="checkbox" checked={guides} onChange={(e) => setGuides(e.target.checked)} /><span>Показать, что видно на телефоне и компьютере (зелёная рамка — видно везде)</span></label>
+          <div className="art-av"><img src={res.avatarData} alt="Аватар" /><span className="muted small">Так аватар выглядит в круге</span></div>
+          <div className="row">
+            <button className="btn btn-primary" onClick={() => void window.jarvis.video.open(res.banner)}>Открыть шапку</button>
+            <button className="btn" onClick={() => void window.jarvis.video.open(res.avatar)}>Открыть аватар</button>
+            <button className="btn" onClick={() => void window.jarvis.video.open(res.banner.replace(/[\\/][^\\/]+$/, ''))}>Папка с файлами</button>
+          </div>
+          <p className="muted small">Как поставить: YouTube Studio → «Настройка канала» → «Брендинг» → загрузите аватар и «Баннер». Файлы лежат в папке «Оформление канала» рядом с вашими видео.</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -325,6 +405,8 @@ export function StudioView(props: { onAsk: (text: string) => void }) {
           </div>
         </>
       )}
+
+      {st?.folder && <ChannelArtCard />}
 
       {st?.folder && <YoutubeCard target={ytTarget} onTarget={setYtTarget} />}
 
