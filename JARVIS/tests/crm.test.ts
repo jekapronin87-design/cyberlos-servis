@@ -84,6 +84,11 @@ describe('клиент CRM: только чтение', () => {
     expect(() => validateCrmBaseUrl('https://u:p@crm.example.ru')).toThrow();
     expect(validateCrmBaseUrl('https://crm.example.ru/')).toBe('https://crm.example.ru');
     expect(validateCrmBaseUrl('http://localhost:4000')).toBe('http://localhost:4000');
+    // ссылка-приглашение или страница входа вместо адреса — берём только адрес сервера
+    expect(validateCrmBaseUrl('https://crm.example.ru/invite/accept?token=abc')).toBe('https://crm.example.ru');
+    expect(validateCrmBaseUrl('https://crm.example.ru/login#x')).toBe('https://crm.example.ru');
+    expect(validateCrmBaseUrl('https://example.ru/api/')).toBe('https://example.ru/api');
+    expect(validateCrmBaseUrl('https://example.ru/api/auth/login')).toBe('https://example.ru/api');
   });
 });
 

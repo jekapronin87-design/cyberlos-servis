@@ -46,7 +46,8 @@ export function validateCrmBaseUrl(v: unknown): string {
   const local = ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname);
   if (u.protocol !== 'https:' && !(u.protocol === 'http:' && local)) throw new Error('Адрес CRM должен начинаться с https:// (http:// — только для localhost)');
   if (u.username || u.password) throw new Error('Адрес не должен содержать логин и пароль');
-  return u.toString().replace(/\/+$/, '');
+  // Нужен только адрес сервера: ссылки-приглашения, страницы входа, параметры и якоря отбрасываются (люди часто вставляют сюда ссылку из письма).
+  return u.pathname === '/api' || u.pathname.startsWith('/api/') ? `${u.origin}/api` : u.origin;
 }
 
 type Fetch = typeof fetch;
@@ -108,7 +109,7 @@ export class CrmClient {
       }
       res = r;
     }
-    if (!res || this.base === null) throw new CrmError('По этому адресу нет сервера CRM (ответ не похож на API). Нужен адрес сервера: например https://ваш-домен/api. Проверьте: адрес + /health должен показать {"ok":true}.', 404);
+    if (!res || this.base === null) throw new CrmError('По этому адресу нет сервера CRM (ответ не похож на API). Вводите только адрес CRM без ссылок-приглашений и страниц входа (например https://crm.ваш-домен.ru). Если сайт и сервер размещены раздельно (Vercel + Railway и т. п.) — нужен адрес СЕРВЕРА. Проверка: откройте в браузере адрес + /health (или /api/health) — должно быть {"ok":true}.', 404);
     if (res.status === 401) throw new CrmError('CRM отклонила вход: неверный email или пароль.', 401);
     if (res.status === 403) {
       const j = (await res.json().catch(() => ({}))) as { error?: string };

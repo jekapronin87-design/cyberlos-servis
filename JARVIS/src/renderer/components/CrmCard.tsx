@@ -34,7 +34,7 @@ export function CrmCard() {
       const s = await window.jarvis.crm.save({ baseUrl: url, environment: env, email, maskPii: mask, frontendUrl: front }, pw || undefined);
       setSt(s);
       setPw('');
-      setMsg({ ok: true, text: 'Сохранено. Нажмите «Проверить подключение».' });
+      setMsg({ ok: true, text: `Сохранено${s.baseUrl && s.baseUrl !== url.trim().replace(/\/+$/, '') ? ` (адрес приведён к ${s.baseUrl}: ссылки-приглашения и страницы входа не нужны)` : ''}. Нажмите «Проверить подключение».` });
     } catch (e) {
       setMsg({ ok: false, text: clean(e) });
     } finally {
@@ -53,8 +53,7 @@ export function CrmCard() {
       <label className="field">
         <span>Адрес CRM (тот, по которому вы заходите в неё в браузере)</span>
         <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://app.ваш-домен.ru" spellCheck={false} />
-        <small className="muted">Если сервер лежит отдельно (Railway и т. п.) — адрес сервера. Приписку «/api» программа подберёт сама.</small>
-        <small className="muted">Адрес <strong>бэкенда</strong> CRM (API), не сайта. Для проверки на своём компьютере: http://localhost:4000</small>
+        <small className="muted">Только адрес сайта, без ссылок из писем и страниц входа — например <code>https://crm.ваш-домен.ru</code>. Если сервер лежит отдельно (Railway и т. п.) — адрес сервера. Приписку «/api» программа подберёт сама. Для проверки на своём компьютере: http://localhost:4000</small>
       </label>
       <label className="field">
         <span>Адрес сайта CRM (необязательно — для подсказок в уроках)</span>
