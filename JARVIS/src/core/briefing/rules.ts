@@ -191,3 +191,12 @@ export function zonedParts(d: Date, tz: string): { date: string; hm: string } {
   const p = Object.fromEntries(f.formatToParts(d).map((x) => [x.type, x.value]));
   return { date: `${p['year']}-${p['month']}-${p['day']}`, hm: `${p['hour']}:${p['minute']}` };
 }
+
+/** Границы текущих суток в часовом поясе (UTC-моменты): [from, to). Переход на летнее время внутри суток не учитывается. */
+export function dayBounds(now: Date, tz: string): { from: Date; to: Date } {
+  const p = zonedParts(now, tz);
+  const wall = Date.parse(`${p.date}T${p.hm}:00Z`);
+  const offset = wall - Math.floor(now.getTime() / 60_000) * 60_000;
+  const from = Date.parse(`${p.date}T00:00:00Z`) - offset;
+  return { from: new Date(from), to: new Date(from + 86_400_000) };
+}

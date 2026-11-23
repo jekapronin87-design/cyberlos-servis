@@ -276,6 +276,12 @@ describe('Вечерний отчёт', () => {
     expect(d.club?.today?.payments?.map((p) => p.who)).toEqual(['Анна К.', 'Пётр С.']);
   });
 
+  it('границы суток считаются по часовому поясу: Бангкок и Нью-Йорк', async () => {
+    const { dayBounds } = await import('../src/core/briefing/rules');
+    expect(dayBounds(NOW, 'Asia/Bangkok')).toEqual({ from: new Date('2026-11-22T17:00:00Z'), to: new Date('2026-11-23T17:00:00Z') });
+    expect(dayBounds(NOW, 'America/New_York').from).toEqual(new Date('2026-11-22T05:00:00Z'));
+  });
+
   it('колода: спидометры, график, курс, оплаты; у каждого слайда есть текст для озвучки', async () => {
     const h = makeCore({ crmFetch: fake(), schedulerNow: () => NOW });
     h.core.aquaSave({ baseUrl: 'https://crm.test' }, key);

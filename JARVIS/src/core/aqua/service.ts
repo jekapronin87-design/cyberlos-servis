@@ -25,7 +25,7 @@ const MAX_TEXT = 14_000;
 const KNOWN_HINT =
   'Адреса (GET): health; pipelines, deals (фильтры pipelineId, stageId, semantic, assignedUserId, q), deals/{id} (с историей этапов и задачами), contacts (q, kind), tasks (status=open|done|overdue, assignedUserId, dealId, dueFrom, dueTo), cold-leads, calls (direction), regions, messages (чаты Telegram/Max: channel=TELEGRAM|MAX, direction=IN|OUT, unanswered=true, from/to) — раздел sales; ' +
   'surveys, installs, service-profiles, service-visits (status) — fulfillment; production/orders, production/machines, warehouse/materials, warehouse/movements (materialId, kind) — production; ' +
-  'employees (active), dealers (status) — people; club/members (step), club/funnel (готовая воронка бота клуба: всего, платящие, этапы, застрявшие, за 7 дней) — club; city/summary — сводка «Город» — summary. ' +
+  'employees (active), dealers (status) — people; club/members (step), club/funnel (готовая воронка бота клуба: всего, платящие, этапы, застрявшие, за 7 дней и today за сутки; параметры tz, date), club/payments (подтверждённые оплаты: from, to) — club; tasks также completedFrom/completedTo;  city/summary — сводка «Город» — summary. ' +
   'Общие параметры списков: limit (до 200), cursor (nextCursor из прошлого ответа), from/to (дата создания), updatedSince. semantic: NEW, ACTIVE, QUALIFIED, SCHEDULED, WON, LOST, JUNK. ' +
   'Ответ списка: {ok, count, nextCursor, data[]}; когда nextCursor = null — страницы закончились. Раздел может быть не включён для ключа (403).';
 

@@ -174,7 +174,7 @@ export class BriefingService {
     try {
       // Сначала готовая воронка от CRM (club/funnel); у старой версии CRM её нет — считаем сами по списку участников
       try {
-        const f = parseClubFunnel(obj((await get('club/funnel')) as unknown)['data']);
+        const f = parseClubFunnel(obj((await get('club/funnel', withToday ? { tz: this.config().tz } : {})) as unknown)['data']);
         if (f) {
           if (withToday) f.today = await buildClubToday(get, now, this.config().tz, f.today);
           return f;

@@ -1,5 +1,5 @@
 import type { EveningData } from '../../shared/deck';
-import { zonedParts } from './rules';
+import { dayBounds, zonedParts } from './rules';
 
 type Get = (path: string, query?: Record<string, unknown>) => Promise<unknown>;
 type Row = Record<string, unknown>;
@@ -52,7 +52,6 @@ export async function buildEveningData(get: Get, now: Date, tz: string, missing:
     labels.push(`${WEEKDAY[new Date(`${dk}T12:00:00Z`).getUTCDay()]} ${Number(dk.slice(8))}`);
   }
   const todayKey = days[days.length - 1]!;
-  const weekAgo = new Date(now.getTime() - 8 * DAY).toISOString();
 
   const deals = await opt('сделки', missing, () => pages(get, 'deals', {}, 5), [] as Row[]);
   const newPerDay = days.map(() => 0);
@@ -73,8 +72,9 @@ export async function buildEveningData(get: Get, now: Date, tz: string, missing:
     } else if (sem === 'LOST' && when === todayKey) lost += 1;
   }
 
-  const tasksRows = await opt('закрытые задачи', missing, () => pages(get, 'tasks', { status: 'done', updatedSince: weekAgo }, 3), null as Row[] | null);
-  const calls = await opt('звонки', missing, () => pages(get, 'calls', { from: new Date(now.getTime() - 2 * DAY).toISOString() }, 3), null as Row[] | null);
+  const b = dayBounds(now, tz);
+  const tasksRows = await opt('закрытые задачи', missing, () => pages(get, 'tasks', { status: 'done', completedFrom: b.from.toISOString(), completedTo: b.to.toISOString() }, 3), null as Row[] | null);
+  const calls = await opt('звонки', missing, () => pages(get, 'calls', { from: b.from.toISOString(), to: b.to.toISOString() }, 3), null as Row[] | null);
   const orders = await opt('производство', missing, () => pages(get, 'production/orders', {}, 3), null as Row[] | null);
 
   const callsToday = calls?.filter((c) => key(c['startedAt'] ?? c['calledAt'] ?? c['createdAt']) === todayKey);
@@ -103,7 +103,8 @@ export async function buildClubToday(get: Get, now: Date, tz: string, funnelToda
   const f = obj(funnelToday);
   let payments: { who: string; amountRub: number }[] | undefined;
   try {
-    const rows = await pages(get, 'club/payments', { from: new Date(now.getTime() - 2 * DAY).toISOString() }, 2);
+    const b = dayBounds(now, tz);
+    const rows = await pages(get, 'club/payments', { from: b.from.toISOString(), to: b.to.toISOString() }, 2);
     payments = rows.filter((p) => key(p['paidAt']) === todayKey).map((p) => ({ who: str(p['memberName']) || str(obj(p['member'])['name']) || 'Участник', amountRub: num(p['amountRub']) }));
   } catch {
     /* списка оплат у CRM может ещё не быть */
