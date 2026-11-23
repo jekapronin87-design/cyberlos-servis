@@ -14,7 +14,7 @@ const cleanError = (e: unknown): string =>
 
 /** Журнал голоса (последние реплики и что с ними сделано) — виден в «Настройки → Голос → Проверить микрофон»: помогает понять, почему он (не) отвечает. */
 export const voiceLog: { at: number; text: string }[] = [];
-const logVoice = (text: string): void => {
+export const logVoice = (text: string): void => {
   voiceLog.push({ at: Date.now(), text });
   while (voiceLog.length > 14) voiceLog.shift();
 };

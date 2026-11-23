@@ -61,6 +61,8 @@ export function registerIpc(opts: {
     if (!(audio instanceof Uint8Array)) throw new Error('Некорректные аудиоданные');
     return core.voice.transcribe(audio, str(mime, 'mime', 100));
   });
+  handle(IPC.realtimeConnect, (_e, sdp) => core.realtime.connect(str(sdp, 'sdp', 100_000)));
+  handle(IPC.realtimeEnded, (_e, sec) => core.realtime.ended(sec));
   handle(IPC.voiceSpeak, (_e, text) => core.voice.speak(str(text, 'text', 4000)));
 
   // Доступ к компьютеру: пути выбирает только пользователь в окне Windows.

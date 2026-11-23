@@ -97,6 +97,16 @@ export function validateSettingsPatch(patch: unknown): Partial<Settings> {
     if (!['off', 'system', 'api'].includes(p.ttsMode as string)) throw new Error('Неизвестный режим озвучки');
     out.ttsMode = p.ttsMode as Settings['ttsMode'];
   }
+  if ('voiceEngine' in p) {
+    if (p.voiceEngine !== 'classic' && p.voiceEngine !== 'realtime') throw new Error('Неизвестный голосовой движок');
+    out.voiceEngine = p.voiceEngine;
+  }
+  for (const key of ['realtimeModel', 'realtimeVoice'] as const) {
+    if (key in p) {
+      if (typeof p[key] !== 'string' || !/^[\w.:\-/]{1,100}$/.test(p[key] as string)) throw new Error(`Некорректное значение: ${key}`);
+      out[key] = p[key] as string;
+    }
+  }
   if ('voiceBaseUrl' in p) out.voiceBaseUrl = validateVoiceBaseUrl(p.voiceBaseUrl);
   for (const key of ['sttModel', 'ttsModel', 'ttsVoice'] as const) {
     if (key in p) {

@@ -11,6 +11,8 @@ import { ChatView } from './views/ChatView';
 import { CrmView } from './views/CrmView';
 import { JobsView } from './views/JobsView';
 import { parseAppIntent, parseNavIntent, parseSectionIntent } from '../shared/voice';
+import { maskText } from '../core/crm/mask';
+import { useRealtime } from './voice/useRealtime';
 import { MentorView } from './views/MentorView';
 import { CallsView } from './views/CallsView';
 import { TelegramView } from './views/TelegramView';
@@ -23,7 +25,7 @@ import { ProfileView } from './views/ProfileView';
 import { SettingsView } from './views/SettingsView';
 import { cancelSpeech, getSpeechLevel, onSpeaking, speak, SpeechSession } from './voice/speech';
 import { useCamera } from './voice/useCamera';
-import { useVoice } from './voice/useVoice';
+import { useVoice, type VoiceControl } from './voice/useVoice';
 
 type View = 'hud' | 'chat' | 'crm' | 'mentor' | 'calls' | 'telegram' | 'agents' | 'space' | 'jobs' | 'profile' | 'memory' | 'audit' | 'settings';
 
@@ -234,27 +236,29 @@ export function App() {
   };
 
   /** Голосовая/текстовая навигация без обращения к модели: мгновенно и бесплатно. */
-  const navigateByIntent = (text: string): boolean => {
+  const navigateByIntent = (text: string, silent = false): string | null => {
     const intent = parseNavIntent(text);
-    if (!intent) return false;
+    if (!intent) return null;
     const st = settingsRef.current;
     const say = (t: string): void => {
-      if (st.ttsMode !== 'off') void speak(t, st.ttsMode, { systemVoice: st.systemVoice, speed: st.ttsSpeed }).catch(() => undefined);
+      if (!silent && st.ttsMode !== 'off') void speak(t, st.ttsMode, { systemVoice: st.systemVoice, speed: st.ttsSpeed }).catch(() => undefined);
     };
     if (intent === 'home') {
       setView('hud');
       say('Возвращаюсь.');
-    } else if (intent === 'agents') {
+      return 'Вернулся на главный экран.';
+    }
+    if (intent === 'agents') {
       uiSounds.play('open');
       setView('agents');
       say('Открываю агентов.');
-    } else {
-      uiSounds.play('open');
-      setSpaceMode(intent);
-      setView('space');
-      say(intent === 'city' ? 'Открываю город бизнеса.' : 'Открываю аналитику.');
+      return 'Открыл раздел агентов на экране.';
     }
-    return true;
+    uiSounds.play('open');
+    setSpaceMode(intent);
+    setView('space');
+    say(intent === 'city' ? 'Открываю город бизнеса.' : 'Открываю аналитику.');
+    return intent === 'city' ? 'Открыл город бизнеса на экране.' : 'Открыл аналитику на экране.';
   };
 
   const [sectionReq, setSectionReq] = useState<SectionRequest | null>(null);
@@ -265,7 +269,7 @@ export function App() {
     await send(text);
   };
   /** «Покажи, что у нас в производстве»: открывает раздел живой CRM и рассказывает о нём. Без живой CRM разбирается модель обычным путём. */
-  const openSectionByIntent = async (text: string): Promise<boolean> => {
+  const openSectionByIntent = async (text: string, narrateAnswer = true): Promise<boolean> => {
     const it = parseSectionIntent(text);
     if (!it) return false;
     const live = await window.jarvis.aqua.get().then((s) => s.hasKey, () => false);
@@ -274,25 +278,75 @@ export function App() {
     setSpaceMode('analytics');
     setView('space');
     setSectionReq({ kind: it.kind, pipelineLike: it.pipelineLike, nonce: Date.now() });
-    void narrate(`Проанализируй раздел CRM «${it.title}»: прочитай данные через crm_live_get (при необходимости сначала crm_live_index) и коротко расскажи, что сейчас происходит, где проблемы и что сделать в первую очередь.`);
+    if (narrateAnswer) void narrate(`Проанализируй раздел CRM «${it.title}»: прочитай данные через crm_live_get (при необходимости сначала crm_live_index) и коротко расскажи, что сейчас происходит, где проблемы и что сделать в первую очередь.`);
     return true;
   };
 
   /** «Открой хром»: запуск программы без обращения к модели. Если программа не найдена — разберётся модель. */
-  const launchByIntent = async (text: string): Promise<boolean> => {
+  const launchByIntent = async (text: string, silent = false): Promise<string | null> => {
     const q = parseAppIntent(text);
-    if (!q || parseNavIntent(text)) return false;
+    if (!q || parseNavIntent(text)) return null;
     try {
       const r = await window.jarvis.apps.launch(q);
-      if (!r.matched) return false;
+      if (!r.matched) return null;
       const st = settingsRef.current;
       uiSounds.play(r.ok ? 'success' : 'error');
       setJobToast({ title: r.ok ? 'Программа' : 'Не удалось запустить', summary: r.message, ok: r.ok });
-      if (st.ttsMode !== 'off') void speak(r.ok ? r.message : 'Не получилось запустить.', st.ttsMode, { systemVoice: st.systemVoice, speed: st.ttsSpeed }).catch(() => undefined);
-      return true;
+      if (!silent && st.ttsMode !== 'off') void speak(r.ok ? r.message : 'Не получилось запустить.', st.ttsMode, { systemVoice: st.systemVoice, speed: st.ttsSpeed }).catch(() => undefined);
+      return r.message;
     } catch {
-      return false;
+      return null;
     }
+  };
+
+  /** Выполнить просьбу ядром ассистента (все инструменты, права и подтверждения) и вернуть текст итогового ответа. */
+  const askChat = async (text: string): Promise<string> => {
+    let id = activeRef.current;
+    if (id === null) {
+      const c = await window.jarvis.conversations.create();
+      id = c.id;
+      setActiveId(id);
+      activeRef.current = id;
+      await refreshConvs();
+    }
+    const convId: number = id;
+    setUserText(text);
+    return new Promise<string>((resolve) => {
+      let last = '';
+      let done = false;
+      let to = 0;
+      let off: () => void = () => undefined;
+      const finish = (r: string): void => {
+        if (done) return;
+        done = true;
+        off();
+        window.clearTimeout(to);
+        resolve(r);
+      };
+      off = window.jarvis.chat.onEvent((e) => {
+        if (e.type === 'message' && e.message.conversationId === convId && e.message.role === 'assistant') {
+          const t = e.message.content.map((b) => (b.type === 'text' ? b.text : '')).join('').trim();
+          if (t) last = t;
+        } else if (e.type === 'run_finished' && e.conversationId === convId) {
+          finish(e.status === 'done' ? last || 'Готово.' : e.status === 'stopped' ? 'Пользователь остановил задачу.' : `Ошибка: ${e.error ?? 'не удалось выполнить'}`);
+        }
+      });
+      to = window.setTimeout(() => finish('Задача ещё выполняется — скажи пользователю, что результат появится на экране.'), 170_000);
+      window.jarvis.chat.send(convId, text).catch((e: unknown) => finish(`Ошибка: ${cleanError(e)}`));
+    });
+  };
+
+  /** Просьба из «живого разговора»: сначала мгновенные переходы по экранам и запуск программ (без модели), остальное — ядро ассистента. */
+  const runRealtimeRequest = async (text: string): Promise<string> => {
+    const nav = navigateByIntent(text, true);
+    if (nav) return nav;
+    const opened = await openSectionByIntent(text, false); // экран раздела открывается, а рассказ о нём даст сам ассистент ниже
+    if (!opened) {
+      const launched = await launchByIntent(text, true);
+      if (launched) return launched;
+    }
+    // В голосовую модель уходит только текст ответа; телефоны и почта маскируются (даты не трогаются)
+    return maskText(await askChat(text));
   };
 
   const send = async (text: string): Promise<void> => {
@@ -361,7 +415,7 @@ export function App() {
     [],
   );
 
-  const voice = useVoice({
+  const classic = useVoice({
     settings,
     isBusy: () => runningRef.current,
     onCommand: (text) => {
@@ -377,7 +431,26 @@ export function App() {
     enableMic: enableDevice('mic'),
   });
   const followUpRef = useRef<(() => void) | null>(null);
-  followUpRef.current = voice.followUp;
+  followUpRef.current = classic.followUp;
+
+  // «Живой разговор» (голос в голос): подменяет обычный голосовой слушатель, когда выбран в настройках
+  const rt = useRealtime({
+    settings,
+    enableMic: enableDevice('mic'),
+    runRequest: runRealtimeRequest,
+    onStopTask: stop,
+    onError: setError,
+    onUserText: (t) => setUserText(t),
+    onAssistantText: (t) => showReply(t),
+    beforeStart: () => {
+      classic.stop();
+      cancelSpeech();
+    },
+  });
+  const voice: VoiceControl = settings.voiceEngine === 'realtime' || rt.active ? rt.control : classic;
+  useEffect(() => {
+    if (settings.voiceEngine === 'realtime' && classic.state !== 'idle') classic.stop();
+  }, [settings.voiceEngine, classic.state]);
 
   const camera = useCamera({ settings, enableCamera: enableDevice('cam'), onError: setError });
 
@@ -386,8 +459,8 @@ export function App() {
   useEffect(() => {
     if (greeted.current || !info) return;
     greeted.current = true;
-    if (settings.autoListen && settings.micEnabled && settings.voiceMode === 'wake' && info.hasVoiceKey) {
-      voice.toggle();
+    if (settings.autoListen && settings.micEnabled && settings.voiceMode === 'wake' && info.hasVoiceKey && settings.voiceEngine === 'classic') {
+      classic.toggle();
       if (settings.ttsMode !== 'off') {
         const s = new SpeechSession({ mode: settings.ttsMode, systemVoice: settings.systemVoice, speed: settings.ttsSpeed, onError: setError });
         s.push(greeting(settings.userName));
@@ -398,7 +471,7 @@ export function App() {
   }, [info]);
 
   // Состояние шара и его «громкость»
-  const orbState: OrbState = speaking ? 'speaking' : running || voice.state === 'transcribing' ? 'thinking' : voice.state === 'listening' || voice.state === 'hearing' ? 'listening' : 'idle';
+  const orbState: OrbState = speaking || rt.speaking ? 'speaking' : running || voice.state === 'transcribing' ? 'thinking' : voice.state === 'listening' || voice.state === 'hearing' ? 'listening' : 'idle';
   // Звуки интерфейса: на все кнопки, на «пробуждение», на начало ответа, на ошибки; звук включения при запуске
   useEffect(() => installUiSounds(), []);
   useEffect(() => {
@@ -425,10 +498,13 @@ export function App() {
   useEffect(() => {
     if (error) uiSounds.play('error');
   }, [error]);
+  const rtRef = useRef(rt);
+  rtRef.current = rt;
   const levelRef = useRef({ voiceLevel: 0, state: orbState });
   levelRef.current = { voiceLevel: voice.level, state: orbState };
   const getLevel = useCallback((): number => {
     const { voiceLevel, state } = levelRef.current;
+    if (rtRef.current.active) return rtRef.current.level();
     if (state === 'speaking') return getSpeechLevel();
     if (state === 'listening') return voiceLevel;
     if (state === 'thinking') return 0.12 + 0.08 * Math.sin(performance.now() / 260);

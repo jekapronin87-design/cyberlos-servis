@@ -70,6 +70,11 @@ export interface Settings {
   micEnabled: boolean;
   voiceMode: VoiceMode;
   ttsMode: TtsMode;
+  /** Голосовой движок: classic — слово-имя + распознавание по фразам; realtime — «живой разговор» голос в голос (OpenAI Realtime). */
+  voiceEngine: 'classic' | 'realtime';
+  /** Модель живого разговора (OpenAI Realtime). */
+  realtimeModel: string;
+  realtimeVoice: string;
   /** OpenAI-совместимый API распознавания/синтеза речи. */
   voiceBaseUrl: string;
   sttModel: string;
@@ -142,6 +147,9 @@ export const DEFAULT_SETTINGS: Settings = {
   micEnabled: false,
   voiceMode: 'push',
   ttsMode: 'system',
+  voiceEngine: 'classic',
+  realtimeModel: 'gpt-realtime',
+  realtimeVoice: 'cedar',
   voiceBaseUrl: 'https://api.openai.com/v1',
   sttModel: 'gpt-4o-transcribe',
   ttsModel: 'gpt-4o-mini-tts',

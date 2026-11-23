@@ -56,6 +56,7 @@ import { AuditLog } from './security/audit';
 import { ConfirmationBroker, type ConfirmationUi } from './security/confirmation';
 import { SECRET_ANTHROPIC_KEY, validateApiKey, type SecretStore } from './security/secrets';
 import { SECRET_VOICE_KEY, VoiceService } from './voice/service';
+import { RealtimeService } from './realtime/service';
 import { registerBuiltinTools } from './tools/builtin';
 import { ToolRegistry } from './tools/registry';
 
@@ -99,6 +100,8 @@ export interface CoreOptions {
   telephonyHearTimeoutMs?: number;
   /** Порт шлюза для телефона (по умолчанию 8787; 0 — любой свободный, для тестов). */
   gatewayPort?: number;
+  /** Подмена сети для «живого разговора» (тесты). */
+  realtimeFetch?: typeof fetch;
   /** Подмена сети и времени для CRM (тесты). */
   crmFetch?: typeof fetch;
   crmNow?: () => Date;
@@ -127,6 +130,7 @@ export class JarvisCore {
   readonly confirm: ConfirmationBroker;
   readonly providers: ProviderManager;
   readonly voice: VoiceService;
+  readonly realtime: RealtimeService;
   readonly attachments: AttachmentRepo;
   readonly profile: ProfileRepo;
   readonly crm: CrmService;
@@ -162,6 +166,7 @@ export class JarvisCore {
       audit: this.audit,
       fetchImpl: opts.fetchImpl,
     });
+    this.realtime = new RealtimeService({ getSettings: () => this.settings.get(), secrets: opts.secrets, audit: this.audit, fetchImpl: opts.realtimeFetch ?? opts.fetchImpl });
     this.attachments = new AttachmentRepo(this.db);
     this.profile = new ProfileRepo(this.db);
     this.crm = new CrmService(this.db, opts.secrets, this.audit, opts.crmFetch, opts.crmNow);

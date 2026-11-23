@@ -28,6 +28,10 @@ const api: JarvisApi = {
     transcribe: (audio, mime) => invoke(IPC.voiceTranscribe, audio, mime),
     speak: (text) => invoke(IPC.voiceSpeak, text),
   },
+  realtime: {
+    connect: (offerSdp) => invoke(IPC.realtimeConnect, offerSdp),
+    ended: (seconds) => invoke(IPC.realtimeEnded, seconds),
+  },
   computer: {
     get: () => invoke(IPC.computerGet),
     addFolder: () => invoke(IPC.computerAddFolder),

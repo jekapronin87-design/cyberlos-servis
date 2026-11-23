@@ -53,6 +53,8 @@ export const IPC = {
   voiceKeyClear: 'voice:key:clear',
   voiceTranscribe: 'voice:transcribe',
   voiceSpeak: 'voice:speak',
+  realtimeConnect: 'realtime:connect',
+  realtimeEnded: 'realtime:ended',
   computerGet: 'computer:get',
   computerAddFolder: 'computer:folder:add',
   computerRemoveFolder: 'computer:folder:remove',
@@ -186,6 +188,11 @@ export interface JarvisApi {
     transcribe(audio: Uint8Array, mime: string): Promise<string>;
     /** Облачный синтез речи (режим «api»). */
     speak(text: string): Promise<{ mime: string; data: Uint8Array }>;
+  };
+  realtime: {
+    /** Начать «живой разговор»: передаёт предложение WebRTC, получает ответ OpenAI (ключи остаются в основном процессе). */
+    connect(offerSdp: string): Promise<{ sdp: string; model: string; voice: string }>;
+    ended(seconds: number): Promise<void>;
   };
   computer: {
     get(): Promise<ComputerAccess>;

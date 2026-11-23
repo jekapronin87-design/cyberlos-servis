@@ -2,7 +2,8 @@ import { nowIso, type Db } from '../db/database';
 import type { AuditLog } from '../security/audit';
 import type { SecretStore } from '../security/secrets';
 import type { ToolRegistry } from '../tools/registry';
-import { maskFreeText } from '../crm/mask';
+import { maskText } from '../crm/mask';
+export { maskText } from '../crm/mask';
 import { buildAquaDashboard, buildAquaSection, type AquaSection, type AquaSectionKind } from './dashboard';
 import type { CrmDashboardDto } from '../../shared/types';
 
@@ -278,14 +279,6 @@ export class AquaService {
       },
     });
   }
-}
-
-/** Даты и время (2026-11-23, 2026-11-23T08:00:00.000Z) похожи на телефон по числу цифр — их маскирование ломало бы данные, поэтому на время маскирования они прячутся. */
-const DATE_RE = /\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?/g;
-export function maskText(t: string): string {
-  const saved: string[] = [];
-  const hidden = t.replace(DATE_RE, (m) => `\u0001${saved.push(m) - 1}\u0002`);
-  return maskFreeText(hidden).replace(/\u0001(\d+)\u0002/g, (_m, i: string) => saved[Number(i)] ?? '');
 }
 
 /** Прячет телефоны и e-mail в любых строковых значениях (числа и id не трогаем). */

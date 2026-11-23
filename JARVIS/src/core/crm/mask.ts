@@ -44,3 +44,12 @@ export function maskKnownNames(text: string, leadName: string | null | undefined
   if (parts.length === 1) out = out.replace(new RegExp(`(?<![\\p{L}])${esc(parts[0]!)}(?![\\p{L}])`, 'giu'), maskName(parts[0]));
   return out;
 }
+
+/** Даты и время (2026-11-23, 2026-11-23T08:00:00.000Z) похожи на телефон по числу цифр — их маскирование ломало бы данные, поэтому на время маскирования они прячутся. */
+const DATE_RE = /\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?/g;
+export function maskText(t: string): string {
+  const saved: string[] = [];
+  const hidden = t.replace(DATE_RE, (m) => `\u0001${saved.push(m) - 1}\u0002`);
+  return maskFreeText(hidden).replace(/\u0001(\d+)\u0002/g, (_m, i: string) => saved[Number(i)] ?? '');
+}
+

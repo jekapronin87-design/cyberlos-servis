@@ -7,6 +7,7 @@ import { GatewayCard } from '../components/GatewayCard';
 import { ModelsCard } from '../components/ModelsCard';
 import { YoutubeCard } from '../components/YoutubeCard';
 import { AquaCard } from '../components/AquaCard';
+import { RealtimeCard } from '../components/RealtimeCard';
 import { MicTest } from '../components/MicTest';
 import { UpdateCard } from '../components/UpdateCard';
 import { listSystemVoices, speak, ttsDiag } from '../voice/speech';
@@ -375,6 +376,8 @@ export function SettingsView(props: {
           </label>
         ))}
       </div>
+
+      <RealtimeCard settings={s} onUpdate={async (p) => { await props.onUpdate(p); }} />
 
       <ModelsCard settings={s} onUpdate={async (p) => { await props.onUpdate(p); }} />
 

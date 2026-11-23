@@ -166,6 +166,21 @@ try {
   assert.equal(mem.length, 1, 'опасное действие не выполнено');
   step('голосовое «стоп» закрывает окно подтверждения; голосом разрешить нельзя');
 
+  // 5b. «Живой разговор»: карточка есть, включается; проверка доступа с чужим адресом API честно отказывает, ключ не утекает; кнопка микрофона не зависает
+  await page.click('.nav-item:has-text("Настройки")');
+  await page.waitForSelector('#realtime-card');
+  await page.locator('#rt-on').click();
+  await page.waitForFunction(() => window.jarvis.settings.get().then((s) => s.voiceEngine === 'realtime'));
+  await page.locator('#rt-test').click();
+  await page.waitForSelector('#realtime-card .banner-err:has-text("только с OpenAI")');
+  await page.click('.nav-item:has-text("Системно")');
+  await page.click('[data-testid=hud-mic]');
+  await page.waitForTimeout(1200);
+  assert.ok((await page.locator('[data-testid=hud-mic].on').count()) === 0, 'при отказе живой разговор не должен «висеть» включённым');
+  await page.locator('.hud').waitFor();
+  await page.evaluate(() => window.jarvis.settings.update({ voiceEngine: 'classic' }));
+  step('живой разговор: карточка, переключатель, понятный отказ при чужом адресе API, микрофон не зависает');
+
   // 6. Выключение главного выключателя гасит микрофон
   await page.evaluate(() => window.jarvis.settings.update({ micEnabled: false }));
   await page.reload();
