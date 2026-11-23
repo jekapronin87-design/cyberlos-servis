@@ -97,6 +97,14 @@ export function validateSettingsPatch(patch: unknown): Partial<Settings> {
     if (!['off', 'system', 'api'].includes(p.ttsMode as string)) throw new Error('Неизвестный режим озвучки');
     out.ttsMode = p.ttsMode as Settings['ttsMode'];
   }
+  if ('voiceHeadphones' in p) {
+    if (typeof p.voiceHeadphones !== 'boolean') throw new Error('voiceHeadphones: да или нет');
+    out.voiceHeadphones = p.voiceHeadphones;
+  }
+  if ('realtimePatience' in p) {
+    if (!['fast', 'normal', 'patient'].includes(p.realtimePatience as string)) throw new Error('Неизвестное терпение разговора');
+    out.realtimePatience = p.realtimePatience as Settings['realtimePatience'];
+  }
   if ('voiceEngine' in p) {
     if (p.voiceEngine !== 'classic' && p.voiceEngine !== 'realtime') throw new Error('Неизвестный голосовой движок');
     out.voiceEngine = p.voiceEngine;

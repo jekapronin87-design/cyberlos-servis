@@ -151,8 +151,10 @@ export class VoiceListener {
     if (this.rec && this.heard && level < this.peak * 0.35) this.noiseFloor = Math.min(0.05, this.noiseFloor * 0.985 + level * 0.015); // шум меняется и во время фразы
 
     const minSpeech = this.o.minSpeechMs ?? 160;
-    const silenceLimit = this.o.silenceMs ?? 850;
-    const maxMs = this.o.maxUtteranceMs ?? 20000;
+    // Терпение растёт вместе с длиной речи: в длинном рассказе люди думают посреди фразы, и пауза в 1–1,5 с — не конец. Для коротких команд остаётся быстрый отклик.
+    const baseSilence = this.o.silenceMs ?? 850;
+    const silenceLimit = this.speechMs > 9000 ? baseSilence * 2 : this.speechMs > 3500 ? baseSilence * 1.5 : baseSilence;
+    const maxMs = this.o.maxUtteranceMs ?? 45000;
 
     if (!this.rec) {
       // ждём речь; параллельно держим «предисторию»

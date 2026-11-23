@@ -72,6 +72,10 @@ export interface Settings {
   ttsMode: TtsMode;
   /** Голосовой движок: classic — слово-имя + распознавание по фразам; realtime — «живой разговор» голос в голос (OpenAI Realtime). */
   voiceEngine: 'classic' | 'realtime';
+  /** Я в наушниках: эхо колонок невозможно — не отсеивать «эхо» и разрешить перебивать ассистента. */
+  voiceHeadphones: boolean;
+  /** Терпение живого разговора к паузам: fast — отвечает быстрее, patient — дожидается конца длинной мысли. */
+  realtimePatience: 'fast' | 'normal' | 'patient';
   /** Модель живого разговора (OpenAI Realtime). */
   realtimeModel: string;
   realtimeVoice: string;
@@ -148,6 +152,8 @@ export const DEFAULT_SETTINGS: Settings = {
   voiceMode: 'push',
   ttsMode: 'system',
   voiceEngine: 'classic',
+  voiceHeadphones: false,
+  realtimePatience: 'patient',
   realtimeModel: 'gpt-realtime',
   realtimeVoice: 'cedar',
   voiceBaseUrl: 'https://api.openai.com/v1',

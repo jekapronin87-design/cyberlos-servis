@@ -48,7 +48,7 @@ describe('Живой разговор (OpenAI Realtime)', () => {
     expect(sess).toMatchObject({ type: 'realtime', model: 'gpt-realtime', tool_choice: 'auto' });
     expect(sess.audio.output.voice).toBe('cedar');
     expect(sess.audio.input.transcription).toMatchObject({ language: 'ru' });
-    expect(sess.audio.input.turn_detection).toMatchObject({ type: 'server_vad', create_response: true, interrupt_response: true });
+    expect(sess.audio.input.turn_detection).toMatchObject({ type: 'semantic_vad', eagerness: 'low', create_response: true, interrupt_response: true });
     expect(sess.tools).toHaveLength(1);
     expect(sess.tools[0]).toMatchObject({ type: 'function', name: 'ask_assistant' });
     expect(sess.instructions).toContain('ask_assistant');

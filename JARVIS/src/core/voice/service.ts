@@ -58,7 +58,7 @@ export class OpenAiCompatibleStt implements SpeechToText {
       method: 'POST',
       headers: { Authorization: `Bearer ${this.cfg.apiKey}` },
       body: form,
-      signal: withTimeout(signal, 25_000),
+      signal: withTimeout(signal, 60_000),
     }).catch((e: unknown) => {
       throw friendly(e);
     });

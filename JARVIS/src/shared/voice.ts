@@ -103,9 +103,10 @@ const JUNK = /продолжение следует|субтитры (сдела
 export function isJunkTranscript(text: string): boolean {
   const t = normalizeSpeech(text);
   if (!t) return true;
-  if (JUNK.test(text)) return true;
-  if (t.length <= 2) return true; // «а», «э», «м»
   const words = t.split(' ');
+  // «Выдуманные» фразы — всегда короткие; в длинной речи обычные слова вроде «спасибо за внимание» не делают её мусором
+  if (words.length <= 8 && JUNK.test(text)) return true;
+  if (t.length <= 2) return true; // «а», «э», «м»
   if (words.length >= 4 && new Set(words).size === 1) return true; // «да да да да»
   return false;
 }

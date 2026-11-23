@@ -216,6 +216,10 @@ export function SettingsView(props: {
           </select>
           <small className="muted">Скажите имя один раз («{s.assistantName}, доброе утро») — дальше можно разговаривать без него; фраза «пока» или «отбой» заканчивает беседу. Голосом можно сказать «стоп», чтобы остановить задачу. Опасные действия голосом не подтверждаются — только кнопкой в окне.</small>
         </label>
+        <label className="check">
+          <input type="checkbox" id="headphones" checked={s.voiceHeadphones} onChange={(e) => void run(() => props.onUpdate({ voiceHeadphones: e.target.checked }), e.target.checked ? 'Режим «Я в наушниках» включён: можно перебивать ассистента и говорить сколько угодно.' : 'Выключено: ассистент отсеивает эхо колонок.')} />
+          <span><strong>Я в наушниках</strong> <span className="muted small">— эхо колонок исключено, поэтому ассистент не отсеивает вашу речь, пока сам говорит: можно перебивать, а длинные фразы не пропадают. Если слушаете через колонки — не включайте.</span></span>
+        </label>
         {s.ttsMode === 'system' && (
           <div className="banner banner-demo" id="tts-system-hint">
             Сейчас включены <strong>голоса Windows</strong>: они звучат роботизированно, а между предложениями бывают паузы по несколько секунд — это ограничение самих голосов Windows. Естественный голос и без пауз даёт облачный синтез.{' '}

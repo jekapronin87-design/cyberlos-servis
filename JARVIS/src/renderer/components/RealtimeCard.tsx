@@ -66,6 +66,14 @@ export function RealtimeCard({ settings: s, onUpdate }: { settings: Settings; on
           </select>
         </label>
       </div>
+      <label className="field">
+        <span>Терпение к паузам</span>
+        <select value={s.realtimePatience} onChange={(e) => void run(() => onUpdate({ realtimePatience: e.target.value as Settings['realtimePatience'] }), 'Сохранено (применится к следующему разговору)')}>
+          <option value="fast">Быстро — отвечает почти сразу после паузы</option>
+          <option value="normal">Обычно</option>
+          <option value="patient">Долго — дожидается конца длинной мысли (рекомендуется, если вы говорите много)</option>
+        </select>
+      </label>
       <div className="row">
         <button className="btn" id="rt-test" disabled={busy} onClick={() => void run(async () => setMsg({ ok: true, text: await testRealtime() }), '')}>
           Проверить доступ (без разговора)

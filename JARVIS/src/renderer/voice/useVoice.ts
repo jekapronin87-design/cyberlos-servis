@@ -7,7 +7,7 @@ import { cancelSpeech, isAudibleNow, isSpeaking, recentSpoken, speak, speechStat
 
 export type VoiceUiState = 'idle' | 'listening' | 'hearing' | 'transcribing';
 
-const STT_TIMEOUT_MS = 30_000;
+const STT_TIMEOUT_MS = 75_000;
 
 const cleanError = (e: unknown): string =>
   e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'Ошибка голоса';
@@ -68,6 +68,14 @@ export function useVoice(p: {
   const queue = useRef<Promise<void>>(Promise.resolve());
   /** Сколько подряд «коротких» (≤3 слов) реплик принято в беседе без слова-имени — признак зацикливания на эхе или шуме. */
   const shortStreak = useRef(0);
+  /** Команда, которую подержали, пока не станет ясно, закончили ли вы мысль (длинная речь часто идёт несколькими кусками). */
+  const pending = useRef<{ text: string; timer: number; since: number } | null>(null);
+  /** Идёт ли сейчас вторая часть речи (слышим вас или распознаём) — тогда команду не выполняем, ждём. */
+  const activity = useRef({ hearing: false, transcribing: 0 });
+  const clearPending = (): void => {
+    if (pending.current) window.clearTimeout(pending.current.timer);
+    pending.current = null;
+  };
   const pRef = useRef(p);
   pRef.current = p;
 
@@ -108,15 +116,15 @@ export function useVoice(p: {
   const handleUtterance = useCallback(
     async (blob: Blob, meta: UtteranceMeta): Promise<void> => {
       const cur = pRef.current;
-      void meta; // эхо колонок отсеивает сам захват звука (см. listener: gate) и проверка по смыслу ниже
       setTranscribing((n) => n + 1);
+      activity.current.transcribing += 1;
       try {
         const bytes = new Uint8Array(await blob.arrayBuffer());
         let timer = 0;
         const text = await Promise.race([
           window.jarvis.voice.transcribe(bytes, blob.type || 'audio/wav'),
           new Promise<never>((_, rej) => {
-            timer = window.setTimeout(() => rej(new Error('Распознавание речи не ответило за 30 секунд. Проверьте интернет и ключ голоса.')), STT_TIMEOUT_MS);
+            timer = window.setTimeout(() => rej(new Error('Распознавание речи не ответило за 75 секунд. Проверьте интернет и ключ голоса.')), STT_TIMEOUT_MS);
           }),
         ]).finally(() => window.clearTimeout(timer));
         const wake = cur.settings.voiceMode === 'wake';
@@ -124,7 +132,7 @@ export function useVoice(p: {
           if (text.trim()) logVoice(`Отброшено как шум/выдумку распознавания: «${text.trim().slice(0, 60)}»`);
           return;
         }
-        if (isEchoOfSpeech(text, recentSpoken())) {
+        if (!cur.settings.voiceHeadphones && isEchoOfSpeech(text, recentSpoken())) {
           say('Это слова самого ассистента из колонок — пропускаю. С наушниками такого не будет.');
           return;
         } // «Продолжение следует…» и прочие выдумки распознавания на шуме
@@ -145,12 +153,17 @@ export function useVoice(p: {
           say(`Услышал: «${heard}» — но нет слова «${cur.settings.assistantName}». Начните фразу с этого слова.`, 'warn');
         } else if (cmd.kind === 'stop') {
           say('Команда «стоп»');
+          clearPending();
           cancelSpeech();
           cur.onStopCommand();
         } else if (cmd.kind === 'wake') {
           if (isSpeaking()) {
-            say(`Услышал: «${heard}» — но я ещё говорю. Скажите «стоп», чтобы прервать.`, 'warn');
-            return;
+            // В наушниках эхо невозможно: ваша речь поверх ассистента — это перебивание, он замолкает и слушает вас.
+            if (cur.settings.voiceHeadphones) cancelSpeech();
+            else {
+              say(`Услышал: «${heard}» — но я ещё говорю. Скажите «стоп», чтобы прервать.`, 'warn');
+              return;
+            }
           }
           if (!cmd.text) {
             if (wake) {
@@ -174,12 +187,36 @@ export function useVoice(p: {
             }
           } else shortStreak.current = 0;
           if (wake) setAwait(true); // беседа продолжается без слова-имени
-          if (cur.isBusy()) {
-            say(`Услышал: «${heard}» — но я ещё отвечаю на предыдущий запрос. Скажите «стоп».`, 'warn');
+          // Длинная речь приходит кусками (пауза посреди мысли): если фраза не закончена (нет точки/вопроса) или была долгой, ждём продолжение и склеиваем.
+          const text2 = pending.current ? `${pending.current.text} ${cmd.text}` : cmd.text;
+          const long = meta.endedAt - meta.startedAt > 6000;
+          const finished = /[.!?…]["»)]?\s*$/.test(cmd.text.trim());
+          const run = (): void => {
+            clearPending();
+            const c2 = pRef.current;
+            if (c2.isBusy()) {
+              say(`Услышал: «${text2.slice(0, 90)}» — но я ещё отвечаю на предыдущий запрос. Скажите «стоп».`, 'warn');
+              return;
+            }
+            say(`Понял: «${text2.slice(0, 90)}»`);
+            c2.onCommand(text2);
+          };
+          // Короткие команды без точки («открой аналитику») выполняются сразу — ждём только когда фраза длинная и оборвана.
+          if (wake && !finished && (long || words >= 6)) {
+            const since = pending.current?.since ?? Date.now();
+            if (pending.current) window.clearTimeout(pending.current.timer);
+            // Выполняем, когда вы замолчали и ничего не распознаётся; но не ждём бесконечно (не дольше 12 с)
+            const arm = (): number =>
+              window.setTimeout(() => {
+                const busy = activity.current.hearing || activity.current.transcribing > 0;
+                if (busy && Date.now() - since < 12_000 && pending.current) pending.current.timer = arm();
+                else run();
+              }, 1600);
+            pending.current = { text: text2, timer: arm(), since };
+            say(`Слушаю дальше… («${text2.slice(-60)}»)`);
             return;
           }
-          say(`Понял: «${cmd.text.slice(0, 90)}»`);
-          cur.onCommand(cmd.text);
+          run();
         }
       } catch (e) {
         const m = cleanError(e);
@@ -187,12 +224,15 @@ export function useVoice(p: {
         cur.onError(m);
       } finally {
         setTranscribing((n) => n - 1);
+        activity.current.transcribing -= 1;
       }
     },
     [setAwait, say],
   );
 
   const stop = useCallback(() => {
+    if (pending.current) window.clearTimeout(pending.current.timer);
+    pending.current = null;
     listener.current?.stop();
     listener.current = null;
     setAwait(false);
@@ -212,9 +252,13 @@ export function useVoice(p: {
       cancelSpeech(); // не слушаем собственную озвучку
       const l = new VoiceListener({
         continuous: cur.settings.voiceMode === 'wake',
-        onState: setListenState,
+        onState: (s) => {
+          activity.current.hearing = s === 'hearing';
+          setListenState(s);
+        },
         onLevel: setLevel,
         gate: () => {
+          if (pRef.current.settings.voiceHeadphones) return { speaking: false, lastEnd: 0 };
           const s = speechState();
           // Эхом считаем только то, что звучит из колонок прямо сейчас. Пауза между предложениями (следующее ещё готовится) — это тишина, ваша речь в ней настоящая.
           const speaking = isSpeaking() && isAudibleNow();
