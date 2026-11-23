@@ -51,8 +51,9 @@ export function CrmCard() {
       </p>
       {msg && <div className={`banner ${msg.ok ? 'banner-ok' : 'banner-err'}`}>{msg.text}</div>}
       <label className="field">
-        <span>Адрес CRM</span>
-        <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://api.ваш-домен.ru" spellCheck={false} />
+        <span>Адрес CRM (тот, по которому вы заходите в неё в браузере)</span>
+        <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://app.ваш-домен.ru" spellCheck={false} />
+        <small className="muted">Если сервер лежит отдельно (Railway и т. п.) — адрес сервера. Приписку «/api» программа подберёт сама.</small>
         <small className="muted">Адрес <strong>бэкенда</strong> CRM (API), не сайта. Для проверки на своём компьютере: http://localhost:4000</small>
       </label>
       <label className="field">

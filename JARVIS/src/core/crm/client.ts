@@ -66,8 +66,16 @@ export class CrmClient {
     return !!this.getConfig() && this.secrets.has(SECRET_CRM_PASSWORD);
   }
 
+  /** Адрес API, определённый при входе (если пользователь указал адрес сайта без «/api», дописывается автоматически). */
+  private base: string | null = null;
+
   resetSession(): void {
     this.token = null;
+    this.base = null;
+  }
+
+  effectiveBase(): string | null {
+    return this.base;
   }
 
   private cfg(): CrmConfig {
@@ -80,14 +88,27 @@ export class CrmClient {
     const c = this.cfg();
     const password = this.secrets.get(SECRET_CRM_PASSWORD);
     if (!password) throw new CrmError('Не задан пароль учётной записи CRM.');
-    const res = await this.fetchImpl(`${c.baseUrl}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: c.email, password }),
-      signal: AbortSignal.timeout(20_000),
-    }).catch((e: unknown) => {
-      throw this.netError(e);
-    });
+    // Люди часто вводят адрес сайта CRM (https://app.example.ru), а API живёт по /api. Пробуем оба варианта и запоминаем рабочий.
+    const candidates = [c.baseUrl, ...(c.baseUrl.endsWith('/api') ? [] : [`${c.baseUrl}/api`])];
+    let res: Response | null = null;
+    for (const b of candidates) {
+      const r = await this.fetchImpl(`${b}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: c.email, password }),
+        signal: AbortSignal.timeout(20_000),
+      }).catch((e: unknown) => {
+        throw this.netError(e);
+      });
+      const looksLikeApi = r.status !== 404 && r.status !== 405 && ((r.headers.get('content-type') ?? '').includes('json') || r.status >= 400);
+      if (looksLikeApi) {
+        res = r;
+        this.base = b;
+        break;
+      }
+      res = r;
+    }
+    if (!res || this.base === null) throw new CrmError('По этому адресу нет сервера CRM (ответ не похож на API). Нужен адрес сервера: например https://ваш-домен/api. Проверьте: адрес + /health должен показать {"ok":true}.', 404);
     if (res.status === 401) throw new CrmError('CRM отклонила вход: неверный email или пароль.', 401);
     if (res.status === 403) {
       const j = (await res.json().catch(() => ({}))) as { error?: string };
@@ -111,7 +132,7 @@ export class CrmClient {
     const c = this.cfg();
     if (!this.token) await this.login();
     const qs = query && Object.keys(query).length ? '?' + new URLSearchParams(query).toString() : '';
-    const res = await this.fetchImpl(`${c.baseUrl}${clean}${qs}`, {
+    const res = await this.fetchImpl(`${this.base ?? c.baseUrl}${clean}${qs}`, {
       method: 'GET',
       headers: { Authorization: `Bearer ${this.token}`, Accept: 'application/json' },
       signal: AbortSignal.timeout(30_000),

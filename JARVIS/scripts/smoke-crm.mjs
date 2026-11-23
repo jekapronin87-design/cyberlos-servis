@@ -35,7 +35,7 @@ try {
   // 2. Настройка в интерфейсе
   await page.click('.nav-item:has-text("Настройки")');
   const card = page.locator('#crm-card');
-  await card.locator('input[placeholder^="https://api"]').fill(fx.url.replace('http://', 'http://')); // localhost-адрес разрешён
+  await card.locator('input[placeholder^="https://app"]').fill(fx.url.replace('http://', 'http://')); // localhost-адрес разрешён
   await card.locator('input[placeholder^="jarvis@"]').fill('jarvis@aquamaster.ru');
   await card.locator('input[type=password]').fill('ro-pass-123');
   await card.locator('button:has-text("Сохранить")').click();

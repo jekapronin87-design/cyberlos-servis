@@ -250,3 +250,27 @@ describe('CRM в диалоге', () => {
 
 void loadSnapshot;
 void CrmError;
+
+describe('адрес CRM: «/api» подставляется сам', () => {
+  it('если указан адрес сайта без /api, вход находит API по /api; неверный адрес — понятная ошибка', async () => {
+    const fx = await startCrmFixture();
+    try {
+      const wrapped = (async (url: string, init?: RequestInit) => {
+        const u = new URL(url);
+        if (!u.pathname.startsWith('/api/')) return new Response('<!doctype html><html>сайт</html>', { status: 200, headers: { 'content-type': 'text/html' } });
+        return fetch(`${u.origin}${u.pathname.slice(4)}${u.search}`, init);
+      }) as typeof fetch;
+      const h = makeCore({ crmFetch: wrapped, crmNow: () => NOW });
+      h.core.crmSave({ baseUrl: fx.url, environment: 'test', email: 'jarvis@aquamaster.ru', maskPii: true }, 'ro-pass-123');
+      expect(await run(h, 'crm_status')).toContain('подключена');
+      expect(await run(h, 'crm_overview')).toMatch(/воронк|Воронк|заявк/i);
+      expect(h.core.crm.client.effectiveBase()).toBe(fx.url + '/api');
+      // сайт вообще без API
+      const bad = makeCore({ crmFetch: (async () => new Response('<html></html>', { status: 200, headers: { 'content-type': 'text/html' } })) as typeof fetch, crmNow: () => NOW });
+      bad.core.crmSave({ baseUrl: 'https://example.com', environment: 'test', email: 'a@b.ru', maskPii: true }, 'pass-12345');
+      await expect(bad.core.crm.client.get('/auth/me')).rejects.toThrow(/нет сервера CRM/);
+    } finally {
+      await fx.close();
+    }
+  });
+});
