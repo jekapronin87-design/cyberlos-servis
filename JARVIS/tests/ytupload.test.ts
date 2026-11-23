@@ -96,7 +96,11 @@ describe('Загрузка на YouTube', () => {
     h.core.ytUpload.saveClient(CID, CSEC);
     expect(h.secrets.get('youtubeUpload.clientSecret')).toBe(CSEC);
     expect(h.core.ytUpload.status()).toMatchObject({ hasClient: true, connected: false, clientId: CID });
+    const links: (string | null)[] = [];
+    h.core.onYtAuthUrl((u) => links.push(u));
     const st = await h.core.ytUpload.connect();
+    expect(links[0]).toContain('accounts.google.com'); // ссылку можно скопировать и открыть в другом браузере
+    expect(links.at(-1)).toBeNull();
     expect(st).toMatchObject({ connected: true, channel: 'Евгений Пронин и Системно', channelId: 'UCabcdefghijklmnopqrstuv', handle: '@evgeny-sistemno', channelError: null });
     expect(b.seen[0]!.url.searchParams.get('prompt')).toBe('select_account consent'); // Google спрашивает аккаунт и канал
     const au = b.seen[0]!.url;

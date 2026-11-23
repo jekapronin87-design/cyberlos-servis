@@ -85,6 +85,8 @@ const api: JarvisApi = {
     upload: (spec) => invoke(IPC.ytuUpload, spec),
     openStep: (step) => invoke(IPC.ytuOpenStep, step),
     checkChannel: () => invoke(IPC.ytuCheck),
+    onAuthLink: subscribe(IPC.evtYtuLink),
+    openPermissions: () => invoke(IPC.ytuPermissions),
     openChannel: (id) => invoke(IPC.ytuOpenChannel, id),
     onProgress: subscribe(IPC.evtYtu),
   },

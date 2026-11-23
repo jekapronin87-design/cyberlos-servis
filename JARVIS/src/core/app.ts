@@ -146,6 +146,11 @@ export class JarvisCore {
   readonly show: ShowService;
   readonly video: VideoService;
   readonly ytUpload: YoutubeUploader;
+  private authUrlListeners = new Set<(u: string | null) => void>();
+  onYtAuthUrl(cb: (u: string | null) => void): () => void {
+    this.authUrlListeners.add(cb);
+    return () => this.authUrlListeners.delete(cb);
+  }
   private uploadListeners = new Set<(p: { pct: number; stage: string }) => void>();
   onUploadProgress(cb: (p: { pct: number; stage: string }) => void): () => void {
     this.uploadListeners.add(cb);
@@ -231,6 +236,7 @@ export class JarvisCore {
       audit: this.audit,
       fetchImpl: opts.youtubeUploadFetch,
       openExternal: opts.openExternal,
+      onAuthUrl: (u) => this.authUrlListeners.forEach((l) => l(u)),
       spend: (u) => this.youtube.spendHard(u),
       resolveResult: (ref) => this.video.resolveResult(ref),
       onProgress: (p) => this.uploadListeners.forEach((l) => l(p)),

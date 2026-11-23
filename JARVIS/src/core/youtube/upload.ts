@@ -62,6 +62,8 @@ interface Deps {
   fetchImpl?: Fetch;
   /** Открыть адрес в браузере пользователя (только accounts.google.com). */
   openExternal?: (url: string) => Promise<void>;
+  /** Сообщить интерфейсу ссылку входа (её можно скопировать и открыть в другом браузере или в режиме инкогнито); null — вход завершён. */
+  onAuthUrl?: (url: string | null) => void;
   /** Списать единицы квоты YouTube (жёсткий предел 10 000 в сутки). */
   spend: (units: number) => void;
   /** Превращает ссылку на ролик (имя из «Готово» или путь) в файлы. */
@@ -152,6 +154,7 @@ export class YoutubeUploader {
           else if (u.searchParams.get('code')) resolve(u.searchParams.get('code')!);
         });
       });
+      this.d.onAuthUrl?.(url);
       await this.d.openExternal(url);
       const code = await codeP;
       const tok = await this.token({ grant_type: 'authorization_code', code, redirect_uri: redirect, code_verifier: verifier, client_id: clientId, client_secret: clientSecret });
@@ -163,6 +166,7 @@ export class YoutubeUploader {
       return this.status();
     } finally {
       server.close();
+      this.d.onAuthUrl?.(null);
     }
   }
 

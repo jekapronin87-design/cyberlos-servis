@@ -159,10 +159,16 @@ function YoutubeCard({ target, onTarget }: { target: string | null; onTarget: (n
   const [privacy, setPrivacy] = useState<'private' | 'unlisted' | 'public'>('private');
   const [prog, setProg] = useState<{ pct: number; stage: string } | null>(null);
   const [res, setRes] = useState<YtUploadResultDto | null>(null);
+  const [authLink, setAuthLink] = useState<string | null>(null);
 
   useEffect(() => {
+    const off = window.jarvis.ytUpload.onAuthLink(setAuthLink);
     void window.jarvis.ytUpload.status().then((s) => { setSt(s); setCid(s.clientId); }, () => undefined);
-    return window.jarvis.ytUpload.onProgress(setProg);
+    const off2 = window.jarvis.ytUpload.onProgress(setProg);
+    return () => {
+      off();
+      off2();
+    };
   }, []);
   useEffect(() => {
     if (target) {
@@ -222,6 +228,28 @@ function YoutubeCard({ target, onTarget }: { target: string | null; onTarget: (n
           <button className="btn btn-primary" id="yt-connect" disabled={busy} onClick={() => void run(async () => { setMsg({ ok: true, text: 'Открыл окно входа Google в браузере — войдите тем аккаунтом, где ваш канал. Если Google пишет «Приложение не проверено», нажмите «Дополнительно» → «Перейти на Системно» (это ваше собственное приложение).' }); setSt(await window.jarvis.ytUpload.connect()); setMsg({ ok: true, text: 'YouTube подключён.' }); })}>Подключить YouTube</button>
           <button className="btn" onClick={() => void run(async () => setSt(await window.jarvis.ytUpload.disconnect()))}>Сбросить настройки</button>
         </div>
+      )}
+      {authLink && (
+        <div className="banner banner-demo" data-testid="yt-link">
+          Жду, пока вы войдёте в Google. Если окно открылось не в том браузере или Google подставил не тот аккаунт или канал — скопируйте ссылку и откройте её в <strong>окне инкогнито</strong> (Ctrl+Shift+N в Chrome) или в другом браузере:
+          <div className="row" style={{ marginTop: 6 }}>
+            <input readOnly value={authLink} onFocus={(e) => e.currentTarget.select()} style={{ flex: 1 }} />
+            <button className="btn" onClick={() => void navigator.clipboard.writeText(authLink).catch(() => undefined)}>Скопировать ссылку</button>
+          </div>
+        </div>
+      )}
+      {st?.hasClient && (
+        <details className="yt-help">
+          <summary>Подключается не тот канал? Как выбрать нужный</summary>
+          <ol className="small">
+            <li>Нажмите <strong>«Забыть доступ в Google»</strong> ниже: откроется страница, где найдите «Системно» → «Удалить доступ» («Delete all connections»). Тогда Google забудет прежний выбор канала.</li>
+            <li>Вернитесь сюда: «Сменить канал / отключить» → «Подключить YouTube».</li>
+            <li>В окне Google сначала выберите аккаунт, а потом (если спросит) — <strong>канал или «бренд-аккаунт»</strong> «Евгений Системно». Каналы, созданные отдельно, часто лежат в списке как отдельные пункты со своими названиями.</li>
+            <li>Если нужного канала в списке нет — откройте YouTube, нажмите на свой аватар → «Сменить аккаунт» → выберите «Евгений Системно». Потом снова нажмите «Подключить» и вставьте ссылку входа в окно инкогнито, где сначала войдите в YouTube этим каналом.</li>
+            <li>После входа здесь должно появиться название канала, а кнопка «Открыть этот канал» покажет его в браузере.</li>
+          </ol>
+          <button className="btn" onClick={() => void window.jarvis.ytUpload.openPermissions().catch(() => undefined)}>Забыть доступ в Google (открыть страницу)</button>
+        </details>
       )}
       {st?.connected && (
         <div className="yt-conn" data-testid="yt-connected">

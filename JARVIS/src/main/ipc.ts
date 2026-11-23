@@ -325,6 +325,10 @@ export function registerIpc(opts: {
     client: 'https://console.cloud.google.com/auth/clients/create',
   };
   handle(IPC.ytuCheck, () => core.ytUpload.refreshStatus(true));
+  handle(IPC.ytuPermissions, async () => {
+    await shell.openExternal('https://myaccount.google.com/permissions');
+  });
+  core.onYtAuthUrl((u) => send(IPC.evtYtuLink, u));
   handle(IPC.ytuOpenChannel, async (_e, id) => {
     const c = str(id, 'channelId', 40);
     if (!/^UC[\w-]{22}$/.test(c)) throw new Error('Некорректный номер канала.');

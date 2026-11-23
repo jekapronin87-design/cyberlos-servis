@@ -123,6 +123,7 @@ export const IPC = {
   ytuUpload: 'ytu:upload',
   ytuOpenStep: 'ytu:openStep',
   ytuCheck: 'ytu:check',
+  ytuPermissions: 'ytu:permissions',
   ytuOpenChannel: 'ytu:openChannel',
   agentsList: 'agents:list',
   agentsTemplates: 'agents:templates',
@@ -176,6 +177,7 @@ export const IPC = {
   evtShow: 'evt:show',
   evtVideo: 'evt:video',
   evtYtu: 'evt:ytu',
+  evtYtuLink: 'evt:ytuLink',
   profileGet: 'profile:get',
   profileSet: 'profile:set',
   profileClear: 'profile:clear',
@@ -291,6 +293,10 @@ export interface JarvisApi {
     /** Загрузка готового ролика (по кнопке; доступ по умолчанию закрытый). */
     upload(spec: { video: string; title: string; description: string; tags: string[]; privacy: 'private' | 'unlisted' | 'public' }): Promise<YtUploadResultDto>;
     onProgress(cb: (p: { pct: number; stage: string }) => void): () => void;
+    /** Ссылка входа Google, пока ждём вход (null — вход завершён): её можно скопировать и открыть в другом браузере или в режиме инкогнито. */
+    onAuthLink(cb: (url: string | null) => void): () => void;
+    /** Открывает страницу Google, где можно отозвать доступ Системно (после этого Google забывает прежний канал). */
+    openPermissions(): Promise<void>;
     /** Открывает в браузере страницу Google для шага мастера настройки (адреса зашиты в программе). */
     openStep(step: 'lang' | 'project' | 'api' | 'consent' | 'audience' | 'client'): Promise<void>;
   };
