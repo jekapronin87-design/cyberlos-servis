@@ -230,3 +230,15 @@ describe('картинки', () => {
     expect(h.core.tools.list().find((t) => t.name === 'image_generate')!.risk).toBe('medium');
   });
 });
+
+import Anthropic from '@anthropic-ai/sdk';
+import { describeApiError } from '../src/core/providers/anthropic';
+describe('Понятные ошибки Anthropic', () => {
+  it('400 показывает настоящую причину; закончились деньги — отдельное объяснение; ключ не утекает', () => {
+    const mk = (status: number, message: string) => new Anthropic.APIError(status, { type: 'error', error: { type: 'invalid_request_error', message } }, message, new Headers());
+    expect(describeApiError(mk(400, 'Your credit balance is too low to access the Anthropic API.'))).toMatch(/закончились деньги/);
+    expect(describeApiError(mk(400, 'tools.3.input_schema: bad'))).toContain('tools.3.input_schema: bad');
+    expect(describeApiError(mk(400, 'key sk-ant-abcdef123456 bad'))).not.toContain('abcdef123456');
+    expect(describeApiError(mk(400, 'prompt is too long: 250000 tokens'))).toMatch(/слишком длинным/);
+  });
+});

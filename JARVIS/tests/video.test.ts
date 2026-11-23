@@ -69,7 +69,7 @@ describe('Видео: субтитры и ffmpeg', () => {
   it('разбор вывода ffmpeg: длительность, размер с поворотом телефона, наличие звука; экранирование путей Windows', () => {
     const log = 'Duration: 00:01:05.50, start: 0.0\n  Stream #0:0: Video: h264, yuv420p, 1920x1080, 30 fps\n  displaymatrix: rotation of -90.00 degrees\n  Stream #0:1: Audio: aac';
     expect(parseMediaInfo(log)).toMatchObject({ durationSec: 65.5, width: 1080, height: 1920, hasAudio: true, hasVideo: true });
-    expect(escFilterPath("C:\\Windows\\Fonts")).toBe('C\\:/Windows/Fonts');
+    expect(escFilterPath('C:\\Windows\\Fonts')).toBe('C\\\\:/Windows/Fonts'); // два уровня экранирования: на Windows это ломало монтаж
   });
 
   it('планировщик: реакция = длина показываемого видео, дальше рассказ; ошибки без звука и без второго видео', async () => {
@@ -187,4 +187,20 @@ describe('Видео-студия', () => {
     expect(list).toContain('Я на камеру.mp4');
     expect(list).toContain('для обложки');
   }, 240_000);
+});
+
+describe('Пути с двоеточием в фильтрах ffmpeg (как «C:» на Windows)', () => {
+  it('каталог шрифтов с двоеточием в имени принимается ffmpeg и в -vf, и в filter_complex', () => {
+    const base = mkdtempSync(join(tmpdir(), 'jv-colon-'));
+    const fonts = join(base, 'C:Windows');
+    mkdirSync(fonts);
+    writeFileSync(join(base, 'subs.ass'), buildAss([{ w: 'Привет', s: 0.2, e: 0.9 }], { width: 360, height: 640 }), 'utf8');
+    const esc = escFilterPath(fonts);
+    mk(['-f', 'lavfi', '-i', 'color=c=black:s=360x640:d=1', '-frames:v', '1', join(base, 'bg.png')]);
+    // -vf
+    execFileSync(FF, ['-hide_banner', '-loglevel', 'error', '-y', '-i', 'bg.png', '-vf', `ass=subs.ass:fontsdir=${esc}`, '-frames:v', '1', 'out1.png'], { cwd: base, stdio: 'pipe' });
+    // filter_complex
+    execFileSync(FF, ['-hide_banner', '-loglevel', 'error', '-y', '-i', 'bg.png', '-filter_complex', `[0:v]ass=subs.ass:fontsdir=${esc}[v]`, '-map', '[v]', '-frames:v', '1', 'out2.png'], { cwd: base, stdio: 'pipe' });
+    expect(existsSync(join(base, 'out1.png')) && existsSync(join(base, 'out2.png'))).toBe(true);
+  });
 });

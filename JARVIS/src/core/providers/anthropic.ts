@@ -124,7 +124,12 @@ export function describeApiError(err: unknown): string {
     if (err.status === 404) return 'Модель не найдена. Проверьте название модели в настройках.';
     if (err.status === 429) return 'Превышен лимит запросов API. Попробуйте позже.';
     if (err.status && err.status >= 500) return 'Сервис Anthropic временно недоступен. Попробуйте позже.';
-    return `Ошибка API (${err.status ?? 'нет статуса'}).`;
+    // Настоящая причина от сервиса (без ключей): чаще всего «закончились деньги на счёте» или «слишком длинный запрос»
+    const inner = (err.error as { error?: { message?: unknown } } | undefined)?.error?.message;
+    const msg = typeof inner === 'string' ? inner.replace(/\b(sk|ek)-[A-Za-z0-9_*.-]{4,}/g, '[ключ]').slice(0, 260) : '';
+    if (/credit balance/i.test(msg)) return 'На счёте Anthropic закончились деньги (Billing → пополнить баланс). Пока можно включить бесплатные модели в «Настройки → Модели».';
+    if (/prompt is too long|too many tokens|context/i.test(msg)) return 'Диалог стал слишком длинным для модели — начните новый диалог.';
+    return `Ошибка API (${err.status ?? 'нет статуса'})${msg ? ': ' + msg : ''}.`;
   }
   if (err instanceof Anthropic.APIConnectionError) return 'Нет соединения с API. Проверьте интернет.';
   return err instanceof Error ? err.message : 'Неизвестная ошибка';

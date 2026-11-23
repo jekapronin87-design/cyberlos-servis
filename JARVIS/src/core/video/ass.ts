@@ -15,6 +15,11 @@ const COLORS: Record<SubStyle, { fill: string; base: string; outline: string; ac
   clean: { fill: '&H00FFFFFF', base: '&H00FFFFFF', outline: '&H00202020', accent: '&H00FFFFFF' },
 };
 
+/** Каталог шрифтов для libass: на Windows не нужен (ffmpeg сам берёт системные шрифты через DirectWrite), на Linux/macOS — каталог шрифтов. */
+export function fontsDirFor(platform: string = process.platform): string | null {
+  return platform === 'win32' ? null : defaultFont(platform).dir;
+}
+
 export function defaultFont(platform: string = process.platform): { name: string; dir: string | null; file: string } {
   if (platform === 'win32') return { name: 'Arial Black', dir: 'C:/Windows/Fonts', file: 'C:/Windows/Fonts/ariblk.ttf' };
   if (platform === 'darwin') return { name: 'Arial Black', dir: '/System/Library/Fonts/Supplemental', file: '/System/Library/Fonts/Supplemental/Arial Black.ttf' };

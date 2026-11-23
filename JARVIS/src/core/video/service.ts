@@ -6,9 +6,9 @@ import { nowIso, type Db } from '../db/database';
 import type { AuditLog } from '../security/audit';
 import type { ToolRegistry } from '../tools/registry';
 import type { VoiceService } from '../voice/service';
-import { buildAss, buildCoverAss, chunkWords, defaultFont, fitSize, wrapTitle, type Word } from './ass';
+import { buildAss, buildCoverAss, chunkWords, defaultFont, fitSize, fontsDirFor, wrapTitle, type Word } from './ass';
 import { locateFfmpeg, probe, runFfmpeg, type MediaInfo } from './ffmpeg';
-import { planMontage } from './montage';
+import { escFilterPath, planMontage } from './montage';
 import { ART_STYLES, avatarAss, avatarBackground, bannerAss, bannerBackground, type ArtStyle } from './art';
 
 const EXT = /\.(mp4|mov|m4v|mkv|webm|avi|mpg|mpeg|wmv)$/i;
@@ -308,7 +308,7 @@ export class VideoService {
       // монтаж
       set('render', 'run', 0);
       const outName = `${name}.mp4`;
-      const mp = planMontage({ layout, face, ref, width: W, height: H, ass: assName, fontsDir: defaultFont().dir && existsSync(defaultFont().dir!) ? defaultFont().dir : null, out: join(tmp, 'out.mp4') });
+      const mp = planMontage({ layout, face, ref, width: W, height: H, ass: assName, fontsDir: fontsDirFor() && existsSync(fontsDirFor()!) ? fontsDirFor() : null, out: join(tmp, 'out.mp4') });
       let last = 0;
       await runFfmpeg(mp.args, {
         bin,
@@ -361,7 +361,8 @@ export class VideoService {
   private async coverFrom(video: string | null, atSec: number, title: string, style: 'bold' | 'neon' | 'clean', out: string, W: number, H: number, tmp: string, signal?: AbortSignal, bgImage?: string): Promise<void> {
     const font = defaultFont();
     writeFileSync(join(tmp, 'cover.ass'), buildCoverAss({ width: W, height: H, style, font: font.name, title, kicker: undefined }), 'utf8');
-    const fonts = font.dir && existsSync(font.dir) ? `:fontsdir=${font.dir.replace(/\\/g, '/').replace(/:/g, '\\:')}` : '';
+    const fd = fontsDirFor();
+    const fonts = fd && existsSync(fd) ? `:fontsdir=${escFilterPath(fd)}` : '';
     const vf = `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},eq=brightness=-0.06:saturation=1.15,drawbox=y=ih*0.36:w=iw:h=ih*0.64:color=black@0.38:t=fill,drawbox=y=ih*0.6:w=iw:h=ih*0.4:color=black@0.32:t=fill,ass=cover.ass${fonts}`;
     const input = bgImage ? ['-i', bgImage] : ['-ss', atSec.toFixed(2), '-i', video!];
     await runFfmpeg([...input, '-frames:v', '1', '-vf', vf, out], { bin: this.bin(), cwd: tmp, signal });
@@ -417,7 +418,8 @@ export class VideoService {
     mkdirSync(dir, { recursive: true });
     const tmp = mkdtempSync(join(tmpdir(), 'jarvis-art-'));
     const font = defaultFont();
-    const fonts = font.dir && existsSync(font.dir) ? `:fontsdir=${font.dir.replace(/\\/g, '/').replace(/:/g, '\\:')}` : '';
+    const fd = fontsDirFor();
+    const fonts = fd && existsSync(fd) ? `:fontsdir=${escFilterPath(fd)}` : '';
     try {
       const W = 2560;
       const H = 1440;
