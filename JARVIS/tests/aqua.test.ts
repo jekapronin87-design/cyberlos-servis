@@ -25,7 +25,13 @@ function fakeCrm() {
     if (mode === 'redirect') return new Response('', { status: 307, headers: { location: 'https://evil.example/steal' } });
     if (mode === 'html') return new Response('<html>', { status: 200 });
     const p = new URL(url).pathname;
-    if (p === '/api/readonly/health') return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    if (p === '/api/readonly/health')
+      return new Response(JSON.stringify({ ok: true, key: { name: 'Системно', scopes: ['sales', 'summary'], revealPii: false }, endpoints: [{ path: '/api/readonly/deals', description: 'Сделки', filters: ['pipelineId', 'q'] }] }), { status: 200 });
+    if (p === '/api/readonly/tasks') {
+      const cur = new URL(url).searchParams.get('cursor');
+      const page = cur === 'c2' ? 3 : cur === 'c1' ? 2 : 1;
+      return new Response(JSON.stringify({ ok: true, count: 1, nextCursor: page === 3 ? null : `c${page}`, data: [{ id: `t${page}`, title: `Задача ${page}` }] }), { status: 200 });
+    }
     if (p === '/api/readonly/deals')
       return new Response(JSON.stringify({ items: [{ id: 'd1', title: 'Септик для Ивана', phone: '+7 912 345-67-89', note: 'пишите ivan@mail.ru', amount: 123456789012 }], nextCursor: null }), { status: 200 });
     return new Response('{}', { status: 404 });
@@ -70,7 +76,7 @@ describe('Аквамастер: подключение по ключу', () => {
     await expect(h.core.tools.get('crm_live_get')!.execute({ path: 'deals' }, ctx)).rejects.toThrow(/не подключена/);
     h.core.aquaSave({ baseUrl: '', maskPii: true }, KEY);
     expect(h.core.aquaStatus()).toMatchObject({ configured: true, hasKey: true });
-    await h.core.aquaTest();
+    expect(await h.core.aquaTest()).toContain('sales, summary');
     expect(h.secrets.get('aqua.key')).toBe(KEY);
     expect(JSON.stringify(h.core.listAudit(200))).not.toContain(KEY);
     expect(c.calls.every((x) => !x.url.includes(KEY))).toBe(true);
@@ -131,11 +137,28 @@ describe('Аквамастер: подключение по ключу', () => {
     await expect(h.core.aquaTest()).rejects.toThrow(/не JSON/);
   });
 
-  it('crm_live_index без индекса у CRM подсказывает известные разделы; инструменты только для чтения и входят в группу «CRM»', async () => {
+  it('листание: pages=3 склеивает страницы по nextCursor; pages=1 даёт одну страницу и курсор', async () => {
+    const { h, c } = setup();
+    h.core.aquaSave({ baseUrl: '', maskPii: true }, KEY);
+    const one = JSON.parse(String(await h.core.tools.get('crm_live_get')!.execute({ path: 'tasks' }, ctx)));
+    expect(one).toMatchObject({ count: 1, nextCursor: 'c1' });
+    const all = JSON.parse(String(await h.core.tools.get('crm_live_get')!.execute({ path: 'tasks', pages: 3, query: { limit: 1 } }, ctx)));
+    expect(all.data.map((x: { id: string }) => x.id)).toEqual(['t1', 't2', 't3']);
+    expect(all.nextCursor).toBeNull();
+    const urls = c.calls.map((x) => x.url);
+    expect(urls.some((u) => u.includes('cursor=c2'))).toBe(true);
+    const many = JSON.parse(String(await h.core.tools.get('crm_live_get')!.execute({ path: 'tasks', pages: 99 }, ctx)));
+    expect(many.data.length).toBe(3); // страницы кончились раньше лимита 5
+  });
+
+  it('crm_live_index показывает разделы ключа и адреса из health, плюс известные пути; инструменты только для чтения и входят в группу «CRM»', async () => {
     const { h } = setup();
     h.core.aquaSave({ baseUrl: '', maskPii: true }, KEY);
     const idx = String(await h.core.tools.get('crm_live_index')!.execute({}, ctx));
-    expect(idx).toContain('summary');
+    expect(idx).toContain('разделы sales, summary');
+    expect(idx).toContain('/api/readonly/deals — Сделки');
+    expect(idx).toContain('cold-leads');
+    expect(idx).toContain('city/summary');
     for (const n of ['crm_live_status', 'crm_live_index', 'crm_live_get']) {
       const t = h.core.tools.list().find((x) => x.name === n)!;
       expect(t.mutates, n).toBe(false);

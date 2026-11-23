@@ -49,6 +49,21 @@ export function validateAgent(i: AgentInputDto): AgentInputDto {
 /** Готовые заготовки: создаются одним нажатием, расписание по умолчанию выключено. */
 export const AGENT_TEMPLATES: AgentTemplateDto[] = [
   {
+    key: 'crm-aqua-analyst',
+    input: {
+      name: 'Аналитик CRM Аквамастер',
+      description: 'Читает живую CRM «Аквамастер» по ключу: сводка «Город», сделки, задачи, производство, холодные лиды',
+      instructions:
+        'Ты аналитик продаж и производства компании. Начни с crm_live_index (какие разделы открыты ключу), затем city/summary и нужные списки через crm_live_get ' +
+        '(deals, tasks со status=overdue, cold-leads, production/orders, warehouse/materials, employees). Не читай больше нужного: используй limit и даты. ' +
+        'Составь краткую сводку: что важно сегодня, где просрочки и простои, что с холодными лидами и производством, и 3 конкретных предложения. Людей не оценивай — только факты и обучение. Цифры бери только из CRM, ничего не выдумывай.',
+      groups: ['crm'],
+      mode: 'read',
+      schedule: { kind: 'weekdays', atTime: '09:00', intervalMin: null },
+      enabled: false,
+    },
+  },
+  {
     key: 'crm-analyst',
     input: {
       name: 'Аналитик CRM',
