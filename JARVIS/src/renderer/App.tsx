@@ -10,12 +10,12 @@ import { AuditView } from './views/AuditView';
 import { ChatView } from './views/ChatView';
 import { CrmView } from './views/CrmView';
 import { JobsView } from './views/JobsView';
-import { parseAppIntent, parseNavIntent } from '../shared/voice';
+import { parseAppIntent, parseNavIntent, parseSectionIntent } from '../shared/voice';
 import { MentorView } from './views/MentorView';
 import { CallsView } from './views/CallsView';
 import { TelegramView } from './views/TelegramView';
 import { AgentsView } from './views/AgentsView';
-import { SpaceView, type SpaceMode } from './views/SpaceView';
+import { SpaceView, type SectionRequest, type SpaceMode } from './views/SpaceView';
 import { SpaceBackground } from './hud/SpaceBackground';
 import { ambient, installUiSounds, uiSounds } from './audio/uiSounds';
 import { MemoryView } from './views/MemoryView';
@@ -257,6 +257,27 @@ export function App() {
     return true;
   };
 
+  const [sectionReq, setSectionReq] = useState<SectionRequest | null>(null);
+  /** Ответ ассистента голосом, не покидая текущий экран (например, пока открыта таблица раздела). */
+  const narrate = async (text: string): Promise<void> => {
+    const st = settingsRef.current;
+    if (st.ttsMode !== 'off') session.current = new SpeechSession({ mode: st.ttsMode, systemVoice: st.systemVoice, speed: st.ttsSpeed, onError: setError });
+    await send(text);
+  };
+  /** «Покажи, что у нас в производстве»: открывает раздел живой CRM и рассказывает о нём. Без живой CRM разбирается модель обычным путём. */
+  const openSectionByIntent = async (text: string): Promise<boolean> => {
+    const it = parseSectionIntent(text);
+    if (!it) return false;
+    const live = await window.jarvis.aqua.get().then((s) => s.hasKey, () => false);
+    if (!live) return false;
+    uiSounds.play('open');
+    setSpaceMode('analytics');
+    setView('space');
+    setSectionReq({ kind: it.kind, pipelineLike: it.pipelineLike, nonce: Date.now() });
+    void narrate(`Проанализируй раздел CRM «${it.title}»: прочитай данные через crm_live_get (при необходимости сначала crm_live_index) и коротко расскажи, что сейчас происходит, где проблемы и что сделать в первую очередь.`);
+    return true;
+  };
+
   /** «Открой хром»: запуск программы без обращения к модели. Если программа не найдена — разберётся модель. */
   const launchByIntent = async (text: string): Promise<boolean> => {
     const q = parseAppIntent(text);
@@ -276,6 +297,7 @@ export function App() {
 
   const send = async (text: string): Promise<void> => {
     if (navigateByIntent(text)) return;
+    if (await openSectionByIntent(text)) return;
     if (await launchByIntent(text)) return;
     try {
       let id = activeId;
@@ -346,7 +368,7 @@ export function App() {
       // Голосовая команда: отвечаем голосом, по мере того как ответ генерируется
       const st = settingsRef.current;
       session.current = new SpeechSession({ mode: st.ttsMode, systemVoice: st.systemVoice, speed: st.ttsSpeed, onError: setError });
-      if (parseNavIntent(text) || parseAppIntent(text)) return void send(text);
+      if (parseNavIntent(text) || parseSectionIntent(text) || parseAppIntent(text)) return void send(text);
       setView((v) => (v === 'settings' || v === 'audit' || v === 'memory' || v === 'space' ? 'hud' : v));
       void send(text);
     },
@@ -537,7 +559,7 @@ export function App() {
           setSettings(await window.jarvis.settings.update(p));
           await refreshInfo();
         }} />}
-        {view === 'space' && <SpaceView mode={spaceMode} onMode={setSpaceMode} onClose={() => setView('hud')} onAsk={(t) => void sendSpoken(t)} orbState={orbState} getLevel={getLevel} />}
+        {view === 'space' && <SpaceView mode={spaceMode} onMode={setSpaceMode} onClose={() => setView('hud')} onAsk={(t) => void sendSpoken(t)} onNarrate={(t) => void narrate(t)} request={sectionReq} orbState={orbState} getLevel={getLevel} />}
         {view === 'jobs' && <JobsView onOpenConversation={(id) => void openConversation(id)} />}
         {view === 'crm' && <CrmView onAsk={(t) => void sendSpoken(t)} onOpenSettings={() => setView('settings')} />}
         {view === 'profile' && (

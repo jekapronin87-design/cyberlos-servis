@@ -9,7 +9,7 @@ import { YoutubeCard } from '../components/YoutubeCard';
 import { AquaCard } from '../components/AquaCard';
 import { MicTest } from '../components/MicTest';
 import { UpdateCard } from '../components/UpdateCard';
-import { listSystemVoices, speak } from '../voice/speech';
+import { listSystemVoices, speak, ttsDiag } from '../voice/speech';
 
 const OPENAI_VOICES = ['onyx', 'ash', 'echo', 'fable', 'sage', 'verse', 'ballad', 'alloy', 'coral', 'nova', 'shimmer'];
 
@@ -215,6 +215,12 @@ export function SettingsView(props: {
           </select>
           <small className="muted">Скажите имя один раз («{s.assistantName}, доброе утро») — дальше можно разговаривать без него; фраза «пока» или «отбой» заканчивает беседу. Голосом можно сказать «стоп», чтобы остановить задачу. Опасные действия голосом не подтверждаются — только кнопкой в окне.</small>
         </label>
+        {s.ttsMode === 'system' && (
+          <div className="banner banner-demo" id="tts-system-hint">
+            Сейчас включены <strong>голоса Windows</strong>: они звучат роботизированно, а между предложениями бывают паузы по несколько секунд — это ограничение самих голосов Windows. Естественный голос и без пауз даёт облачный синтез.{' '}
+            <button className="btn btn-primary" onClick={() => void run(() => props.onUpdate({ ttsMode: 'api' }), 'Включён облачный голос. Нажмите «▶ Проверить голос».')}>Включить облачный голос</button>
+          </div>
+        )}
         <label className="field">
           <span>Озвучка ответов (на голосовые команды)</span>
           <select value={s.ttsMode} onChange={(e) => run(() => props.onUpdate({ ttsMode: e.target.value as Settings['ttsMode'] }), 'Сохранено')}>
@@ -237,7 +243,9 @@ export function SettingsView(props: {
                 setMsg({ ok: true, text: 'Проверяю голос…' });
                 let failure = '';
                 await speak('Добрый день. Это мой голос. Все системы работают в штатном режиме.', s.ttsMode, { systemVoice: s.systemVoice, speed: s.ttsSpeed, onError: (m) => (failure = m) });
-                setMsg(failure ? { ok: false, text: failure } : { ok: true, text: 'Голос проигран. Если вы ничего не слышали, проверьте громкость и устройство вывода звука Windows.' });
+                const dg = ttsDiag;
+                const timing = dg.firstMs !== null ? ` Замер: первый звук через ${(dg.firstMs / 1000).toFixed(1)} с${dg.sentences > 1 ? `, самая длинная пауза между предложениями ${(dg.maxGapMs / 1000).toFixed(1)} с` : ''}.` : '';
+                setMsg(failure ? { ok: false, text: failure } : { ok: true, text: `Голос проигран. Если вы ничего не слышали, проверьте громкость и устройство вывода звука Windows.${timing}` });
               }}>
               ▶ Проверить голос
             </button>

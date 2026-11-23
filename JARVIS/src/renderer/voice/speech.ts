@@ -11,6 +11,8 @@ let generation = 0; // растёт при каждой отмене — «ст�
 
 let speakingSince: number | null = null;
 let lastSpokeEnd = 0;
+/** Когда отзвучало последнее предложение (даже если реплика ещё не закончена) — от него считается «хвост» эха. */
+let lastSoundEnd = 0;
 let lastActivity = 0;
 /** Если «говорит» и нет признаков жизни (звук не идёт, слова не произносятся) дольше этого — считаем, что озвучка зависла. */
 const STALL_MS = 20_000;
@@ -42,6 +44,15 @@ let pendingTts = 0;
 /** Реально ли что-то звучит или вот-вот зазвучит. */
 const reallyActive = (): boolean => pendingTts > 0 || document.querySelector('audio[data-jv-tts]') !== null || window.speechSynthesis?.speaking === true;
 
+/**
+ * Звучит ли что-то ПРЯМО СЕЙЧАС (колонки действительно играют). Отличается от isSpeaking(): между предложениями (пока следующее ещё синтезируется)
+ * ассистент «говорит», но колонки молчат — в эту паузу вашу речь нельзя считать эхом.
+ */
+export const isAudibleNow = (): boolean => activeAudio > 0 || window.speechSynthesis?.speaking === true;
+
+/** Измерения озвучки последней реплики — показываются в «Проверить микрофон», чтобы было видно, где тормозит. */
+export const ttsDiag: { mode: string; firstMs: number | null; maxGapMs: number; sentences: number; at: number } = { mode: '', firstMs: null, maxGapMs: 0, sentences: 0, at: 0 };
+
 export const isSpeaking = (): boolean => {
   if (speaking) {
     const idle = performance.now() - lastActivity;
@@ -50,7 +61,7 @@ export const isSpeaking = (): boolean => {
   }
   return speaking;
 };
-export const speechState = (): { speakingSince: number | null; lastSpokeEnd: number } => ({ speakingSince, lastSpokeEnd });
+export const speechState = (): { speakingSince: number | null; lastSpokeEnd: number } => ({ speakingSince, lastSpokeEnd: Math.max(lastSpokeEnd, lastSoundEnd) });
 
 /** Что ассистент произносил недавно (для отсева эха по смыслу). */
 const spokenLog: { t: number; text: string }[] = [];
@@ -193,11 +204,27 @@ export class SpeechSession {
   private gen: number;
   private chain: Promise<void> = Promise.resolve();
   private emitted = false;
-  private fetches: Promise<Blob | null>[] = [];
+  private t0 = 0;
+  private lastEnd = 0;
+  /** Очередь «поставить реплику в очередь голоса Windows»: следующая реплика ставится сразу, не дожидаясь конца предыдущей (иначе между предложениями паузы). */
+  private sysStart: Promise<void> = Promise.resolve();
 
   constructor(private o: SpeechOptions) {
     cancelSpeech();
     this.gen = generation;
+    Object.assign(ttsDiag, { mode: o.mode, firstMs: null, maxGapMs: 0, sentences: 0, at: Date.now() });
+  }
+
+  /** Фиксирует начало звучания очередного предложения: время до первого звука и самая длинная пауза между предложениями. */
+  private markStart(): void {
+    const now = performance.now();
+    ttsDiag.sentences += 1;
+    if (ttsDiag.firstMs === null) ttsDiag.firstMs = Math.round(now - this.t0);
+    else if (this.lastEnd) ttsDiag.maxGapMs = Math.max(ttsDiag.maxGapMs, Math.round(now - this.lastEnd));
+  }
+  private markEnd(): void {
+    this.lastEnd = performance.now();
+    lastSoundEnd = this.lastEnd;
   }
 
   private get alive(): boolean {
@@ -232,6 +259,7 @@ export class SpeechSession {
 
   private enqueue(sentence: string): void {
     this.emitted = true;
+    if (!this.t0) this.t0 = performance.now();
     const text = textForSpeech(sentence, 600);
     if (!text) return;
     spokenLog.push({ t: performance.now(), text });
@@ -256,7 +284,16 @@ export class SpeechSession {
         if (blob && this.alive) await this.playBlob(blob);
       });
     } else {
-      this.chain = this.chain.then(() => (this.alive ? this.sayWithSystem(text) : undefined));
+      let ended: Promise<void> = Promise.resolve();
+      const started = (this.sysStart = this.sysStart.then(async () => {
+        if (!this.alive || !window.speechSynthesis) return;
+        const voices = await voicesReady();
+        if (this.alive) ended = this.queueUtterance(text, voices); // speak() вызывается сразу: Windows сам проиграет по очереди без пауз
+      }));
+      this.chain = this.chain.then(async () => {
+        await started;
+        await ended;
+      });
     }
   }
 
@@ -274,6 +311,7 @@ export class SpeechSession {
     audio.playbackRate = Math.min(1.8, Math.max(0.7, this.o.speed ?? 1)); // живее, но голос не «пищит»: высота тона сохраняется
     audio.preservesPitch = true;
     audio.ontimeupdate = touch;
+    audio.onplaying = () => this.markStart();
     await new Promise<void>((resolve) => {
       // Сторож: длительность неизвестна заранее, поэтому ждём не дольше 90 с на предложение.
       const guard = window.setTimeout(() => resolve(), 90_000);
@@ -293,33 +331,43 @@ export class SpeechSession {
       });
     });
     if (viaAnalyser) activeAudio = Math.max(0, activeAudio - 1);
+    this.markEnd();
     audio.remove();
     URL.revokeObjectURL(url);
   }
 
-  private async sayWithSystem(text: string): Promise<void> {
-    if (!window.speechSynthesis) return;
-    const voices = await voicesReady();
-    await new Promise<void>((resolve) => {
+  /** Ставит фразу в очередь голоса Windows и возвращает обещание, которое выполнится, когда она отзвучит. */
+  private queueUtterance(text: string, voices: SpeechSynthesisVoice[]): Promise<void> {
+    return new Promise<void>((resolve) => {
       const u = new SpeechSynthesisUtterance(text);
       u.lang = 'ru-RU';
       const v = pickVoice(voices, this.o.systemVoice ?? '');
       if (v) u.voice = v;
       u.rate = 1.0 * Math.min(1.8, Math.max(0.7, this.o.speed ?? 1));
-      u.pitch = 0.82; // чуть ниже — солиднее
+      u.pitch = 0.9; // чуть ниже — солиднее, но без «растянутости»
+      let guard = 0;
+      const arm = (): void => {
+        window.clearTimeout(guard);
+        // У голосов Windows событие окончания иногда не приходит — не ждём дольше разумного после последнего признака жизни.
+        guard = window.setTimeout(() => {
+          window.speechSynthesis.cancel();
+          resolve();
+        }, Math.max(8000, text.length * 120));
+      };
       u.onboundary = () => {
         pseudo = 0.7 + Math.random() * 0.3;
         pseudoAt = performance.now();
         touch();
+        arm();
       };
-      u.onstart = touch;
-      // У голосов Windows событие окончания иногда не приходит — не ждём дольше разумного.
-      const guard = window.setTimeout(() => {
-        window.speechSynthesis.cancel();
-        resolve();
-      }, Math.max(8000, text.length * 120));
+      u.onstart = () => {
+        touch();
+        arm();
+        this.markStart();
+      };
       u.onend = u.onerror = () => {
         window.clearTimeout(guard);
+        this.markEnd();
         resolve();
       };
       window.speechSynthesis.speak(u);

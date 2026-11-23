@@ -641,6 +641,14 @@ export interface AgentTemplateDto {
   input: AgentInputDto;
 }
 
+export interface AquaSectionDto {
+  title: string;
+  columns: string[];
+  rows: string[][];
+  total: number;
+  note?: string;
+}
+
 export interface AquaStatusDto {
   configured: boolean;
   baseUrl: string;

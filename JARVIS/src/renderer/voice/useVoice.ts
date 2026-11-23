@@ -3,7 +3,7 @@ import type { Settings } from '../../shared/types';
 import { isEchoOfSpeech, isEndPhrase, isJunkTranscript, parseVoiceCommand, type UtteranceMeta } from '../../shared/voice';
 import { VoiceListener, type ListenerState } from './listener';
 import { uiSounds } from '../audio/uiSounds';
-import { cancelSpeech, isSpeaking, recentSpoken, speak, speechState } from './speech';
+import { cancelSpeech, isAudibleNow, isSpeaking, recentSpoken, speak, speechState } from './speech';
 
 export type VoiceUiState = 'idle' | 'listening' | 'hearing' | 'transcribing';
 
@@ -216,7 +216,9 @@ export function useVoice(p: {
         onLevel: setLevel,
         gate: () => {
           const s = speechState();
-          return { speaking: isSpeaking(), lastEnd: s.lastSpokeEnd };
+          // Эхом считаем только то, что звучит из колонок прямо сейчас. Пауза между предложениями (следующее ещё готовится) — это тишина, ваша речь в ней настоящая.
+          const speaking = isSpeaking() && isAudibleNow();
+          return { speaking, lastEnd: s.lastSpokeEnd };
         },
         onDropped: (why) => say(why === 'echo' ? 'Пока я говорил, микрофон слышал мой голос из колонок — это пропущено. Говорите после того, как я закончу (с наушниками можно перебивать).' : 'Слишком короткая фраза после моей речи — не расслышал. Повторите.', 'warn'),
         onUtterance: (b, meta) => {

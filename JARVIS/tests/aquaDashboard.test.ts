@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildAquaDashboard } from '../src/core/aqua/dashboard';
+import { buildAquaDashboard, buildAquaSection } from '../src/core/aqua/dashboard';
 import { makeCore } from './helpers';
 
 const NOW = new Date('2026-11-23T08:00:00.000Z');
@@ -130,5 +130,35 @@ describe('Аквамастер: сводка для «Города»', () => {
     const dash = await h.core.aquaDashboard();
     expect(dash.overview.stuck).toBe(1);
     expect(JSON.stringify(dash)).not.toContain('345-67-89');
+  });
+});
+
+describe('Аквамастер: таблицы по нажатию', () => {
+  it('простой, без ответственного, воронка/стадия, производство, задачи, материалы', async () => {
+    const { get } = fakeGet();
+    const stuck = await buildAquaSection(get, 'stuck', {}, NOW);
+    expect(stuck.total).toBe(1);
+    expect(stuck.rows[0]).toEqual(expect.arrayContaining(['Сделка d2', 'Продажа · КП', 'Иван Петров']));
+    const un = await buildAquaSection(get, 'unassigned', {}, NOW);
+    expect(un.rows.map((r) => r[1])).toEqual(['Сделка d3']);
+    const stage = await buildAquaSection(get, 'stage', { pipeline: 'Продажа', stage: 'КП' }, NOW);
+    expect(stage.total).toBe(2);
+    expect(stage.title).toBe('Продажа · КП');
+    const whole = await buildAquaSection(get, 'stage', { pipeline: 'Продажа' }, NOW);
+    expect(whole.total).toBe(5);
+    const prod = await buildAquaSection(get, 'production', {}, NOW);
+    expect(prod.total).toBe(2);
+    expect(prod.rows.some((r) => r.includes('просрочено'))).toBe(true);
+    const low = await buildAquaSection(get, 'lowstock', {}, NOW);
+    expect(low.rows[0]).toEqual(['Лист', '1', '5', 'шт']);
+    const tasks = await buildAquaSection(get, 'tasks', {}, NOW);
+    expect(tasks.columns[0]).toBe('Задача');
+  });
+  it('через ядро: неизвестный раздел и отсутствие ключа — понятные ошибки', async () => {
+    const h = makeCore({ crmFetch: (async () => new Response('{"ok":true,"data":[],"count":0,"nextCursor":null}', { status: 200 })) as unknown as typeof fetch });
+    await expect(h.core.aquaSection('stuck', {})).rejects.toThrow(/не подключена/);
+    h.core.aquaSave({ baseUrl: '', maskPii: true }, 'sro_TestKey1234567890abcdefghijklmnop');
+    await expect(h.core.aquaSection('hack' as never, {})).rejects.toThrow(/Неизвестный/);
+    expect((await h.core.aquaSection('stuck', {})).total).toBe(0);
   });
 });

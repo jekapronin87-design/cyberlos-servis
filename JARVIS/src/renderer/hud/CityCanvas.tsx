@@ -15,11 +15,13 @@ interface Building {
  * «Город бизнеса»: воронки — районы, стадии — здания. Высота здания — число сделок на стадии, красное свечение — нарушенные сроки (SLA).
  * Изометрия на Canvas 2D. Наведите курсор на здание — подсказка.
  */
-export function CityCanvas({ data }: { data: CrmDashboardDto }) {
+export function CityCanvas({ data, onPick }: { data: CrmDashboardDto; onPick?: (pick: { pipeline: string; stage: string }) => void }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null);
   const hit = useRef<{ poly: [number, number][]; b: Building }[]>([]);
   const mouse = useRef<{ x: number; y: number } | null>(null);
+  const onPickRef = useRef(onPick);
+  onPickRef.current = onPick;
 
   useEffect(() => {
     const canvas = ref.current!;
@@ -160,14 +162,23 @@ export function CityCanvas({ data }: { data: CrmDashboardDto }) {
       mouse.current = { x: e.clientX - r.left, y: e.clientY - r.top };
       const m = mouse.current;
       const f = [...hit.current].reverse().find((hb) => inPoly([m.x, m.y], hb.poly));
-      setTip(f ? { x: m.x, y: m.y, text: `${f.b.district} · ${f.b.label}: ${f.b.open} в работе${f.b.breaches ? `, просрочено по SLA: ${f.b.breaches}` : ''}` } : null);
+      canvas.style.cursor = f && onPickRef.current ? 'pointer' : 'default';
+      setTip(f ? { x: m.x, y: m.y, text: `${f.b.district} · ${f.b.label}: ${f.b.open} в работе${f.b.breaches ? `, без движения/просрочено: ${f.b.breaches}` : ''}${onPickRef.current ? ' — нажмите, чтобы открыть список' : ''}` } : null);
     };
     const leave = (): void => setTip(null);
+    const click = (e: MouseEvent): void => {
+      const r = canvas.getBoundingClientRect();
+      const pt: [number, number] = [e.clientX - r.left, e.clientY - r.top];
+      const f = [...hit.current].reverse().find((hb) => inPoly(pt, hb.poly));
+      if (f) onPickRef.current?.({ pipeline: f.b.district, stage: f.b.label });
+    };
+    canvas.addEventListener('click', click);
     canvas.addEventListener('mousemove', move);
     canvas.addEventListener('mouseleave', leave);
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      canvas.removeEventListener('click', click);
       canvas.removeEventListener('mousemove', move);
       canvas.removeEventListener('mouseleave', leave);
     };

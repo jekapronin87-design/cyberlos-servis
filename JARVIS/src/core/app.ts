@@ -817,6 +817,9 @@ export class JarvisCore {
   aquaDashboard() {
     return this.aqua.dashboard();
   }
+  aquaSection(kind: Parameters<AquaService['section']>[0], arg: { pipeline?: string; stage?: string }) {
+    return this.aqua.section(kind, arg);
+  }
   aquaTest(): Promise<string> {
     return this.aqua.test();
   }

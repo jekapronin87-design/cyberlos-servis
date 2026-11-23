@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import type { CrmDashboardDto } from '../../shared/types';
+import { useEffect, useRef, useState } from 'react';
+import type { AquaSectionDto, CrmDashboardDto } from '../../shared/types';
 import { CityCanvas } from '../hud/CityCanvas';
 import { Orb, type OrbState } from '../hud/Orb';
 import { SAMPLE_DASHBOARD } from '../hud/sampleData';
@@ -17,9 +17,17 @@ const ISSUE: Record<string, string> = {
 };
 
 export type SpaceMode = 'analytics' | 'city';
+export type SectionKind = 'production' | 'tasks' | 'stuck' | 'unassigned' | 'lowstock' | 'stage';
+/** Запрос открыть раздел (голосом или из интерфейса). `nonce` меняется при каждом запросе, чтобы повторная команда тоже срабатывала. */
+export interface SectionRequest {
+  kind: SectionKind;
+  /** Часть названия воронки («монтаж», «продаж») — для kind = stage, когда точное имя неизвестно. */
+  pipelineLike?: string;
+  nonce: number;
+}
 
 /** Полноэкранное «цифровое пространство»: шар сворачивается в угол, вокруг раскрываются карточки или город бизнеса. */
-export function SpaceView(props: { mode: SpaceMode; onMode: (m: SpaceMode) => void; onClose: () => void; onAsk: (text: string) => void; orbState: OrbState; getLevel: () => number }) {
+export function SpaceView(props: { mode: SpaceMode; onMode: (m: SpaceMode) => void; onClose: () => void; onAsk: (text: string) => void; orbState: OrbState; getLevel: () => number; request?: SectionRequest | null; onNarrate?: (text: string) => void }) {
   const [data, setData] = useState<CrmDashboardDto | null>(null);
   const [sample, setSample] = useState(false);
   const [note, setNote] = useState('');
@@ -59,9 +67,50 @@ export function SpaceView(props: { mode: SpaceMode; onMode: (m: SpaceMode) => vo
   }, []);
   const live = data?.source === 'aqua';
 
+  // ---- раздел «по нажатию»: таблица за плиткой или зданием ----
+  const [sec, setSec] = useState<{ title: string; state: 'loading' | 'ok' | 'error'; data?: AquaSectionDto; error?: string } | null>(null);
+  const openSection = (kind: SectionKind, arg: { pipeline?: string; stage?: string } = {}, title = 'Загружаю…'): void => {
+    setSec({ title, state: 'loading' });
+    window.jarvis.aqua
+      .section(kind, arg)
+      .then((d) => setSec({ title: d.title, state: 'ok', data: d }))
+      .catch((e: unknown) => setSec({ title, state: 'error', error: e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'Ошибка' }));
+  };
+  const lastReq = useRef(0);
+  useEffect(() => {
+    const r = props.request;
+    if (!r || r.nonce === lastReq.current || !data) return;
+    lastReq.current = r.nonce;
+    if (!live) return;
+    if (r.kind === 'stage') {
+      const stem = (r.pipelineLike ?? '').toLowerCase();
+      const p = data.overview.pipelines.find((x) => x.name.toLowerCase().includes(stem));
+      if (!p) return setSec({ title: 'Не нашёл такую воронку', state: 'error', error: `Воронки «${r.pipelineLike}» нет. Есть: ${data.overview.pipelines.map((x) => x.name).join(', ')}.` });
+      return openSection('stage', { pipeline: p.name }, p.name);
+    }
+    openSection(r.kind);
+  }, [props.request, data, live]);
+  useEffect(() => {
+    if (!sec) return;
+    const k = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setSec(null);
+    };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [sec]);
+
   const o = data?.overview;
-  const tile = (label: string, value: number, bad = false, i = 0) => (
-    <div key={label} className={`sp-card sp-tile ${bad && value > 0 ? 'sp-bad' : ''}`} style={{ animationDelay: `${0.25 + i * 0.07}s` }}>
+  const tile = (label: string, value: number, bad = false, i = 0, kind?: SectionKind) => (
+    <div
+      key={label}
+      className={`sp-card sp-tile ${bad && value > 0 ? 'sp-bad' : ''} ${live && kind ? 'sp-click' : ''}`}
+      style={{ animationDelay: `${0.25 + i * 0.07}s` }}
+      role={live && kind ? 'button' : undefined}
+      tabIndex={live && kind ? 0 : undefined}
+      title={live && kind ? 'Нажмите, чтобы увидеть список' : undefined}
+      onClick={live && kind ? () => openSection(kind, {}, label) : undefined}
+      onKeyDown={live && kind ? (e) => e.key === 'Enter' && openSection(kind, {}, label) : undefined}
+    >
       <div className="sp-v">{value}</div>
       <div className="sp-l">{label}</div>
     </div>
@@ -102,20 +151,48 @@ export function SpaceView(props: { mode: SpaceMode; onMode: (m: SpaceMode) => vo
       {!data && <div className="space-loading">Загружаю данные…</div>}
       {data && o && props.mode === 'city' && (
         <>
-          <CityCanvas data={data} />
+          <CityCanvas data={data} onPick={live ? (b) => openSection('stage', b, `${b.pipeline} · ${b.stage}`) : undefined} />
           <div className="space-legend">Район — воронка · здание — стадия · высота — сделок в работе · <span className="hot">красный — {live ? `не менялись дольше ${7} дней` : 'нарушены сроки'}</span></div>
         </>
+      )}
+      {sec && (
+        <aside className="sp-drawer" data-testid="space-drawer" role="dialog" aria-label={sec.title}>
+          <header>
+            <h2>{sec.title}</h2>
+            <button className="space-close" onClick={() => setSec(null)} title="Закрыть (Esc)">✕</button>
+          </header>
+          {sec.state === 'loading' && <p className="muted">Читаю из CRM…</p>}
+          {sec.state === 'error' && <div className="banner banner-err">{sec.error}</div>}
+          {sec.state === 'ok' && sec.data && (
+            <>
+              <p className="muted small">Всего: {sec.data.total}{sec.data.note ? ` · ${sec.data.note}` : ''} · только чтение</p>
+              {sec.data.rows.length === 0 ? (
+                <p>Пусто — здесь ничего нет.</p>
+              ) : (
+                <div className="sp-table-wrap">
+                  <table className="sp-table">
+                    <thead><tr>{sec.data.columns.map((c) => <th key={c}>{c}</th>)}</tr></thead>
+                    <tbody>{sec.data.rows.map((r, i) => <tr key={i}>{r.map((v, j) => <td key={j} className={/просрочен/.test(v) ? 'hot' : ''}>{v}</td>)}</tr>)}</tbody>
+                  </table>
+                </div>
+              )}
+              <div className="row">
+                <button className="btn" onClick={() => (props.onNarrate ?? props.onAsk)(`Проанализируй этот список CRM «${sec.title}»: что важно, где проблемы и что сделать в первую очередь. Прочитай данные через crm_live_get.`)}>Спросить ассистента про это</button>
+              </div>
+            </>
+          )}
+        </aside>
       )}
       {data && o && props.mode === 'analytics' && (
         <div className="space-grid">
           <div className="sp-row">
             {tile('Новых за сутки', o.newLast24h, false, 0)}
-            {tile('Без ответственного', o.unassignedOpen, true, 1)}
-            {tile(live ? 'Без движения 7+ дней' : 'Простаивают', o.stuck, true, 2)}
-            {tile('Задач просрочено', o.tasksOverdue, true, 3)}
-            {tile('Производство: просрочено', o.productionOverdue, true, 4)}
+            {tile('Без ответственного', o.unassignedOpen, true, 1, 'unassigned')}
+            {tile(live ? 'Без движения 7+ дней' : 'Простаивают', o.stuck, true, 2, 'stuck')}
+            {tile('Задач просрочено', o.tasksOverdue, true, 3, 'tasks')}
+            {tile('Производство: просрочено', o.productionOverdue, true, 4, 'production')}
             {!live && tile('Ждут предоплату', o.awaitingPrepayment, true, 5)}
-            {live && tile('Низкий остаток материалов', o.lowStock, true, 5)}
+            {live && tile('Низкий остаток материалов', o.lowStock, true, 5, 'lowstock')}
           </div>
           <div className="sp-card sp-wide" style={{ animationDelay: '0.45s' }}>
             <h3>Воронки</h3>
@@ -123,10 +200,10 @@ export function SpaceView(props: { mode: SpaceMode; onMode: (m: SpaceMode) => vo
               const max = Math.max(1, ...p.byStage.map((s) => s.open));
               return (
                 <div key={p.slug} className="sp-funnel">
-                  <div className="sp-fn-title">{p.name} <span>{p.open} в работе · {p.won} выиграно · {p.lost} проиграно</span></div>
+                  <div className={`sp-fn-title ${live ? 'sp-click' : ''}`} onClick={live ? () => openSection('stage', { pipeline: p.name }, p.name) : undefined}>{p.name} <span>{p.open} в работе · {p.won} выиграно · {p.lost} проиграно</span></div>
                   <div className="sp-bars">
                     {p.byStage.map((s) => (
-                      <div key={s.name} className="sp-bar" title={`${s.name}: ${s.open}${s.breaches ? `, просрочено: ${s.breaches}` : ''}`}>
+                      <div key={s.name} className={`sp-bar ${live ? 'sp-click' : ''}`} onClick={live ? () => openSection('stage', { pipeline: p.name, stage: s.name }, `${p.name} · ${s.name}`) : undefined} title={`${s.name}: ${s.open}${s.breaches ? `, просрочено: ${s.breaches}` : ''}`}>
                         <div className={`sp-bar-fill ${s.breaches ? 'hot' : ''}`} style={{ height: `${Math.max(6, (s.open / max) * 100)}%` }} />
                         <small>{s.name}</small>
                       </div>

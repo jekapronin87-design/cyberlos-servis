@@ -250,6 +250,12 @@ export function registerIpc(opts: {
   handle(IPC.aquaDisconnect, () => core.aquaDisconnect());
   handle(IPC.aquaTest, () => core.aquaTest());
   handle(IPC.aquaDashboard, () => core.aquaDashboard());
+  handle(IPC.aquaSection, (_e, kind, arg) => {
+    const a = (arg ?? {}) as { pipeline?: unknown; stage?: unknown };
+    const k = str(kind, 'kind', 20);
+    if (!['production', 'tasks', 'stuck', 'unassigned', 'lowstock', 'stage'].includes(k)) throw new Error('Неизвестный раздел');
+    return core.aquaSection(k as Parameters<typeof core.aquaSection>[0], { pipeline: a.pipeline ? str(a.pipeline, 'pipeline', 120) : '', stage: a.stage ? str(a.stage, 'stage', 120) : '' });
+  });
   handle(IPC.crmGet, () => core.crmStatus());
   handle(IPC.crmSave, (_e, cfg, password) => {
     const c = cfg as { baseUrl?: unknown; environment?: unknown; email?: unknown; maskPii?: unknown; frontendUrl?: unknown };

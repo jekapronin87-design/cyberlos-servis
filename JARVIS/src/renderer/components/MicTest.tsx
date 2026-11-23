@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { voiceLog } from '../voice/useVoice';
+import { ttsDiag } from '../voice/speech';
 import { VoiceListener } from '../voice/listener';
 
 const clean = (e: unknown): string =>
@@ -80,6 +81,11 @@ export function MicTest({ micEnabled }: { micEnabled: boolean }) {
             ))}
           </ul>
         </details>
+      )}
+      {ttsDiag.firstMs !== null && (
+        <p className="small muted" style={{ margin: '4px 0' }}>
+          Последняя озвучка ({ttsDiag.mode === 'api' ? 'облачная' : 'голоса Windows'}): первый звук через {(ttsDiag.firstMs / 1000).toFixed(1)} с{ttsDiag.sentences > 1 ? `, самая длинная пауза между предложениями ${(ttsDiag.maxGapMs / 1000).toFixed(1)} с (предложений: ${ttsDiag.sentences})` : ''}.
+        </p>
       )}
       {steps.map((s, i) => (
         <p key={i} className={s.ok ? 'small' : 'small'} style={{ color: s.ok ? undefined : 'var(--danger, #f88)', margin: '4px 0' }}>{s.ok ? '✓' : '✗'} {s.text}</p>

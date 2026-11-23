@@ -56,6 +56,9 @@ try {
   await page.waitForSelector('.city-canvas');
   step('«Покажи наш город» открывает город сразу');
 
+  const msgs = await page.evaluate(async () => (await window.jarvis.conversations.list()).length);
+  assert.equal(msgs, 0, 'навигация не должна создавать диалоги и тратить запросы к модели');
+
   // Живые данные: ключ «Аквамастер» → «Город» и карточки строятся из CRM (фиктивный сервер), примера больше нет
   const KEY = 'sro_SpaceKey1234567890abcdefghijkl';
   const iso = (daysAgo) => new Date(Date.now() - daysAgo * 86400000).toISOString();
@@ -69,7 +72,9 @@ try {
     const list = (data) => res.end(JSON.stringify({ ok: true, count: data.length, nextCursor: null, data }));
     if (p === 'deals') return list(deals);
     if (p === 'city/summary') return res.end(JSON.stringify({ ok: true, data: { tasks: { open: 14, overdue: 3 }, production: { ordersByStatus: [{ status: 'IN_PROGRESS', count: 4 }], materialsBelowMinimum: [] } } }));
-    if (p === 'tasks' || p === 'production/orders' || p === 'employees') return list([]);
+    if (p === 'production/orders') return list([{ id: 'o1', number: 57, productName: 'Сайберлос 15', status: 'IN_PROGRESS', plannedFor: iso(3), finishedAt: null, cancelledAt: null, stages: [{ name: 'Раскрой', status: 'DONE' }, { name: 'Сварка', status: 'IN_PROGRESS', assigneeName: 'Алексей' }] }]);
+    if (p === 'tasks') return list([{ id: 't1', type: 'CALL', title: 'Перезвонить по КП', dueAt: iso(2), completedAt: null, assignedUserId: 'u1', assigneeName: 'Иван Петров' }]);
+    if (p === 'employees') return list([]);
     res.statusCode = 404; res.end('{}');
   });
   await new Promise((r) => live.listen(0, '127.0.0.1', r));
@@ -89,11 +94,45 @@ try {
   await page.waitForTimeout(800);
   await page.screenshot({ path: join(shots, 's4-live-city.png') });
   step('с ключом «Аквамастер» карточки и город строятся из живых данных (простой, задачи, воронки), пример не показывается');
+
+  // Нажатие: плитка и здание открывают таблицу из CRM
+  await page.click('.space-tabs button:has-text("Карточки")');
+  await page.click('.sp-tile:has-text("Без движения")');
+  await page.waitForSelector('[data-testid=space-drawer] .sp-table tbody tr');
+  assert.match(await page.locator('[data-testid=space-drawer]').textContent(), /Сделка d2/);
+  await page.screenshot({ path: join(shots, 's5-drawer.png') });
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('[data-testid=space-drawer]', { state: 'detached' });
+  await page.click('.space-tabs button:has-text("Город")');
+  await page.waitForSelector('.city-canvas');
+  await page.waitForTimeout(600);
+  // клик по зданию города: ищем точку внутри любого здания перебором по сетке
+  const box = await page.locator('.city-canvas').boundingBox();
+  let opened = false;
+  for (let yy = 0.2; yy < 0.9 && !opened; yy += 0.04) {
+    for (let xx = 0.2; xx < 0.8 && !opened; xx += 0.04) {
+      await page.mouse.click(box.x + box.width * xx, box.y + box.height * yy);
+      opened = (await page.locator('[data-testid=space-drawer]').count()) > 0;
+    }
+  }
+  assert.ok(opened, 'клик по зданию города должен открывать список');
+  await page.waitForSelector('[data-testid=space-drawer] .sp-table tbody tr');
+  step('нажатие на плитку и на здание города открывает таблицу из CRM (только чтение)');
+  await page.keyboard.press('Escape');
+  // Голос/текст: «покажи, что у нас в производстве» открывает раздел и запускает рассказ
+  await page.click('.space-close');
+  await page.waitForSelector('.hud');
+  await page.fill('.hud-input', 'Покажи, что у нас в производстве');
+  await page.press('.hud-input', 'Enter');
+  await page.waitForSelector('[data-testid=space-drawer]');
+  await page.waitForSelector('[data-testid=space-drawer] :text("Сайберлос 15")');
+  assert.match(await page.locator('[data-testid=space-drawer]').textContent(), /Сварка \(Алексей\)/);
+  await page.screenshot({ path: join(shots, 's6-production.png') });
+  step('«Покажи, что у нас в производстве» → открылся раздел «Производство» с заказами и текущим этапом');
   await page.evaluate(() => window.jarvis.aqua.disconnect());
   live.close();
 
-  const msgs = await page.evaluate(async () => (await window.jarvis.conversations.list()).length);
-  assert.equal(msgs, 0, 'навигация не должна создавать диалоги и тратить запросы к модели');
+
   assert.deepEqual(errors, [], 'ошибки: ' + errors.join('; '));
   console.log('SPACE SMOKE OK. Скриншоты:', shots);
 } catch (e) {

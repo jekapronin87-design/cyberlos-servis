@@ -79,6 +79,7 @@ const api: JarvisApi = {
     disconnect: () => invoke(IPC.aquaDisconnect),
     test: () => invoke(IPC.aquaTest),
     dashboard: () => invoke(IPC.aquaDashboard),
+    section: (kind, arg) => invoke(IPC.aquaSection, kind, arg),
   },
   youtube: {
     status: () => invoke(IPC.ytStatus),

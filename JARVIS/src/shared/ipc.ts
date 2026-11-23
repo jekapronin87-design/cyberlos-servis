@@ -20,6 +20,7 @@ import type {
   TelegramStatusDto,
   YoutubeStatusDto,
   AquaStatusDto,
+  AquaSectionDto,
   AgentDto,
   AgentInputDto,
   AgentRunDto,
@@ -93,6 +94,7 @@ export const IPC = {
   aquaDisconnect: 'aqua:disconnect',
   aquaTest: 'aqua:test',
   aquaDashboard: 'aqua:dashboard',
+  aquaSection: 'aqua:section',
   agentsList: 'agents:list',
   agentsTemplates: 'agents:templates',
   agentsSave: 'agents:save',
@@ -246,6 +248,8 @@ export interface JarvisApi {
     test(): Promise<string>;
     /** Сводка из живой CRM для «Города» и карточек. */
     dashboard(): Promise<CrmDashboardDto>;
+    /** Таблица «что за плиткой/зданием»: production | tasks | stuck | unassigned | lowstock | stage. */
+    section(kind: string, arg?: { pipeline?: string; stage?: string }): Promise<AquaSectionDto>;
   };
   youtube: {
     status(): Promise<YoutubeStatusDto>;

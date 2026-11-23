@@ -3,7 +3,7 @@ import type { AuditLog } from '../security/audit';
 import type { SecretStore } from '../security/secrets';
 import type { ToolRegistry } from '../tools/registry';
 import { maskFreeText } from '../crm/mask';
-import { buildAquaDashboard } from './dashboard';
+import { buildAquaDashboard, buildAquaSection, type AquaSection, type AquaSectionKind } from './dashboard';
 import type { CrmDashboardDto } from '../../shared/types';
 
 export const SECRET_AQUA_KEY = 'aqua.key';
@@ -179,6 +179,13 @@ export class AquaService {
     const value = await buildAquaDashboard((p, q) => this.get(p, q), new Date());
     this.dash = { at: Date.now(), value };
     return value;
+  }
+
+  /** Таблица «что за этой плиткой/зданием» (только чтение, до 5 страниц сделок). */
+  async section(kind: AquaSectionKind, arg: { pipeline?: string; stage?: string } = {}): Promise<AquaSection> {
+    if (!this.secrets.has(SECRET_AQUA_KEY)) throw new AquaError('CRM «Аквамастер» не подключена.');
+    if (!['production', 'tasks', 'stuck', 'unassigned', 'lowstock', 'stage'].includes(kind)) throw new AquaError('Неизвестный раздел.');
+    return buildAquaSection((p, q) => this.get(p, q), kind, { pipeline: String(arg.pipeline ?? '').slice(0, 120), stage: String(arg.stage ?? '').slice(0, 120) }, new Date());
   }
 
   /** Проверка подключения для кнопки в настройках. */

@@ -163,6 +163,41 @@ export function parseNavIntent(text: string): NavIntent | null {
   return null;
 }
 
+export interface SectionIntent {
+  kind: 'production' | 'tasks' | 'stuck' | 'unassigned' | 'lowstock' | 'stage';
+  /** Часть названия воронки для kind = stage. */
+  pipelineLike?: string;
+  /** Как назвать раздел вслух. */
+  title: string;
+}
+
+/**
+ * «Покажи, что у нас в производстве», «покажи просроченные задачи», «открой монтаж» → раздел живой CRM.
+ * Только короткие фразы, начинающиеся с команды; разбирается без модели. Аналитика/город («покажи статистику по продажам») — отдельный разбор parseNavIntent.
+ */
+export function parseSectionIntent(text: string): SectionIntent | null {
+  const t = normalizeSpeech(text);
+  const words = t.split(' ').filter(Boolean);
+  if (words.length === 0 || words.length > 10) return null;
+  if (!/^(покажи|показать|открой|открыть|расскажи|давай посмотрим|дай|что|как|выведи)(?![а-я])/.test(t)) return null;
+  if (/(^| )агент|программ|сайт|ютуб|youtube|телеграм/.test(t)) return null;
+  if (/без ответственн/.test(t)) return { kind: 'unassigned', title: 'сделки без ответственного' };
+  if (/застряв|завис|без движени|простаива|залежал/.test(t)) return { kind: 'stuck', title: 'сделки без движения' };
+  if (/задач/.test(t)) return { kind: 'tasks', title: 'просроченные задачи' };
+  if (/производств|(^| )цех(е|а|у|ом)?( |$)/.test(t)) return { kind: 'production', title: 'производство' };
+  if (/остатк|материал|склад/.test(t)) return { kind: 'lowstock', title: 'материалы ниже минимума' };
+  const pipes: [RegExp, string, string][] = [
+    [/монтаж/, 'монтаж', 'монтаж'],
+    [/замер/, 'замер', 'замеры'],
+    [/сервис/, 'сервис', 'сервис'],
+    [/холодн/, 'холодн', 'холодные лиды'],
+    [/(^| )продаж/, 'продаж', 'продажи'],
+    [/(^| )(лид|лиды|лидов|заявк)/, 'лид', 'лиды'],
+  ];
+  for (const [re, like, title] of pipes) if (re.test(t)) return { kind: 'stage', pipelineLike: like, title };
+  return null;
+}
+
 /**
  * «Открой хром», «запусти блокнот» → название программы. Не срабатывает на сайты, файлы, папки, документы и слишком длинные фразы —
  * их разбирает модель. Решение «такая программа есть и она одна» принимает ядро (resolveApp).

@@ -189,3 +189,81 @@ export async function buildAquaDashboard(get: Get, now: Date): Promise<CrmDashbo
     at: now.toISOString(),
   };
 }
+
+// ---------- разделы «по нажатию»: что стоит за плиткой или зданием ----------
+
+export interface AquaSection {
+  title: string;
+  columns: string[];
+  rows: string[][];
+  total: number;
+  note?: string;
+}
+
+export type AquaSectionKind = 'production' | 'tasks' | 'stuck' | 'unassigned' | 'lowstock' | 'stage';
+
+const ruDate = (iso: unknown): string => {
+  const t = Date.parse(str(iso));
+  if (!Number.isFinite(t)) return '—';
+  const x = new Date(t);
+  return `${String(x.getUTCDate()).padStart(2, '0')}.${String(x.getUTCMonth() + 1).padStart(2, '0')}.${x.getUTCFullYear()}`;
+};
+const money = (v: unknown): string => (typeof v === 'number' ? `${Math.round(v).toLocaleString('ru-RU')} ₽` : '—');
+const SHOW = 60;
+
+/** Строки таблицы для плитки/здания: те же данные, что видит человек в CRM, только читаем. */
+export async function buildAquaSection(get: Get, kind: AquaSectionKind, arg: { pipeline?: string; stage?: string }, now: Date): Promise<AquaSection> {
+  const nowMs = now.getTime();
+  const cut = <T,>(all: T[]): { shown: T[]; note?: string } => ({ shown: all.slice(0, SHOW), note: all.length > SHOW ? `Показано ${SHOW} из ${all.length}.` : undefined });
+  const dealRow = (d: Row): string[] => [
+    String(d['number'] ?? ''),
+    str(d['title'], '—'),
+    `${str(obj(d['pipeline'])['name'])} · ${str(obj(d['stage'])['name'])}`,
+    str(obj(d['assignee'])['fullName'], 'не назначен'),
+    money(d['amountRub']),
+    ruDate(d['updatedAt']),
+  ];
+  const dealCols = ['№', 'Сделка', 'Воронка · стадия', 'Ответственный', 'Сумма', 'Изменена'];
+
+  if (kind === 'production') {
+    const all = (await list(get, 'production/orders')).rows.filter((o) => !CLOSED_PRODUCTION.test(str(o['status'])) && !o['finishedAt'] && !o['cancelledAt']);
+    all.sort((a, b) => Date.parse(str(a['plannedFor'])) - Date.parse(str(b['plannedFor'])));
+    const { shown, note } = cut(all);
+    return {
+      title: 'Производство: заказы в работе',
+      columns: ['№', 'Изделие', 'Статус', 'План', 'Сейчас на этапе', 'Срок'],
+      total: all.length,
+      note,
+      rows: shown.map((o) => {
+        const stages = Array.isArray(o['stages']) ? (o['stages'] as Row[]) : [];
+        const cur = stages.find((s) => !/^DONE$/i.test(str(s['status'])));
+        const planned = Date.parse(str(o['plannedFor']));
+        return [String(o['number'] ?? ''), str(o['productName'], '—'), str(o['status']), ruDate(o['plannedFor']), cur ? `${str(cur['name'])}${str(cur['assigneeName']) ? ` (${str(cur['assigneeName'])})` : ''}` : '—', Number.isFinite(planned) && planned < nowMs ? 'просрочено' : 'в срок'];
+      }),
+    };
+  }
+  if (kind === 'tasks') {
+    const all = (await list(get, 'tasks', { status: 'overdue' })).rows;
+    const { shown, note } = cut(all);
+    return { title: 'Просроченные задачи', columns: ['Задача', 'Ответственный', 'Срок', 'Тип'], total: all.length, note, rows: shown.map((t) => [str(t['title'], '—'), str(t['assigneeName'], '—'), ruDate(t['dueAt']), str(t['type'])]) };
+  }
+  if (kind === 'lowstock') {
+    const s = obj(obj(await get('city/summary'))['data']);
+    const low = Array.isArray(obj(s['production'])['materialsBelowMinimum']) ? (obj(s['production'])['materialsBelowMinimum'] as Row[]) : [];
+    return { title: 'Материалы ниже минимума', columns: ['Материал', 'Остаток', 'Минимум', 'Ед.'], total: low.length, rows: low.slice(0, SHOW).map((m) => [str(m['name']), String(m['stockQty'] ?? ''), String(m['minQty'] ?? ''), str(m['unit'])]) };
+  }
+
+  const deals = (await list(get, 'deals')).rows;
+  if (kind === 'stuck' || kind === 'unassigned') {
+    const open = deals.filter((d) => OPEN.has(str(d['stageSemantic'], str(obj(d['stage'])['semantic']))));
+    const all = kind === 'stuck' ? open.filter((d) => nowMs - Date.parse(str(d['updatedAt'])) > STUCK_DAYS * DAY) : open.filter((d) => !str(obj(d['assignee'])['id']));
+    all.sort((a, b) => Date.parse(str(a['updatedAt'])) - Date.parse(str(b['updatedAt'])));
+    const { shown, note } = cut(all);
+    return { title: kind === 'stuck' ? `Сделки без движения дольше ${STUCK_DAYS} дней` : 'Сделки без ответственного', columns: dealCols, total: all.length, note, rows: shown.map(dealRow) };
+  }
+  // stage: все сделки воронки (и стадии, если указана)
+  const all = deals.filter((d) => str(obj(d['pipeline'])['name']) === arg.pipeline && (!arg.stage || str(obj(d['stage'])['name']) === arg.stage));
+  all.sort((a, b) => Date.parse(str(b['updatedAt'])) - Date.parse(str(a['updatedAt'])));
+  const { shown, note } = cut(all);
+  return { title: `${arg.pipeline ?? 'Воронка'}${arg.stage ? ' · ' + arg.stage : ''}`, columns: dealCols, total: all.length, note, rows: shown.map(dealRow) };
+}

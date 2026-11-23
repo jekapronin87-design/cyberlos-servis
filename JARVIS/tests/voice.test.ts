@@ -241,3 +241,26 @@ describe('подсказка-словарь не становится коман
     expect(parseVoiceCommand('Системно, Джарвис, который час?', { requireWake: true })).toEqual({ kind: 'wake', text: 'Джарвис, который час?' });
   });
 });
+
+import { parseSectionIntent } from '../src/shared/voice';
+describe('Голосовые разделы CRM', () => {
+  it('«покажи, что у нас в производстве» и подобные → раздел', () => {
+    expect(parseSectionIntent('Покажи, что у нас сейчас в производстве')).toMatchObject({ kind: 'production' });
+    expect(parseSectionIntent('открой производство')).toMatchObject({ kind: 'production' });
+    expect(parseSectionIntent('покажи просроченные задачи')).toMatchObject({ kind: 'tasks' });
+    expect(parseSectionIntent('что у нас с застрявшими сделками')).toMatchObject({ kind: 'stuck' });
+    expect(parseSectionIntent('покажи сделки без ответственного')).toMatchObject({ kind: 'unassigned' });
+    expect(parseSectionIntent('покажи остатки на складе')).toMatchObject({ kind: 'lowstock' });
+    expect(parseSectionIntent('покажи монтаж')).toMatchObject({ kind: 'stage', pipelineLike: 'монтаж' });
+    expect(parseSectionIntent('открой холодные лиды')).toMatchObject({ kind: 'stage', pipelineLike: 'холодн' });
+    expect(parseSectionIntent('покажи продажи')).toMatchObject({ kind: 'stage', pipelineLike: 'продаж' });
+  });
+  it('не перехватывает чужое: агенты, сайты, программы, длинные фразы, обычные вопросы', () => {
+    expect(parseSectionIntent('запусти агента по производству')).toBeNull();
+    expect(parseSectionIntent('открой сайт про производство')).toBeNull();
+    expect(parseSectionIntent('покажи погоду')).toBeNull();
+    expect(parseSectionIntent('расскажи анекдот')).toBeNull();
+    expect(parseSectionIntent('Проанализируй раздел CRM «производство»: прочитай данные')).toBeNull();
+    expect(parseSectionIntent('какая сегодня погода в производстве одежды в китае и как это влияет на цены на рынке')).toBeNull();
+  });
+});

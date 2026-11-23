@@ -286,3 +286,14 @@ th { background: var(--panel-solid); position: sticky; top: 0; font-family: var(
 .grid-checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 18px; margin-bottom: 8px; }
 @media (max-width: 1000px) { .grid-checks { grid-template-columns: 1fr; } }
 .space-banner.space-live { border-style: solid; border-color: rgba(120, 230, 170, 0.55); color: #a8f0c8; }
+.sp-click { cursor: pointer; }
+.sp-tile.sp-click:hover { border-color: rgba(120, 220, 255, 0.7); }
+.sp-bar.sp-click:hover small, .sp-fn-title.sp-click:hover { color: #9fe6ff; }
+.sp-drawer { position: fixed; top: 120px; right: 14px; bottom: 14px; width: min(720px, 62vw); z-index: 20; background: rgba(4, 12, 26, 0.94); border: 1px solid rgba(90, 200, 255, 0.45); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; backdrop-filter: blur(6px); }
+.sp-drawer header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sp-drawer h2 { margin: 0; font-size: 17px; font-weight: 600; color: #dff4ff; }
+.sp-table-wrap { overflow: auto; flex: 1; border: 1px solid rgba(90, 200, 255, 0.18); border-radius: 8px; }
+.sp-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.sp-table th { position: sticky; top: 0; background: rgba(8, 24, 44, 0.98); text-align: left; padding: 6px 8px; color: #9fd8f5; font-weight: 600; }
+.sp-table td { padding: 5px 8px; border-top: 1px solid rgba(90, 200, 255, 0.1); color: #d5ecfa; }
+.sp-table td.hot { color: #ff9a80; }
