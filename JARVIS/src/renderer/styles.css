@@ -411,6 +411,34 @@ th { background: var(--panel-solid); position: sticky; top: 0; font-family: var(
 .sh-alert.lv-warn { border-color: rgba(255, 209, 102, 0.55); background: rgba(255, 209, 102, 0.07); }
 .sh-alert.lv-warn .sh-alert-dot { background: #ffd166; box-shadow: 0 0 14px #ffd166; }
 @keyframes pulse-dot { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.5); opacity: 0.55; } }
+/* спидометры */
+.sh-gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 18px; margin-top: 18px; }
+.sh-gauge { text-align: center; padding: 14px 10px 12px; border-radius: 16px; border: 1px solid rgba(92, 200, 255, 0.2); background: radial-gradient(120% 90% at 50% 0%, rgba(92, 200, 255, 0.1), transparent 70%); animation: up 0.6s calc(0.15s + var(--i) * 0.14s) both; }
+.sh-gauge svg { width: 100%; max-width: 250px; overflow: visible; }
+.sh-g-track { fill: none; stroke: rgba(120, 170, 220, 0.18); stroke-width: 11; stroke-linecap: round; }
+.sh-g-arc { fill: none; stroke: var(--c); stroke-width: 11; stroke-linecap: round; filter: drop-shadow(0 0 7px var(--c)); transition: stroke-dasharray 1.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.sh-g-tick { stroke: rgba(160, 200, 240, 0.45); stroke-width: 1.4; }
+.sh-g-needle { transform-origin: 100px 100px; transition: transform 1.5s cubic-bezier(0.2, 0.9, 0.25, 1.15); }
+.sh-g-needle line { stroke: #eaf6ff; stroke-width: 2.5; stroke-linecap: round; filter: drop-shadow(0 0 4px var(--c)); }
+.sh-g-needle circle { fill: var(--c); stroke: #06101f; stroke-width: 2; }
+.sh-g-v { margin-top: -22px; font-size: 34px; font-weight: 700; color: var(--c); text-shadow: 0 0 16px var(--c); }
+.sh-g-v small { font-size: 16px; opacity: 0.8; }
+.sh-g-l { font-size: 16px; font-weight: 600; margin-top: 2px; }
+.sh-g-n { font-size: 12px; color: #8fb4d0; margin-top: 3px; }
+/* график */
+.sh-trend { margin-top: 14px; }
+.sh-trend svg { width: 100%; max-height: 330px; overflow: visible; }
+.sh-t-grid { stroke: rgba(120, 170, 220, 0.16); stroke-dasharray: 3 5; }
+.sh-t-axis { fill: #7fa6c6; font-size: 11px; }
+.sh-t-line { fill: none; stroke: var(--c); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; animation: sh-draw 1.6s calc(0.3s + var(--i) * 0.4s) cubic-bezier(0.3, 0.7, 0.2, 1) forwards; filter: drop-shadow(0 0 6px var(--c)); }
+.sh-t-area { fill: var(--c); opacity: 0; animation: sh-fade 1.2s calc(1s + var(--i) * 0.4s) forwards; }
+.sh-t-dot { fill: var(--c); opacity: 0; animation: sh-pop 0.4s forwards; filter: drop-shadow(0 0 5px var(--c)); }
+.sh-t-last { fill: var(--c); font-size: 14px; font-weight: 700; opacity: 0; animation: sh-pop 0.4s 1.6s forwards; }
+.sh-t-legend { display: flex; gap: 18px; justify-content: center; font-size: 13px; color: #a9c8e0; margin-top: 6px; }
+.sh-t-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+@keyframes sh-draw { to { stroke-dashoffset: 0; } }
+@keyframes sh-fade { to { opacity: 0.22; } }
+@keyframes sh-pop { to { opacity: 1; } }
 /* низ */
 .show-foot { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 8px; }
 .show-dots { display: flex; gap: 8px; }

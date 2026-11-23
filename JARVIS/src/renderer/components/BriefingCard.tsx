@@ -47,7 +47,7 @@ export function BriefingCard() {
     <div className="card" id="briefing-card">
       <h2>Утренняя сводка и тревоги</h2>
       <p className="muted small">
-        Каждый день в назначенное время Системно сам открывает красивую «космическую» сводку: цифры бизнеса, Telegram-бот клуба (сколько зашло, кто оплатил, кто на каком этапе), важная почта и рабочие чаты. Если что-то горит — покажет тревогу и пришлёт уведомление. Всё считается обычными правилами, <strong>без нейросети и без расходов</strong>. Приложение должно быть запущено (включите «запуск при входе в Windows»). Сказать голосом: «покажи утреннюю сводку».
+        Каждый день в назначенное время Системно сам открывает красивую «космическую» сводку: цифры бизнеса, Telegram-бот клуба (сколько зашло, кто оплатил, кто на каком этапе), важная почта и рабочие чаты. Если что-то горит — покажет тревогу и пришлёт уведомление. Всё считается обычными правилами, <strong>без нейросети и без расходов</strong>. Приложение должно быть запущено (включите «запуск при входе в Windows»). Сказать голосом: «покажи утреннюю сводку» или «вечерний отчёт».
       </p>
       {msg && <div className={`banner ${msg.ok ? 'banner-ok' : 'banner-err'}`}>{msg.text}</div>}
       <div className="row">
@@ -59,6 +59,13 @@ export function BriefingCard() {
         <label className="field grow">
           <span>Часовой пояс</span>
           <input value={cfg.tz} onChange={(e) => patch({ tz: e.target.value })} spellCheck={false} placeholder="Asia/Bangkok" />
+        </label>
+      </div>
+      <div className="row">
+        <label className="check"><input type="checkbox" checked={cfg.eveningEnabled} onChange={(e) => patch({ eveningEnabled: e.target.checked })} /><span>Вечерний отчёт тоже показывать сам (итоги дня: CRM, курс, оплаты)</span></label>
+        <label className="field">
+          <span>Время вечернего отчёта</span>
+          <input id="evening-time" type="time" value={cfg.eveningTime} onChange={(e) => patch({ eveningTime: e.target.value })} />
         </label>
       </div>
       <label className="check"><input type="checkbox" checked={cfg.speak} onChange={(e) => patch({ speak: e.target.checked })} /><span>Озвучивать приветствие голосом</span></label>
@@ -117,7 +124,8 @@ export function BriefingCard() {
 
       <div className="row" style={{ marginTop: 12 }}>
         <button className="btn btn-primary" id="briefing-save" disabled={busy} onClick={() => void save()}>Сохранить</button>
-        <button className="btn" id="briefing-run" disabled={busy} onClick={() => void run(async () => void (await window.jarvis.briefing.run()))}>Показать сводку сейчас</button>
+        <button className="btn" id="briefing-run" disabled={busy} onClick={() => void run(async () => void (await window.jarvis.briefing.run('morning')))}>Показать утреннюю сводку сейчас</button>
+        <button className="btn" id="evening-run" disabled={busy} onClick={() => void run(async () => void (await window.jarvis.briefing.run('evening')))}>Показать вечерний отчёт сейчас</button>
       </div>
       {!st.crm && <small className="muted">CRM «Аквамастер» не подключена — в сводке будут только почта и то, что доступно.</small>}
     </div>

@@ -35,6 +35,7 @@ export function parseClubFunnel(dataIn: unknown): ClubStatsDto | null {
       return { step: stepName(str(s['step'], 'Без этапа')), count: num(s['count']), stuck: num(s['stuckOver3Days']) };
     }).sort((a, b) => b.count - a.count),
     last7Days: d['last7Days'] ? { joined: num(l7['joined']), paid: num(l7['paid']) } : undefined,
+    today: d['today'] ? { joined: num(obj(d['today'])['joined']), paid: num(obj(d['today'])['paid']), paidRub: num(obj(d['today'])['paidRub']) } : undefined,
   };
 }
 /** Шаги, на которых «застрял» уже не считается (человек дошёл до конца или ушёл). */

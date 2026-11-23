@@ -341,7 +341,7 @@ export interface JarvisApi {
     get(): Promise<BriefingStateDto>;
     save(cfg: BriefingConfigDto): Promise<BriefingStateDto>;
     /** Показать сводку прямо сейчас («покажи утреннюю сводку»). */
-    run(): Promise<BriefingPayloadDto>;
+    run(kind?: 'morning' | 'evening'): Promise<BriefingPayloadDto>;
     /** Сводка, которая была готова, пока окно ещё не открылось (забирается один раз). */
     pending(): Promise<BriefingPayloadDto | null>;
     mailAdd(provider: 'gmail' | 'yandex', email: string, password: string): Promise<MailAccountDto[]>;

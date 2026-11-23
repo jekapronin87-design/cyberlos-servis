@@ -1,14 +1,16 @@
 import { nowIso, type Db } from '../db/database';
 import type { AuditLog } from '../security/audit';
-import { briefingSpeech, buildBriefingDeck, type AlertDto, type BriefingData, type ChatItemDto, type ClubStatsDto } from '../../shared/deck';
+import { briefingSpeech, buildBriefingDeck, buildEveningDeck, eveningSpeech, type AlertDto, type BriefingData, type ChatItemDto, type ClubStatsDto } from '../../shared/deck';
 import type { BriefingConfigDto, BriefingPayloadDto, DeckDto } from '../../shared/deck';
 import type { CrmDashboardDto } from '../../shared/types';
+import { buildClubToday, buildEveningData } from './evening';
+import type { ToolRegistry } from '../tools/registry';
 import { computeAlerts, parseChats, parseClub, parseClubFunnel, zonedParts } from './rules';
 import type { MailService } from './mail';
 
 export type BriefingConfig = BriefingConfigDto;
 
-export const DEFAULT_BRIEFING: BriefingConfig = { enabled: true, time: '10:00', tz: 'Asia/Bangkok', speak: true, alerts: true, vip: [], };
+export const DEFAULT_BRIEFING: BriefingConfig = { enabled: true, time: '10:00', tz: 'Asia/Bangkok', speak: true, alerts: true, vip: [], eveningEnabled: false, eveningTime: '20:00' };
 
 export type BriefingPayload = BriefingPayloadDto;
 
@@ -46,7 +48,9 @@ export function validateBriefingConfig(raw: unknown, base: BriefingConfig = DEFA
   const tz = typeof c['tz'] === 'string' && c['tz'].trim() ? c['tz'].trim() : base.tz;
   if (!tz_ok(tz)) throw new Error('Неизвестный часовой пояс (пример: Asia/Bangkok).');
   const vip = Array.isArray(c['vip']) ? c['vip'].filter((x): x is string => typeof x === 'string').map((x) => x.trim().slice(0, 80)).filter(Boolean).slice(0, 30) : base.vip;
-  return { enabled: c['enabled'] === undefined ? base.enabled : c['enabled'] !== false, time, tz, speak: c['speak'] === undefined ? base.speak : c['speak'] !== false, alerts: c['alerts'] === undefined ? base.alerts : c['alerts'] !== false, vip };
+  const eveningTime = typeof c['eveningTime'] === 'string' ? c['eveningTime'].trim() : base.eveningTime;
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(eveningTime)) throw new Error('Время вечернего отчёта должно быть в виде ЧЧ:ММ, например 20:00.');
+  return { eveningEnabled: c['eveningEnabled'] === undefined ? base.eveningEnabled : c['eveningEnabled'] === true, eveningTime, enabled: c['enabled'] === undefined ? base.enabled : c['enabled'] !== false, time, tz, speak: c['speak'] === undefined ? base.speak : c['speak'] !== false, alerts: c['alerts'] === undefined ? base.alerts : c['alerts'] !== false, vip };
 }
 
 /**
@@ -134,6 +138,11 @@ export class BriefingService {
       await this.run(false).catch((e) => this.deps.audit.record({ actor: 'system', action: 'briefing.failed', decision: 'error', details: { error: e instanceof Error ? e.message : String(e) } }));
       return;
     }
+    if (c.eveningEnabled && t.hm >= c.eveningTime && t.hm < '23:30' && this.read('lastEvening', '') !== t.date) {
+      this.write('lastEvening', t.date);
+      await this.run(false, 'evening').catch((e) => this.deps.audit.record({ actor: 'system', action: 'briefing.failed', decision: 'error', details: { error: e instanceof Error ? e.message : String(e) } }));
+      return;
+    }
     if (c.alerts && Date.now() - this.lastAlertCheck >= 15 * 60_000) {
       this.lastAlertCheck = Date.now();
       await this.checkAlerts().catch(() => undefined);
@@ -141,30 +150,35 @@ export class BriefingService {
   }
 
   /** Собирает всё, что подключено. Каждый источник независим: упал один — остальные работают. */
-  async collect(): Promise<BriefingData> {
+  async collect(kind: 'morning' | 'evening' = 'morning'): Promise<BriefingData> {
     const c = this.config();
     const now = this.now();
     const missing: string[] = [];
     const [dash, club, mail, chats] = await Promise.all([
       this.deps.dashboard().catch((e) => (missing.push(`CRM: ${msg(e)}`), null)),
-      this.collectClub(now, missing),
+      this.collectClub(now, missing, kind === 'evening'),
       this.deps.mail.list().length ? this.deps.mail.collect(c.vip, now).catch((e) => (missing.push(`почта: ${msg(e)}`), null)) : Promise.resolve(null),
       this.collectChats(now, missing),
     ]);
     if (mail) missing.push(...mail.errors);
     if (!dash && !missing.some((m) => m.startsWith('CRM'))) missing.push('CRM не подключена');
     if (dash) missing.push(...dash.missing.map((m) => `в CRM нет раздела: ${m}`));
-    return { userName: this.deps.userName(), at: now.toISOString(), tz: c.tz, dash, club, mail: mail ? { items: mail.items, accounts: mail.accounts, errors: mail.errors } : null, chats: chats ? { items: chats } : null, missing };
+    const get = this.deps.crmGet?.();
+    const evening = kind === 'evening' && get ? await buildEveningData(get, now, c.tz, missing).catch((e) => (missing.push(`итоги дня: ${msg(e)}`), null)) : null;
+    return { kind, evening, userName: this.deps.userName(), at: now.toISOString(), tz: c.tz, dash, club, mail: mail ? { items: mail.items, accounts: mail.accounts, errors: mail.errors } : null, chats: chats ? { items: chats } : null, missing };
   }
 
-  private async collectClub(now: Date, missing: string[]): Promise<ClubStatsDto | null> {
+  private async collectClub(now: Date, missing: string[], withToday = false): Promise<ClubStatsDto | null> {
     const get = this.deps.crmGet?.();
     if (!get) return null;
     try {
       // Сначала готовая воронка от CRM (club/funnel); у старой версии CRM её нет — считаем сами по списку участников
       try {
         const f = parseClubFunnel(obj((await get('club/funnel')) as unknown)['data']);
-        if (f) return f;
+        if (f) {
+          if (withToday) f.today = await buildClubToday(get, now, this.config().tz, f.today);
+          return f;
+        }
       } catch (e) {
         if (status(e) !== 404) throw e;
       }
@@ -176,7 +190,9 @@ export class BriefingService {
         cursor = typeof r?.nextCursor === 'string' && r.nextCursor ? r.nextCursor : null;
         if (!cursor) break;
       }
-      return parseClub(rows, now);
+      const club = parseClub(rows, now);
+      if (withToday) club.today = await buildClubToday(get, now, this.config().tz, undefined);
+      return club;
     } catch (e) {
       missing.push(`клуб (Telegram-бот): ${status(e) === 403 ? 'раздел club не включён для ключа' : status(e) === 404 ? 'в CRM пока нет этого раздела' : msg(e)}`);
       return null;
@@ -204,13 +220,16 @@ export class BriefingService {
   }
 
   /** Показать сводку сейчас (по расписанию или по кнопке/голосу). */
-  async run(manual: boolean): Promise<BriefingPayload> {
+  async run(manual: boolean, kind: 'morning' | 'evening' = 'morning'): Promise<BriefingPayload> {
     if (this.busy) throw new Error('Сводка уже собирается — подождите несколько секунд.');
     this.busy = true;
     try {
-      const data = await this.collect();
+      const data = await this.collect(kind);
       const alerts = computeAlerts({ dash: data.dash, club: data.club, mail: data.mail?.items ?? null, chats: data.chats?.items ?? null, now: this.now() });
-      const payload: BriefingPayload = { deck: buildBriefingDeck(data, alerts), speech: briefingSpeech(data, alerts), alerts, manual, speak: this.config().speak };
+      const payload: BriefingPayload =
+        kind === 'evening'
+          ? { deck: buildEveningDeck(data, alerts), speech: eveningSpeech(data), alerts, manual, speak: this.config().speak, kind }
+          : { deck: buildBriefingDeck(data, alerts), speech: briefingSpeech(data, alerts), alerts, manual, speak: this.config().speak, kind };
       // тревоги из сводки считаем «уже показанными», чтобы тут же не продублировать их уведомлением
       this.markSeen(alerts);
       this.pending = this.listeners.size ? null : payload;
@@ -220,6 +239,25 @@ export class BriefingService {
     } finally {
       this.busy = false;
     }
+  }
+
+  registerTools(registry: ToolRegistry): void {
+    registry.register<{ kind?: string }>({
+      name: 'show_daily_report',
+      risk: 'low',
+      mutates: false,
+      domain: 'local',
+      external: true,
+      description:
+        'Открывает на экране готовую красивую сводку со спидометрами, графиками и озвучкой каждого слайда: kind="evening" — «вечерний отчёт / итоги дня» (CRM за сегодня, курс «Системно»: сколько зашло и оплатило, почта, чаты), kind="morning" — «утренняя сводка». ' +
+        'Вызывай сразу, когда пользователь просит показать вечерний/утренний отчёт или итоги дня. Сводка озвучивается сама — после вызова только коротко подтверди.',
+      inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: ['morning', 'evening'] } } },
+      describe: (i) => (i.kind === 'evening' ? 'Показать вечерний отчёт' : 'Показать утреннюю сводку'),
+      execute: async (i) => {
+        const p = await this.run(true, i.kind === 'evening' ? 'evening' : 'morning');
+        return `Отчёт открыт на экране (${p.deck.slides.length} слайдов) и озвучивается автоматически. Ничего не пересказывай — скажи одной фразой, что открыл.`;
+      },
+    });
   }
 
   private markSeen(alerts: AlertDto[]): void {

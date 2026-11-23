@@ -245,3 +245,105 @@ describe('Сводка: сервис', () => {
     expect(calls.every((c) => c.m === 'GET')).toBe(true);
   });
 });
+
+describe('Вечерний отчёт', () => {
+  const key = 'sro_TestKey1234567890abcdefghijklmnop';
+  const deal = (id: string, sem: string, createdH: number, updH: number, amount = 0) => ({ id, number: 1, title: id, stageSemantic: sem, createdAt: ago(createdH), updatedAt: ago(updH), amountRub: amount, pipeline: { id: 'p', name: 'Продажа' }, stage: { id: 's', name: 'КП', semantic: sem }, assignee: { id: 'u', fullName: 'Иван' } });
+  const fake = (): typeof fetch =>
+    (async (url: string) => {
+      const p = new URL(url).pathname.replace('/api/readonly/', '');
+      const ok = (data: unknown) => new Response(JSON.stringify({ ok: true, count: 1, nextCursor: null, data }), { status: 200 });
+      if (p === 'deals') return ok([deal('a', 'NEW', 1, 1), deal('b', 'NEW', 2, 2), deal('c', 'WON', 80, 1, 150000), deal('d', 'LOST', 90, 2), deal('e', 'NEW', 30, 30), deal('f', 'WON', 100, 50, 90000)]);
+      if (p === 'tasks') return ok([{ id: 't', completedAt: ago(2) }, { id: 'u', completedAt: ago(40) }]);
+      if (p === 'calls') return ok([{ startedAt: ago(1), direction: 'IN' }, { startedAt: ago(2), direction: 'OUT' }, { startedAt: ago(3), direction: 'OUT' }]);
+      if (p === 'production/orders') return ok([{ id: 'o', status: 'DONE', finishedAt: ago(1), plannedFor: ago(5) }]);
+      if (p === 'city/summary') return ok({ tasks: { open: 10, overdue: 4 }, production: { materialsBelowMinimum: [] } });
+      if (p === 'club/funnel') return ok({ total: 120, withAccessNow: 9, paying: 11, paidTotalRub: 33000, byStep: [{ step: 'watch', count: 70, stuckOver3Days: 52 }], last7Days: { joined: 14, paid: 7 }, today: { joined: 3, paid: 2, paidRub: 9800 } });
+      if (p === 'club/payments') return ok([{ paidAt: ago(2), amountRub: 4900, memberName: 'Анна К.' }, { paidAt: ago(1), amountRub: 4900, memberName: 'Пётр С.' }, { paidAt: ago(30), amountRub: 4900, memberName: 'Старая' }]);
+      if (p === 'employees') return ok([]);
+      return new Response('{}', { status: 404 });
+    }) as unknown as typeof fetch;
+
+  it('итоги дня считаются по суткам в часовом поясе пользователя', async () => {
+    const h = makeCore({ crmFetch: fake(), schedulerNow: () => NOW });
+    h.core.aquaSave({ baseUrl: 'https://crm.test' }, key);
+    const d = await h.core.briefing.collect('evening');
+    const e = d.evening!;
+    expect(e.today).toMatchObject({ newDeals: 2, won: 1, wonRub: 150000, lost: 1, tasksDone: 1, calls: { in: 1, out: 2 }, productionDone: 1 });
+    expect(e.dayLabels).toHaveLength(7);
+    expect(e.week.newPerDay.at(-1)).toBe(2);
+    expect(d.club?.today).toMatchObject({ joined: 3, paid: 2, paidRub: 9800 });
+    expect(d.club?.today?.payments?.map((p) => p.who)).toEqual(['Анна К.', 'Пётр С.']);
+  });
+
+  it('колода: спидометры, график, курс, оплаты; у каждого слайда есть текст для озвучки', async () => {
+    const h = makeCore({ crmFetch: fake(), schedulerNow: () => NOW });
+    h.core.aquaSave({ baseUrl: 'https://crm.test' }, key);
+    const p = await h.core.briefing.run(true, 'evening');
+    expect(p.kind).toBe('evening');
+    expect(p.deck.title).toBe('Вечерний отчёт');
+    expect(p.deck.narrate).toBe(true);
+    const kinds = p.deck.slides.map((s) => s.kind);
+    for (const k of ['title', 'kpis', 'gauges', 'trend', 'funnel', 'alerts', 'text']) expect(kinds).toContain(k);
+    expect(p.deck.slides.every((s) => !!s.say)).toBe(true);
+    const text = JSON.stringify(p.deck);
+    expect(text).toContain('Оплатили сегодня');
+    expect(text).toContain('Анна К.');
+    expect(text).toContain('Оплат на сумму');
+    const g = p.deck.slides.find((s) => s.kind === 'gauges');
+    expect(g && g.kind === 'gauges' && g.items.length >= 3).toBe(true);
+  });
+
+  it('утренняя сводка тоже озвучивается по слайдам', async () => {
+    const h = makeCore({ crmFetch: fake(), schedulerNow: () => NOW });
+    h.core.aquaSave({ baseUrl: 'https://crm.test' }, key);
+    const p = await h.core.briefing.run(true);
+    expect(p.deck.narrate).toBe(true);
+    expect(p.deck.slides.every((s) => !!s.say)).toBe(true);
+  });
+
+  it('если CRM не отдаёт оплаты за сегодня — отчёт честно об этом пишет, а не выдумывает', async () => {
+    const f = (async (url: string) => {
+      const p = new URL(url).pathname.replace('/api/readonly/', '');
+      if (p === 'club/funnel') return new Response(JSON.stringify({ ok: true, data: { total: 5, withAccessNow: 1, paying: 1, paidTotalRub: 1000, byStep: [{ step: 'watch', count: 5, stuckOver3Days: 0 }] } }), { status: 200 });
+      return new Response('{}', { status: 404 });
+    }) as unknown as typeof fetch;
+    const h = makeCore({ crmFetch: f, schedulerNow: () => NOW });
+    h.core.aquaSave({ baseUrl: 'https://crm.test' }, key);
+    const p = await h.core.briefing.run(true, 'evening');
+    expect(JSON.stringify(p.deck)).toContain('CRM пока не отдаёт');
+    expect(JSON.stringify(p.deck)).not.toContain('Оплатили сегодня');
+  });
+
+  it('вечерний отчёт по расписанию: один раз в сутки, и только если включён', async () => {
+    const h = makeCore({ crmFetch: fake(), schedulerNow: () => new Date('2026-11-23T13:30:00Z') }); // 20:30 в Бангкоке
+    h.core.aquaSave({ baseUrl: 'https://crm.test' }, key);
+    h.core.briefing.save({ enabled: false, eveningEnabled: true, eveningTime: '20:00' });
+    const got: string[] = [];
+    h.core.briefing.onBriefing((p) => got.push(p.kind));
+    await h.core.briefing.tick();
+    await h.core.briefing.tick();
+    expect(got).toEqual(['evening']);
+    const h2 = makeCore({ crmFetch: fake(), schedulerNow: () => new Date('2026-11-23T13:30:00Z') });
+    h2.core.briefing.onBriefing((p) => got.push(p.kind));
+    h2.core.briefing.save({ enabled: false });
+    await h2.core.briefing.tick();
+    expect(got).toEqual(['evening']);
+  });
+
+  it('голос: «вечерний отчёт» понимается и без глагола; инструмент для модели есть', () => {
+    for (const t of ['вечерний отчет', 'Покажи мне вечерний отчет', 'покажи итоги дня', 'сделай вечерний отчёт', 'итоги дня']) expect(parseNavIntent(t), t).toBe('evening');
+    for (const t of ['утренняя сводка', 'покажи утреннюю сводку']) expect(parseNavIntent(t), t).toBe('briefing');
+    const h = makeCore();
+    expect(h.core.tools.get('show_daily_report')).toBeTruthy();
+  });
+
+  it('колода: новые виды слайдов проходят проверку', () => {
+    const d = sanitizeDeck({ narrate: true, slides: [{ kind: 'gauges', title: 'g', say: 'раз', items: [{ label: 'a', value: 5, max: 10, tone: 'good' }] }, { kind: 'trend', title: 't', labels: ['пн', 'вт'], series: [{ label: 'x', values: [1, 2, 3, 4] }] }] });
+    expect(d.narrate).toBe(true);
+    const t = d.slides[1]!;
+    expect(t.kind === 'trend' && t.series[0]!.values).toEqual([1, 2]);
+    expect(d.slides[0]!.say).toBe('раз');
+    expect(sanitizeDeck({ narrate: true, slides: [{ kind: 'text', title: 'x', bullets: ['y'] }] }).narrate).toBeUndefined();
+  });
+});

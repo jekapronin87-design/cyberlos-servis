@@ -262,18 +262,23 @@ export function App() {
     [],
   );
   // Утренняя сводка по расписанию (и по кнопке/голосу): открыть показ и поздороваться
+  /** Озвучка слайда для показа: готовый текст слайда (say), без нейросети. */
+  const narrateSlide = (text: string): { done: Promise<void>; cancel: () => void } => {
+    const st = settingsRef.current;
+    const s = new SpeechSession({ mode: st.ttsMode, systemVoice: st.systemVoice, speed: st.ttsSpeed, onError: setError });
+    s.push(text);
+    return { done: s.end(), cancel: cancelSpeech };
+  };
   const openBriefing = (p: { deck: DeckDto; speech: string; speak: boolean }): void => {
     setDeck(p.deck);
     const st = settingsRef.current;
-    const mute = noLocalSpeechRef.current;
-    noLocalSpeechRef.current = false;
-    if (st.ttsMode !== 'off' && p.speak && !mute) {
+    // Озвученный показ (narrate) читает слайды сам; иначе — только приветствие
+    if (!p.deck.narrate && st.ttsMode !== 'off' && p.speak) {
       const s = new SpeechSession({ mode: st.ttsMode, systemVoice: st.systemVoice, speed: st.ttsSpeed, onError: setError });
       s.push(p.speech);
       void s.end();
     }
   };
-  const noLocalSpeechRef = useRef(false);
   useEffect(() => {
     void window.jarvis.briefing.pending().then((p) => p && openBriefing(p), () => undefined);
     const off1 = window.jarvis.briefing.onBriefing((p) => openBriefing(p));
@@ -308,13 +313,17 @@ export function App() {
       return 'CRM не подключена, поэтому на экране пример данных.';
     }
   };
-  /** «Покажи утреннюю сводку»: собирает данные (CRM, клуб, почта, чаты) и открывает показ; приветствие озвучивается шаблоном, без нейросети. */
+  /** «Покажи утреннюю сводку / вечерний отчёт»: собирает данные (CRM, курс, почта, чаты) и открывает показ; каждый слайд озвучивается шаблоном, без нейросети. */
   const briefingByIntent = async (text: string, viaRealtime = false): Promise<string | null> => {
-    if (parseNavIntent(text) !== 'briefing') return null;
+    const intent = parseNavIntent(text);
+    if (intent !== 'briefing' && intent !== 'evening') return null;
+    const evening = intent === 'evening';
     try {
-      noLocalSpeechRef.current = viaRealtime; // в живом разговоре приветствие произнесёт сама голосовая модель
-      const p = await window.jarvis.briefing.run(); // само придёт и событием onBriefing → откроется показ
-      return viaRealtime ? `Сводка открыта на экране. Зачитай её коротко своими словами: ${p.speech}` : p.speech;
+      uiSounds.play('sweep');
+      // само придёт и событием onBriefing → откроется показ и начнётся озвучка слайдов
+      const p = await window.jarvis.briefing.run(evening ? 'evening' : 'morning');
+      if (evening) return viaRealtime ? 'Вечерний отчёт открыт на экране и озвучивается автоматически. Ничего не пересказывай и не перебивай — скажи только «Открываю».' : p.speech;
+      return viaRealtime ? 'Утренняя сводка открыта на экране и озвучивается автоматически. Ничего не пересказывай — скажи только «Открываю».' : p.speech;
     } catch (e) {
       return e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'Не получилось собрать сводку.';
     }
@@ -330,7 +339,7 @@ export function App() {
   /** Голосовая/текстовая навигация без обращения к модели: мгновенно и бесплатно. */
   const navigateByIntent = (text: string, silent = false): string | null => {
     const intent = parseNavIntent(text);
-    if (!intent || intent === 'stats' || intent === 'briefing') return null;
+    if (!intent || intent === 'stats' || intent === 'briefing' || intent === 'evening') return null;
     const st = settingsRef.current;
     const say = (t: string): void => {
       if (!silent && st.ttsMode !== 'off') void speak(t, st.ttsMode, { systemVoice: st.systemVoice, speed: st.ttsSpeed }).catch(() => undefined);
@@ -834,7 +843,17 @@ export function App() {
         )}
       </main>
 
-      {deck && <ShowView deck={deck} command={showCmd} onClose={() => setDeck(null)} />}
+      {deck && (
+        <ShowView
+          deck={deck}
+          command={showCmd}
+          onClose={() => {
+            cancelSpeech();
+            setDeck(null);
+          }}
+          narrator={settingsRef.current.ttsMode !== 'off' ? narrateSlide : undefined}
+        />
+      )}
 
       {current && <ConfirmDialog req={current} onAnswer={(a) => answer(current.id, a)} onStop={stop} />}
     </div>

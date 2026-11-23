@@ -56,6 +56,83 @@ function Head({ s }: { s: { title: string; subtitle?: string } }) {
   );
 }
 
+/** Спидометр: полукруглая шкала, светящаяся дуга и стрелка, которые плавно «доезжают» до значения. */
+function Gauge({ g, i }: { g: { label: string; value: number; max: number; unit?: string; note?: string; tone?: Tone }; i: number }) {
+  const frac = Math.max(0, Math.min(1, g.value / Math.max(1, g.max)));
+  const [on, setOn] = useState(reduced());
+  useEffect(() => {
+    const t = window.setTimeout(() => setOn(true), 250 + i * 160);
+    return () => window.clearTimeout(t);
+  }, []);
+  const c = COLOR[g.tone ?? 'neutral'];
+  const angle = -90 + (on ? frac : 0) * 180;
+  const ticks = Array.from({ length: 11 }, (_, k) => -90 + k * 18);
+  return (
+    <div className="sh-gauge" style={{ ...idx(i), ['--c' as string]: c }}>
+      <svg viewBox="0 0 200 120" aria-hidden="true">
+        <path d="M20 100 A80 80 0 0 1 180 100" pathLength="100" className="sh-g-track" />
+        <path d="M20 100 A80 80 0 0 1 180 100" pathLength="100" className="sh-g-arc" style={{ strokeDasharray: `${on ? frac * 100 : 0} 100` }} />
+        {ticks.map((a, k) => (
+          <line key={k} x1="100" y1="22" x2="100" y2={k % 5 === 0 ? 30 : 27} className="sh-g-tick" transform={`rotate(${a} 100 100)`} />
+        ))}
+        <g className="sh-g-needle" style={{ transform: `rotate(${angle}deg)` }}>
+          <line x1="100" y1="100" x2="100" y2="32" />
+          <circle cx="100" cy="100" r="6" />
+        </g>
+      </svg>
+      <div className="sh-g-v"><Count value={g.value} unit={g.unit} /></div>
+      <div className="sh-g-l">{g.label}</div>
+      {g.note && <div className="sh-g-n">{g.note}</div>}
+    </div>
+  );
+}
+
+/** Линейный график по дням: линии «рисуются» слева направо, под ними мягкая заливка. */
+function Trend({ s }: { s: Extract<SlideDto, { kind: 'trend' }> }) {
+  const W = 640;
+  const H = 250;
+  const L = 36;
+  const B = 28;
+  const n = Math.max(2, s.labels.length);
+  const max = Math.max(1, ...s.series.flatMap((r) => r.values));
+  const niceMax = Math.max(2, Math.ceil(max / 2) * 2);
+  const x = (k: number): number => L + (k * (W - L - 12)) / (n - 1);
+  const y = (v: number): number => H - B - (v / niceMax) * (H - B - 16);
+  return (
+    <div className="sh-trend">
+      <svg viewBox={`0 0 ${W} ${H}`} aria-hidden="true">
+        {[0, 0.5, 1].map((f, k) => (
+          <g key={k}>
+            <line x1={L} x2={W - 12} y1={y(niceMax * f)} y2={y(niceMax * f)} className="sh-t-grid" />
+            <text x={L - 6} y={y(niceMax * f) + 4} className="sh-t-axis" textAnchor="end">{Math.round(niceMax * f)}</text>
+          </g>
+        ))}
+        {s.labels.map((l, k) => (
+          <text key={k} x={x(k)} y={H - 8} className="sh-t-axis" textAnchor="middle">{l}</text>
+        ))}
+        {s.series.map((r, si) => {
+          const col = r.tone ? COLOR[r.tone] : PALETTE[si % PALETTE.length]!;
+          const pts = r.values.map((v, k) => [x(k), y(v)] as const);
+          if (pts.length === 0) return null;
+          const line = pts.map((p, k) => `${k ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ');
+          const area = `${line} L${pts[pts.length - 1]![0].toFixed(1)} ${H - B} L${pts[0]![0].toFixed(1)} ${H - B} Z`;
+          return (
+            <g key={si} style={{ ['--c' as string]: col, ...idx(si) }}>
+              <path d={area} className="sh-t-area" />
+              <path d={line} pathLength="1" className="sh-t-line" />
+              {pts.map((p, k) => <circle key={k} cx={p[0]} cy={p[1]} r={k === pts.length - 1 ? 5 : 3} className="sh-t-dot" style={{ animationDelay: `${0.9 + k * 0.08}s` }} />)}
+              <text x={pts[pts.length - 1]![0]} y={pts[pts.length - 1]![1] - 10} className="sh-t-last" textAnchor="middle">{r.values[r.values.length - 1]}</text>
+            </g>
+          );
+        })}
+      </svg>
+      <div className="sh-t-legend">
+        {s.series.map((r, si) => <span key={si}><i style={{ background: r.tone ? COLOR[r.tone] : PALETTE[si % PALETTE.length] }} />{r.label}</span>)}
+      </div>
+    </div>
+  );
+}
+
 function Slide({ s, source }: { s: SlideDto; source: string }) {
   if (s.kind === 'title') {
     return (
@@ -149,6 +226,12 @@ function Slide({ s, source }: { s: SlideDto; source: string }) {
           </table>
         </div>
       )}
+      {s.kind === 'gauges' && (
+        <div className="sh-gauges">
+          {s.items.map((g, i) => <Gauge key={i} g={g} i={i} />)}
+        </div>
+      )}
+      {s.kind === 'trend' && <Trend s={s} />}
       {s.kind === 'alerts' && (
         <ul className="sh-alerts">
           {s.items.map((a, i) => (
@@ -175,7 +258,7 @@ function Slide({ s, source }: { s: SlideDto; source: string }) {
  * Полноэкранный «Показ»: слайды в космическом оформлении с движением — числа набегают, столбцы растут, воронки раскрываются, слайды
  * «влетают» в рамке-макете. Листается стрелками, мышью и голосом («дальше», «назад», «пауза», «закрой»); сам идёт по слайдам.
  */
-export function ShowView(props: { deck: DeckDto; command: ShowCommand | null; onClose: () => void }) {
+export function ShowView(props: { deck: DeckDto; command: ShowCommand | null; onClose: () => void; narrator?: (text: string) => { done: Promise<void>; cancel: () => void } }) {
   const { deck } = props;
   const n = deck.slides.length;
   const sec = deck.autoplaySec ?? 9;
@@ -203,12 +286,30 @@ export function ShowView(props: { deck: DeckDto; command: ShowCommand | null; on
     else if (kind === 'kpis') window.setTimeout(() => uiSounds.play('tick'), 420);
   }, [i]);
 
+  // Озвученный показ: на каждом слайде читается его текст (say); когда реплика закончилась — пауза и следующий слайд
+  const narrating = !!props.narrator && deck.narrate === true;
+  const say = deck.slides[i]?.say;
+  useEffect(() => {
+    if (!narrating || !say || !playing) return;
+    let alive = true;
+    let next = 0;
+    const h = props.narrator!(say);
+    void h.done.then(() => {
+      if (alive && !last) next = window.setTimeout(() => go(i + 1), 1100);
+    });
+    return () => {
+      alive = false;
+      window.clearTimeout(next);
+      h.cancel();
+    };
+  }, [narrating, say, playing, i]);
+
   // автопоказ
   useEffect(() => {
-    if (!playing || last) return;
+    if (!playing || last || (narrating && say)) return;
     const t = window.setTimeout(() => go(i + 1), sec * 1000);
     return () => window.clearTimeout(t);
-  }, [playing, i, last, sec]);
+  }, [playing, i, last, sec, narrating, say]);
 
   // клавиатура
   const goRef = useRef(go);
@@ -275,7 +376,7 @@ export function ShowView(props: { deck: DeckDto; command: ShowCommand | null; on
         </div>
         <div className="show-hint">← → листать · пробел — пауза · Esc — закрыть · голосом: «дальше», «назад», «пауза», «закрой»</div>
       </footer>
-      {playing && !last && <div key={`p${i}`} className="show-progress" style={{ animationDuration: `${sec}s` }} aria-hidden="true" />}
+      {playing && !last && !(narrating && say) && <div key={`p${i}`} className="show-progress" style={{ animationDuration: `${sec}s` }} aria-hidden="true" />}
     </section>
   );
 }

@@ -351,7 +351,7 @@ export function registerIpc(opts: {
     core.briefing.save(cfg);
     return briefingState();
   });
-  handle(IPC.briefingRun, () => core.briefing.run(true));
+  handle(IPC.briefingRun, (_e, kind) => core.briefing.run(true, kind === 'evening' ? 'evening' : 'morning'));
   handle(IPC.briefingPending, () => core.briefing.takePending());
   handle(IPC.briefingMailAdd, (_e, provider, email, password) => core.mail.add(provider, str(email, 'email', 200), str(password, 'password', 300)));
   handle(IPC.briefingMailRemove, (_e, id) => core.mail.remove(str(id, 'id', 60)));

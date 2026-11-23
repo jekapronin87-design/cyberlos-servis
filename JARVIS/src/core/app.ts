@@ -246,6 +246,7 @@ export class JarvisCore {
       userName: () => this.settings.get().userName,
       now: opts.schedulerNow,
     });
+    this.briefing.registerTools(this.tools);
     this.video = new VideoService({
       db: this.db,
       audit: this.audit,

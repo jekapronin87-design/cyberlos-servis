@@ -112,7 +112,7 @@ const api: JarvisApi = {
   briefing: {
     get: () => invoke(IPC.briefingGet),
     save: (cfg) => invoke(IPC.briefingSave, cfg),
-    run: () => invoke(IPC.briefingRun),
+    run: (kind) => invoke(IPC.briefingRun, kind),
     pending: () => invoke(IPC.briefingPending),
     mailAdd: (provider, email, password) => invoke(IPC.briefingMailAdd, provider, email, password),
     mailRemove: (id) => invoke(IPC.briefingMailRemove, id),
