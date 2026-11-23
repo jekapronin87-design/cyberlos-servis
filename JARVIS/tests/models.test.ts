@@ -242,3 +242,50 @@ describe('Понятные ошибки Anthropic', () => {
     expect(describeApiError(mk(400, 'prompt is too long: 250000 tokens'))).toMatch(/слишком длинным/);
   });
 });
+
+import { cleanSchema, describeProviderHttp } from '../src/core/providers/openai';
+describe('Gemini и другие бесплатные модели: схемы, повторы, понятные ошибки', () => {
+  it('cleanSchema: без additionalProperties и списков типов; пустые параметры не передаются; массивы с items', () => {
+    expect(cleanSchema({ type: 'object', properties: {} })).toBeUndefined();
+    const s = cleanSchema({ type: 'object', properties: { q: { type: 'object', additionalProperties: { type: ['string', 'number'] }, description: 'фильтры' }, a: { type: 'array' }, n: { type: ['integer', 'null'] }, ok: { type: 'string', default: 'x' } }, additionalProperties: false, required: ['q'] })!;
+    const p = s['properties'] as Record<string, Record<string, unknown>>;
+    expect(s['additionalProperties']).toBeUndefined();
+    expect(p['q']).toMatchObject({ type: 'string' });
+    expect(p['a']).toMatchObject({ type: 'array', items: { type: 'string' } });
+    expect(p['n']!['type']).toBe('integer');
+    expect(p['ok']!['default']).toBeUndefined();
+    expect(s['required']).toEqual(['q']);
+  });
+
+  const sseText = (t: string) => new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: t } }] })}\n\ndata: [DONE]\n\n`, { status: 200 });
+  const run = async (f: typeof fetch) => {
+    const p = new OpenAiCompatProvider({ id: 'gemini', name: 'Gemini', baseUrl: 'https://x/v1', apiKey: 'AIzaSyKEY1234567', model: 'm', local: false, fetchImpl: f, retryDelayMs: 0 });
+    let text = '';
+    for await (const ev of p.stream({ system: 's', messages: [{ role: 'user', content: [{ type: 'text', text: 'привет' }] }], tools: [{ name: 'show_stats', description: 'd', inputSchema: { type: 'object', properties: {} } }, { name: 'crm_live_get', description: 'd', inputSchema: { type: 'object', properties: { query: { type: 'object', additionalProperties: { type: ['string', 'number'] } } }, required: ['query'] } }], model: 'm', maxTokens: 50 }, new AbortController().signal)) if (ev.type === 'text') text += ev.text;
+    return text;
+  };
+
+  it('503 «перегружено» дважды, затем ответ — пользователь ничего не замечает; в запросе нет «опасных» полей схемы', async () => {
+    let n = 0;
+    const bodies: string[] = [];
+    const f = (async (_u: string, init: RequestInit) => {
+      bodies.push(String(init.body));
+      return ++n < 3 ? new Response(JSON.stringify([{ error: { code: 503, message: 'The model is overloaded. Please try again later.', status: 'UNAVAILABLE' } }]), { status: 503 }) : sseText('Привет!');
+    }) as unknown as typeof fetch;
+    expect(await run(f)).toBe('Привет!');
+    expect(n).toBe(3);
+    const sent = JSON.parse(bodies[0]!);
+    expect(sent.tools[0].function.parameters).toBeUndefined(); // инструмент без параметров
+    expect(JSON.stringify(sent.tools)).not.toContain('additionalProperties');
+  });
+
+  it('постоянный 503: честная причина от сервиса, а не просто «недоступен»; 400 и 429 тоже с причиной', async () => {
+    const f = (async () => new Response(JSON.stringify([{ error: { code: 503, message: 'The model is overloaded.', status: 'UNAVAILABLE' } }]), { status: 503 })) as unknown as typeof fetch;
+    const err = await run(f).catch((e: unknown) => e as ProviderHttpError);
+    const msg = describeProviderHttp(err as ProviderHttpError);
+    expect(msg).toMatch(/перегружен/);
+    expect(msg).toContain('The model is overloaded');
+    expect(describeProviderHttp(new ProviderHttpError(400, JSON.stringify({ error: { message: 'Invalid JSON payload received. Unknown name "x" key AIzaSyABCDEFGH123' } }), 'gemini'))).toMatch(/Invalid JSON payload.*\[ключ\]/);
+    expect(describeProviderHttp(new ProviderHttpError(500, 'oops', 'gemini'))).toMatch(/недоступен \(500\)/);
+  });
+});

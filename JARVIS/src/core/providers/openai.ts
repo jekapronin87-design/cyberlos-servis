@@ -38,6 +38,35 @@ export function toOpenAiMessages(system: string, messages: ProviderMessage[]): O
   return out;
 }
 
+/**
+ * Схема параметров инструмента в виде, понятном и «строгим» OpenAI-совместимым API (Gemini, Groq, Ollama): без additionalProperties/$schema/default,
+ * тип-списки превращаются в один тип, у массивов есть items. Пустые параметры (нет полей) не передаются вовсе — Gemini отвечает на них ошибкой.
+ */
+export function cleanSchema(s: unknown): Record<string, unknown> | undefined {
+  const walk = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(walk);
+    if (!v || typeof v !== 'object') return v;
+    const o = { ...(v as Record<string, unknown>) };
+    delete o['additionalProperties'];
+    delete o['$schema'];
+    delete o['default'];
+    if (Array.isArray(o['type'])) o['type'] = (o['type'] as string[]).find((t) => t !== 'null') ?? 'string';
+    if (o['type'] === 'array' && !o['items']) o['items'] = { type: 'string' };
+    if (o['properties'] && typeof o['properties'] === 'object') o['properties'] = Object.fromEntries(Object.entries(o['properties'] as Record<string, unknown>).map(([k, x]) => [k, walk(x)]));
+    if (o['items']) o['items'] = walk(o['items']);
+    return o;
+  };
+  const r = walk(s) as Record<string, unknown>;
+  const props = r['properties'] as Record<string, unknown> | undefined;
+  if (!props || Object.keys(props).length === 0) return undefined;
+  // объект без вложенных полей (например, свободный словарь) для строгих API превращаем в строку
+  for (const [k, p] of Object.entries(props)) {
+    const pp = p as Record<string, unknown>;
+    if (pp['type'] === 'object' && !pp['properties']) props[k] = { type: 'string', description: `${String(pp['description'] ?? k)} (JSON-строка)` };
+  }
+  return r;
+}
+
 export interface OpenAiCompatOptions {
   id: string;
   name: string;
@@ -47,6 +76,8 @@ export interface OpenAiCompatOptions {
   /** Локальная модель (Ollama/LM Studio): данные не покидают компьютер, первый ответ может быть долгим (загрузка модели). */
   local: boolean;
   fetchImpl?: Fetch;
+  /** Пауза между повторами при 5xx/429 (мс; в тестах 0). */
+  retryDelayMs?: number;
 }
 
 /** Провайдер для любого OpenAI-совместимого API: Ollama, Groq, Gemini, OpenRouter, Qwen и др. */
@@ -72,25 +103,31 @@ export class OpenAiCompatProvider implements ChatProvider {
       stream: true,
       max_tokens: req.maxTokens,
       ...(req.tools.length
-        ? { tools: req.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.inputSchema } })) }
+        ? { tools: req.tools.map((t) => { const parameters = cleanSchema(t.inputSchema); return { type: 'function', function: { name: t.name, description: t.description.slice(0, 1000), ...(parameters ? { parameters } : {}) } }; }) }
         : {}),
     };
     const timeout = AbortSignal.timeout(this.local ? 300_000 : 120_000);
-    let res: Response;
-    try {
-      res = await f(`${this.o.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(this.o.apiKey ? { Authorization: `Bearer ${this.o.apiKey}` } : {}) },
-        body: JSON.stringify(body),
-        signal: AbortSignal.any([signal, timeout]),
-      });
-    } catch (e) {
-      if (signal.aborted) return;
-      throw new ProviderHttpError(0, this.local ? 'Ollama не запущена или недоступна. Запустите её или отключите эту модель.' : 'Нет связи с сервисом модели.', this.id);
+    let res: Response | undefined;
+    // Бесплатные тарифы часто отвечают «перегружено» (503) или «слишком часто» (429) — пробуем ещё раз через пару секунд
+    for (let attempt = 0; attempt < (this.local ? 1 : 3); attempt++) {
+      try {
+        res = await f(`${this.o.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(this.o.apiKey ? { Authorization: `Bearer ${this.o.apiKey}` } : {}) },
+          body: JSON.stringify(body),
+          signal: AbortSignal.any([signal, timeout]),
+        });
+      } catch (e) {
+        if (signal.aborted) return;
+        throw new ProviderHttpError(0, this.local ? 'Ollama не запущена или недоступна. Запустите её или отключите эту модель.' : 'Нет связи с сервисом модели.', this.id);
+      }
+      if (res.ok || (res.status < 500 && res.status !== 429) || attempt === 2) break;
+      await new Promise((r) => setTimeout(r, this.o.retryDelayMs ?? 1500 * (attempt + 1)));
     }
+    if (!res) throw new ProviderHttpError(0, 'Нет ответа от сервиса модели.', this.id);
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      throw new ProviderHttpError(res.status, text.slice(0, 200), this.id);
+      throw new ProviderHttpError(res.status, text.slice(0, 800), this.id);
     }
     if (!res.body) throw new ProviderHttpError(502, 'Пустой ответ', this.id);
 
@@ -165,11 +202,26 @@ export class OpenAiCompatProvider implements ChatProvider {
 }
 
 /** Понятное сообщение для человека. */
+/** Достаёт из тела ошибки сервиса короткую причину («model overloaded», «quota exceeded»…) — чтобы было понятно, что именно случилось. */
+export function upstreamReason(body: string): string {
+  try {
+    const j = JSON.parse(body) as unknown;
+    const first = Array.isArray(j) ? j[0] : j;
+    const m = (first as { error?: { message?: unknown; status?: unknown } } | undefined)?.error;
+    const text = typeof m?.message === 'string' ? m.message : typeof m?.status === 'string' ? m.status : '';
+    return text.replace(/\s+/g, ' ').replace(/\b(AIza|sk-|gsk_)[\w-]{6,}/g, '[ключ]').slice(0, 180);
+  } catch {
+    return body.replace(/\s+/g, ' ').replace(/\b(AIza|sk-|gsk_)[\w-]{6,}/g, '[ключ]').slice(0, 120);
+  }
+}
+
 export function describeProviderHttp(e: ProviderHttpError): string {
   if (e.status === 0) return e.message;
+  const why = e.status >= 400 ? upstreamReason(e.message) : '';
+  if (e.status >= 500 && /overload|unavailable|high demand|capacity/i.test(why + e.message)) return `Сервис «${e.provider}» перегружен (бесплатный тариф часто так отвечает). Подождите минуту и повторите — программа уже пробовала 3 раза${why ? `. Ответ сервиса: ${why}` : ''}.`;
   if (e.status === 401 || e.status === 403) return `Ключ для «${e.provider}» не подошёл. Проверьте его в настройках.`;
   if (e.status === 404) return `Модель или адрес для «${e.provider}» не найдены. Проверьте название модели.`;
   if (e.status === 429) return `Лимит бесплатных запросов «${e.provider}» исчерпан. Попробуйте позже.`;
-  if (e.status >= 500) return `Сервис «${e.provider}» временно недоступен.`;
-  return `Ошибка «${e.provider}» (${e.status}).`;
+  if (e.status >= 500) return `Сервис «${e.provider}» временно недоступен (${e.status})${why ? `. Ответ сервиса: ${why}` : ''}.`;
+  return `Ошибка «${e.provider}» (${e.status})${why ? `: ${why}` : ''}.`;
 }
