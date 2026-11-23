@@ -289,3 +289,15 @@ describe('Gemini и другие бесплатные модели: схемы, 
     expect(describeProviderHttp(new ProviderHttpError(500, 'oops', 'gemini'))).toMatch(/недоступен \(500\)/);
   });
 });
+
+import { netMessage } from '../src/core/providers/openai';
+describe('Сбои сети и закрытые для страны сервисы', () => {
+  it('сообщение называет адрес и причину и подсказывает выход; 403 объясняет возможную блокировку по стране', () => {
+    const m = netMessage('https://generativelanguage.googleapis.com/v1beta/openai', Object.assign(new TypeError('fetch failed'), { cause: { code: 'ETIMEDOUT' } }));
+    expect(m).toContain('generativelanguage.googleapis.com');
+    expect(m).toContain('ETIMEDOUT');
+    expect(m).toMatch(/VPN/);
+    expect(netMessage('https://x.y/v1', Object.assign(new TypeError('x'), { cause: { code: 'ENOTFOUND' } }))).toMatch(/адрес не найден/);
+    expect(describeProviderHttp(new ProviderHttpError(403, 'Access denied', 'groq'))).toMatch(/закрыт для вашей страны/);
+  });
+});

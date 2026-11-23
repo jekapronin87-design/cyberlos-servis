@@ -27,7 +27,7 @@ export const MODULES: { id: ModuleId; title: string; description: string }[] = [
 
 export type ProviderChoice = 'auto' | 'demo' | 'anthropic';
 /** Бесплатные/дешёвые модели с OpenAI-совместимым интерфейсом. */
-export type FreeProviderId = 'ollama' | 'openrouter' | 'groq' | 'gemini' | 'qwen' | 'custom';
+export type FreeProviderId = 'ollama' | 'openrouter' | 'groq' | 'gemini' | 'qwen' | 'deepseek' | 'custom';
 export interface FreeProviderConfig {
   id: FreeProviderId;
   enabled: boolean;
@@ -41,6 +41,7 @@ export const FREE_PROVIDER_PRESETS: { id: FreeProviderId; name: string; baseUrl:
   { id: 'gemini', name: 'Google Gemini (бесплатный тариф)', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-flash-latest', needsKey: true, local: false, help: 'Ключ бесплатно: aistudio.google.com → Get API key. Есть дневные лимиты.' },
   { id: 'groq', name: 'Groq (быстрый, бесплатный тариф)', baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile', needsKey: true, local: false, help: 'Ключ бесплатно: console.groq.com → API Keys. Есть лимиты запросов в минуту.' },
   { id: 'openrouter', name: 'OpenRouter (бесплатные модели «:free»)', baseUrl: 'https://openrouter.ai/api/v1', model: 'qwen/qwen3-coder:free', needsKey: true, local: false, help: 'Ключ: openrouter.ai/keys. Бесплатные модели помечены «:free»; их список меняется — название можно поправить.' },
+  { id: 'deepseek', name: 'DeepSeek (очень дешёвый, работает из России)', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat', needsKey: true, local: false, help: 'Не бесплатный, но в ~10–20 раз дешевле Claude; пополнение от нескольких долларов. Ключ: platform.deepseek.com → API keys. Доступен из России без VPN.' },
   { id: 'qwen', name: 'Qwen (Alibaba Cloud Model Studio)', baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus', needsKey: true, local: false, help: 'Ключ: Alibaba Cloud Model Studio. Новым аккаунтам обычно дают бесплатную квоту; условия смотрите у них.' },
   { id: 'custom', name: 'Своя модель (любой OpenAI-совместимый адрес)', baseUrl: 'https://', model: '', needsKey: true, local: false, help: 'Например, LM Studio (http://127.0.0.1:1234/v1) или другой сервис.' },
 ];

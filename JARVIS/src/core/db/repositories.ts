@@ -58,7 +58,7 @@ export function validateSettingsPatch(patch: unknown): Partial<Settings> {
     out.imageModel = p.imageModel;
   }
   if ('freeProviders' in p) {
-    const ids = ['ollama', 'openrouter', 'groq', 'gemini', 'qwen', 'custom'];
+    const ids = ['ollama', 'openrouter', 'groq', 'gemini', 'qwen', 'deepseek', 'custom'];
     if (!Array.isArray(p.freeProviders) || p.freeProviders.length > 12) throw new Error('Некорректный список моделей');
     const seen = new Set<string>();
     out.freeProviders = (p.freeProviders as Record<string, unknown>[]).map((c) => {

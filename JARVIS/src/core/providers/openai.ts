@@ -67,6 +67,19 @@ export function cleanSchema(s: unknown): Record<string, unknown> | undefined {
   return r;
 }
 
+/** Сообщение о сбое сети с адресом и причиной: «не соединилось» чаще всего значит, что сервис недоступен из вашей страны/сети (нужен VPN для этого адреса). */
+export function netMessage(baseUrl: string, e: unknown): string {
+  let host = baseUrl;
+  try {
+    host = new URL(baseUrl).host;
+  } catch {
+    /* оставляем как есть */
+  }
+  const code = (e as { cause?: { code?: string } } | undefined)?.cause?.code ?? (e instanceof DOMException ? e.name : '');
+  const what = /ENOTFOUND|EAI_AGAIN/.test(code) ? 'адрес не найден (проверьте интернет и DNS)' : /ETIMEDOUT|UND_ERR_CONNECT_TIMEOUT|TimeoutError/.test(code) ? 'сервис не отвечает (часто так бывает, когда адрес закрыт для вашей страны или сети)' : /ECONNRESET|ECONNREFUSED|EPIPE/.test(code) ? 'соединение сброшено (часто так бывает, когда адрес закрыт для вашей страны или сети)' : /CERT|SSL|TLS/.test(code) ? 'ошибка сертификата (проверьте дату на компьютере и антивирус)' : 'соединиться не удалось';
+  return `Нет связи с ${host}: ${what}${code ? ` [${code}]` : ''}. Если вы в России — включите VPN для этого адреса или выберите модель, доступную без VPN (DeepSeek, OpenRouter, Ollama).`;
+}
+
 export interface OpenAiCompatOptions {
   id: string;
   name: string;
@@ -119,7 +132,7 @@ export class OpenAiCompatProvider implements ChatProvider {
         });
       } catch (e) {
         if (signal.aborted) return;
-        throw new ProviderHttpError(0, this.local ? 'Ollama не запущена или недоступна. Запустите её или отключите эту модель.' : 'Нет связи с сервисом модели.', this.id);
+        throw new ProviderHttpError(0, this.local ? 'Ollama не запущена или недоступна. Запустите её или отключите эту модель.' : netMessage(this.o.baseUrl, e), this.id);
       }
       if (res.ok || (res.status < 500 && res.status !== 429) || attempt === 2) break;
       await new Promise((r) => setTimeout(r, this.o.retryDelayMs ?? 1500 * (attempt + 1)));
@@ -192,8 +205,8 @@ export class OpenAiCompatProvider implements ChatProvider {
       headers: { 'Content-Type': 'application/json', ...(this.o.apiKey ? { Authorization: `Bearer ${this.o.apiKey}` } : {}) },
       body: JSON.stringify({ model: this.o.model, messages: [{ role: 'user', content: 'Ответь одним словом: готов' }], max_tokens: 16 }),
       signal: AbortSignal.timeout(this.local ? 120_000 : 30_000),
-    }).catch(() => {
-      throw new ProviderHttpError(0, this.local ? 'Ollama не отвечает. Запущена ли она?' : 'Нет связи с сервисом.', this.id);
+    }).catch((e: unknown) => {
+      throw new ProviderHttpError(0, this.local ? 'Ollama не отвечает. Запущена ли она?' : netMessage(this.o.baseUrl, e), this.id);
     });
     if (!res.ok) throw new ProviderHttpError(res.status, (await res.text().catch(() => '')).slice(0, 200), this.id);
     const j = (await res.json().catch(() => ({}))) as { choices?: { message?: { content?: string } }[] };
@@ -219,7 +232,7 @@ export function describeProviderHttp(e: ProviderHttpError): string {
   if (e.status === 0) return e.message;
   const why = e.status >= 400 ? upstreamReason(e.message) : '';
   if (e.status >= 500 && /overload|unavailable|high demand|capacity/i.test(why + e.message)) return `Сервис «${e.provider}» перегружен (бесплатный тариф часто так отвечает). Подождите минуту и повторите — программа уже пробовала 3 раза${why ? `. Ответ сервиса: ${why}` : ''}.`;
-  if (e.status === 401 || e.status === 403) return `Ключ для «${e.provider}» не подошёл. Проверьте его в настройках.`;
+  if (e.status === 401 || e.status === 403) return `«${e.provider}» не принял запрос (${e.status}): неверный ключ — или сервис закрыт для вашей страны/сети (Groq и Gemini так делают для России — нужен VPN для их адреса)${why ? `. Ответ сервиса: ${why}` : ''}.`;
   if (e.status === 404) return `Модель или адрес для «${e.provider}» не найдены. Проверьте название модели.`;
   if (e.status === 429) return `Лимит бесплатных запросов «${e.provider}» исчерпан. Попробуйте позже.`;
   if (e.status >= 500) return `Сервис «${e.provider}» временно недоступен (${e.status})${why ? `. Ответ сервиса: ${why}` : ''}.`;
