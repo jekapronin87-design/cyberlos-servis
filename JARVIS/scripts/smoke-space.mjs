@@ -131,6 +131,30 @@ try {
   assert.match(await page.locator('[data-testid=space-drawer]').textContent(), /Сварка \(Алексей\)/);
   await page.screenshot({ path: join(shots, 's6-production.png') });
   step('«Покажи, что у нас в производстве» → открылся раздел «Производство» с заказами и текущим этапом');
+  // «Давай посмотрим статистику» → на экране кинематографичная презентация из данных CRM; листается голосом и клавишами
+  await page.keyboard.press('Escape');
+  await page.click('.space-close');
+  await page.waitForSelector('.hud');
+  await hudType(page, 'Давай посмотрим статистику');
+  await page.waitForSelector('[data-testid=show]');
+  await page.waitForSelector('[data-testid=show-slide][data-kind=title]');
+  const total = Number((await page.locator('[data-testid=show-count]').textContent()).split('/')[1]);
+  assert.ok(total >= 6, 'в презентации должно быть несколько слайдов: ' + total);
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: join(shots, 's7-show-title.png') });
+  await page.keyboard.press('ArrowRight');
+  await page.waitForSelector('[data-testid=show-slide][data-kind=kpis]');
+  await page.waitForTimeout(1600);
+  await page.screenshot({ path: join(shots, 's8-show-kpis.png') });
+  await hudType(page, 'дальше');
+  await page.waitForFunction(() => document.querySelector('[data-testid=show-count]')?.textContent?.startsWith('3'));
+  await page.waitForTimeout(1600);
+  await page.screenshot({ path: join(shots, 's9-show-slide3.png') });
+  await hudType(page, 'назад');
+  await page.waitForFunction(() => document.querySelector('[data-testid=show-count]')?.textContent?.startsWith('2'));
+  await hudType(page, 'закрой');
+  await page.waitForSelector('[data-testid=show]', { state: 'detached' });
+  step('«Давай посмотрим статистику» → презентация из данных CRM (' + total + ' слайдов), «дальше/назад/закрой» голосом работают');
   await page.evaluate(() => window.jarvis.aqua.disconnect());
   live.close();
 

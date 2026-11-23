@@ -174,7 +174,9 @@ describe('имя «Системно»', () => {
 describe('голосовая навигация', () => {
   it('распознаёт переходы', () => {
     expect(parseNavIntent('Открой аналитику')).toBe('analytics');
-    expect(parseNavIntent('покажи статистику по продажам')).toBe('analytics');
+    expect(parseNavIntent('покажи статистику по продажам')).toBe('stats');
+    expect(parseNavIntent('Давай посмотрим статистику, Системно')).toBe('stats');
+    expect(parseNavIntent('покажи карточки')).toBe('analytics');
     expect(parseNavIntent('давай посмотрим, что у нас с бизнесом')).toBe('city');
     expect(parseNavIntent('покажи наш город')).toBe('city');
     expect(parseNavIntent('Открой мой город')).toBe('city');

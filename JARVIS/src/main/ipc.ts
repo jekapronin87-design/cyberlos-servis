@@ -251,6 +251,8 @@ export function registerIpc(opts: {
   });
   handle(IPC.aquaDisconnect, () => core.aquaDisconnect());
   handle(IPC.aquaTest, () => core.aquaTest());
+  handle(IPC.showStats, () => core.show.stats());
+  core.show.onDeck((d) => send(IPC.evtShow, d));
   handle(IPC.aquaDashboard, () => core.aquaDashboard());
   handle(IPC.aquaSection, (_e, kind, arg) => {
     const a = (arg ?? {}) as { pipeline?: unknown; stage?: unknown };

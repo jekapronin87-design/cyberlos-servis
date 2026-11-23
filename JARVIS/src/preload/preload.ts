@@ -77,6 +77,10 @@ const api: JarvisApi = {
     setStartMenu: (on) => invoke(IPC.appsSetStartMenu, on),
     launch: (query) => invoke(IPC.appsLaunch, query),
   },
+  show: {
+    onDeck: subscribe(IPC.evtShow),
+    stats: () => invoke(IPC.showStats),
+  },
   aqua: {
     get: () => invoke(IPC.aquaGet),
     save: (cfg, key) => invoke(IPC.aquaSave, cfg, key),

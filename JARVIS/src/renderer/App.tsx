@@ -10,7 +10,10 @@ import { AuditView } from './views/AuditView';
 import { ChatView } from './views/ChatView';
 import { CrmView } from './views/CrmView';
 import { JobsView } from './views/JobsView';
-import { parseAppIntent, parseNavIntent, parseSectionIntent } from '../shared/voice';
+import { parseAppIntent, parseNavIntent, parseSectionIntent, parseShowControl } from '../shared/voice';
+import { buildStatsDeck, type DeckDto } from '../shared/deck';
+import { SAMPLE_DASHBOARD } from './hud/sampleData';
+import { ShowView, type ShowCommand } from './views/ShowView';
 import { maskText } from '../core/crm/mask';
 import { useRealtime } from './voice/useRealtime';
 import { MentorView } from './views/MentorView';
@@ -235,10 +238,55 @@ export function App() {
     await openConversation(c.id);
   };
 
+  // ----- «Показ»: презентации на экране -----
+  const [deck, setDeck] = useState<DeckDto | null>(null);
+  const [showCmd, setShowCmd] = useState<ShowCommand | null>(null);
+  const deckRef = useRef<DeckDto | null>(null);
+  deckRef.current = deck;
+  useEffect(
+    () =>
+      window.jarvis.show.onDeck((d) => {
+        uiSounds.play('open');
+        setDeck(d);
+      }),
+    [],
+  );
+  /** Голосом при открытом показе: «дальше», «назад», «пауза», «закрой». */
+  const showControlByIntent = (text: string): string | null => {
+    if (!deckRef.current) return null;
+    const c = parseShowControl(text);
+    if (!c) return null;
+    if (c === 'close') {
+      setDeck(null);
+      return 'Закрыл показ.';
+    }
+    setShowCmd({ kind: c, nonce: Date.now() });
+    return c === 'next' ? 'Следующий слайд.' : c === 'prev' ? 'Предыдущий слайд.' : c === 'first' ? 'Сначала.' : c === 'pause' ? 'Пауза.' : 'Продолжаю.';
+  };
+  /** «Покажи статистику»: красивая презентация из данных CRM (без подключённой CRM — с пометкой «пример»). Возвращает главные факты. */
+  const openStats = async (): Promise<string> => {
+    try {
+      const r = await window.jarvis.show.stats();
+      return r.facts.join(' ');
+    } catch {
+      const d = buildStatsDeck(SAMPLE_DASHBOARD, { sample: true });
+      uiSounds.play('open');
+      setDeck(d);
+      return 'CRM не подключена, поэтому на экране пример данных.';
+    }
+  };
+  const statsByIntent = async (text: string, silent = false): Promise<string | null> => {
+    if (parseNavIntent(text) !== 'stats') return null;
+    uiSounds.play('open');
+    const facts = await openStats();
+    if (!silent) void narrate(`На экране открыта презентация «Статистика бизнеса». Коротко (3–4 предложения) прокомментируй главное и скажи, куда смотреть в первую очередь. Цифры:\n${facts}`);
+    return `Открыл статистику бизнеса на экране. Главное: ${facts}`;
+  };
+
   /** Голосовая/текстовая навигация без обращения к модели: мгновенно и бесплатно. */
   const navigateByIntent = (text: string, silent = false): string | null => {
     const intent = parseNavIntent(text);
-    if (!intent) return null;
+    if (!intent || intent === 'stats') return null;
     const st = settingsRef.current;
     const say = (t: string): void => {
       if (!silent && st.ttsMode !== 'off') void speak(t, st.ttsMode, { systemVoice: st.systemVoice, speed: st.ttsSpeed }).catch(() => undefined);
@@ -338,6 +386,10 @@ export function App() {
 
   /** Просьба из «живого разговора»: сначала мгновенные переходы по экранам и запуск программ (без модели), остальное — ядро ассистента. */
   const runRealtimeRequest = async (text: string): Promise<string> => {
+    const ctl = showControlByIntent(text);
+    if (ctl) return ctl;
+    const st = await statsByIntent(text, true);
+    if (st) return st;
     const nav = navigateByIntent(text, true);
     if (nav) return nav;
     const opened = await openSectionByIntent(text, false); // экран раздела открывается, а рассказ о нём даст сам ассистент ниже
@@ -350,6 +402,8 @@ export function App() {
   };
 
   const send = async (text: string): Promise<void> => {
+    if (showControlByIntent(text)) return;
+    if (await statsByIntent(text)) return;
     if (navigateByIntent(text)) return;
     if (await openSectionByIntent(text)) return;
     if (await launchByIntent(text)) return;
@@ -424,7 +478,7 @@ export function App() {
       // Голосовая команда: отвечаем голосом, по мере того как ответ генерируется
       const st = settingsRef.current;
       session.current = new SpeechSession({ mode: st.ttsMode, systemVoice: st.systemVoice, speed: st.ttsSpeed, onError: setError });
-      if (parseNavIntent(text) || parseSectionIntent(text) || parseAppIntent(text)) return void send(text);
+      if (parseNavIntent(text) || parseSectionIntent(text) || parseAppIntent(text) || (deckRef.current && parseShowControl(text))) return void send(text);
       setView((v) => (v === 'settings' || v === 'audit' || v === 'memory' || v === 'space' ? 'hud' : v));
       void send(text);
     },
@@ -724,6 +778,8 @@ export function App() {
           />
         )}
       </main>
+
+      {deck && <ShowView deck={deck} command={showCmd} onClose={() => setDeck(null)} />}
 
       {current && <ConfirmDialog req={current} onAnswer={(a) => answer(current.id, a)} onStop={stop} />}
     </div>

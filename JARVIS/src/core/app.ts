@@ -57,6 +57,7 @@ import { ConfirmationBroker, type ConfirmationUi } from './security/confirmation
 import { SECRET_ANTHROPIC_KEY, validateApiKey, type SecretStore } from './security/secrets';
 import { SECRET_VOICE_KEY, VoiceService } from './voice/service';
 import { RealtimeService } from './realtime/service';
+import { ShowService } from './show/service';
 import { registerBuiltinTools } from './tools/builtin';
 import { ToolRegistry } from './tools/registry';
 
@@ -135,6 +136,7 @@ export class JarvisCore {
   readonly profile: ProfileRepo;
   readonly crm: CrmService;
   readonly aqua: AquaService;
+  readonly show: ShowService;
   readonly mentor: MentorService;
   readonly jobs: JobRepo;
   readonly scheduler: Scheduler;
@@ -191,6 +193,15 @@ export class JarvisCore {
     registerProfileTools(this.tools, this.profile);
     registerCrmTools(this.tools, this.crm);
     this.aqua.registerTools(this.tools);
+    this.show = new ShowService({
+      audit: this.audit,
+      dashboard: async () => {
+        if (this.aqua.status().configured) return this.aqua.dashboard();
+        if (this.crm.client.configured()) return this.crm.dashboard();
+        return null;
+      },
+    });
+    this.show.registerTools(this.tools);
     this.mentor = new MentorService(this.db, this.crm, this.audit, this.browser);
     registerMentorTools(this.tools, this.mentor);
     this.telephony = new TelephonyService(this.db, this.settings, this.audit, this.mentor, opts.telephonyNow, opts.telephonyHearTimeoutMs);

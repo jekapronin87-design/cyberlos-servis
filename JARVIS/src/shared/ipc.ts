@@ -1,3 +1,4 @@
+import type { DeckDto } from './deck';
 import type {
   AppInfo,
   ComputerAccess,
@@ -97,6 +98,7 @@ export const IPC = {
   aquaTest: 'aqua:test',
   aquaDashboard: 'aqua:dashboard',
   aquaSection: 'aqua:section',
+  showStats: 'show:stats',
   agentsList: 'agents:list',
   agentsTemplates: 'agents:templates',
   agentsSave: 'agents:save',
@@ -146,6 +148,7 @@ export const IPC = {
   updateApply: 'update:apply',
   updateRestart: 'update:restart',
   evtUpdate: 'evt:update',
+  evtShow: 'evt:show',
   profileGet: 'profile:get',
   profileSet: 'profile:set',
   profileClear: 'profile:clear',
@@ -246,6 +249,12 @@ export interface JarvisApi {
     setStartMenu(on: boolean): Promise<ComputerAccess>;
     /** Голосовая команда «открой …»: matched=false — не нашли, пусть разбирается модель. */
     launch(query: string): Promise<{ matched: boolean; ok: boolean; message: string }>;
+  };
+  show: {
+    /** Подписка на презентации, которые открывает ассистент (инструмент show_deck/show_stats). */
+    onDeck(cb: (deck: DeckDto) => void): () => void;
+    /** Открыть «Статистику бизнеса» из CRM; без подключённой CRM — ошибка (интерфейс покажет пример). */
+    stats(): Promise<{ facts: string[]; slides: number }>;
   };
   aqua: {
     get(): Promise<AquaStatusDto>;

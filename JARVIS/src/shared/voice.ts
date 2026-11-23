@@ -144,7 +144,7 @@ export function isPromptLeak(transcript: string, hint: string): boolean {
   return t.every((w) => h.has(w)) && new Set(t).size >= 2;
 }
 
-export type NavIntent = 'analytics' | 'city' | 'home' | 'agents';
+export type NavIntent = 'analytics' | 'city' | 'home' | 'agents' | 'stats';
 
 /**
  * Локальные команды перехода по интерфейсу («открой аналитику», «покажи наш город», «вернись»).
@@ -160,7 +160,8 @@ export function parseNavIntent(text: string): NavIntent | null {
   if (/(^| )агент/.test(t)) return null; // «запусти агента Аналитик» — это поручение модели, а не переход
   if (/(^| )(вернись|вернуться|назад|домой|свернись|сверни)( |$)|закрой (аналитику|город|карточки|все|это)|на главную|главный экран/.test(t)) return 'home';
   if (/(^| )(город|города|городом|городу)( |$)|что (там )?(у нас )?с бизнесом|как (там )?(у нас )?бизнес|состояние бизнеса|карта бизнеса/.test(t)) return 'city';
-  if (/аналитик|статистик|показател|дашборд|карточки|отчет по бизнесу|цифры/.test(t)) return 'analytics';
+  if (/аналитик|дашборд|карточки/.test(t)) return 'analytics';
+  if (/статистик|показател|цифры|отчет по бизнесу|как дела в бизнесе/.test(t)) return 'stats';
   return null;
 }
 
@@ -196,6 +197,21 @@ export function parseSectionIntent(text: string): SectionIntent | null {
     [/(^| )(лид|лиды|лидов|заявк)/, 'лид', 'лиды'],
   ];
   for (const [re, like, title] of pipes) if (re.test(t)) return { kind: 'stage', pipelineLike: like, title };
+  return null;
+}
+
+export type ShowControl = 'next' | 'prev' | 'first' | 'pause' | 'play' | 'close';
+
+/** Управление открытым показом голосом: «дальше», «назад», «пауза», «продолжай», «закрой». Только короткие фразы; разбирается без модели. */
+export function parseShowControl(text: string): ShowControl | null {
+  const t = normalizeSpeech(text);
+  if (!t || t.split(' ').length > 5) return null;
+  if (/^(дальше|далее|следующий( слайд)?|вперед|листай( дальше)?|давай дальше|покажи дальше)$/.test(t)) return 'next';
+  if (/^(назад|предыдущий( слайд)?|вернись назад|верни назад|на шаг назад|покажи назад)$/.test(t)) return 'prev';
+  if (/^(сначала|с начала|в начало|первый слайд|давай сначала)$/.test(t)) return 'first';
+  if (/^(пауза|остановись|подожди|погоди|останови( показ)?)$/.test(t)) return 'pause';
+  if (/^(продолжай|продолжи|продолжаем|играй|поехали)$/.test(t)) return 'play';
+  if (/^(закрой( показ| презентацию| это| экран)?|убери( это| экран)?|хватит|выход|выйти|вернись|на главную|свернись|закончили|достаточно)$/.test(t)) return 'close';
   return null;
 }
 
