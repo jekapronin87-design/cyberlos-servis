@@ -189,6 +189,20 @@ try {
 
   step('живой разговор: карточка, переключатель, понятный отказ при чужом адресе API, микрофон не зависает');
 
+  // 5c. Кнопка «Слушаю / Не слушаю» на главном экране: полностью выключает ожидание имени и запоминает выбор
+  await page.click('.nav-item:has-text("Системно")');
+  await page.waitForSelector('[data-testid=hud-listen]');
+  if (await page.locator('[data-testid=hud-listen].listen-on').count()) await page.click('[data-testid=hud-listen]');
+  await page.waitForSelector('[data-testid=hud-listen]:not(.listen-on)');
+  await page.waitForFunction(() => window.jarvis.settings.get().then((x) => x.autoListen === false));
+  assert.match(await page.locator('[data-testid=hud-listen]').textContent(), /Не слушаю/);
+  await page.click('[data-testid=hud-listen]');
+  await page.waitForSelector('[data-testid=hud-listen].listen-on');
+  await page.waitForFunction(() => window.jarvis.settings.get().then((x) => x.autoListen === true));
+  await page.click('[data-testid=hud-listen]');
+  await page.waitForSelector('[data-testid=hud-listen]:not(.listen-on)');
+  step('кнопка «Слушаю / Не слушаю»: выключает и включает ожидание имени, выбор запоминается');
+
   // 6. Выключение главного выключателя гасит микрофон
   await page.evaluate(() => window.jarvis.settings.update({ micEnabled: false }));
   await page.reload();

@@ -65,6 +65,8 @@ export function HudView(props: {
   armed?: boolean;
   /** Одно нажатие: разрешить микрофон, включить режим «слушать имя» и начать слушать. */
   onSetupHandsFree?: () => void;
+  /** Включить/выключить прослушивание слова-имени (запоминается между запусками). */
+  onToggleListen?: () => void;
 }) {
   const [text, setText] = useState('');
   const [boot, setBoot] = useState(true);
@@ -84,7 +86,7 @@ export function HudView(props: {
   const rtMode = props.settings.voiceEngine === 'realtime';
   const [typing, setTyping] = useState(false);
   /** Режим «Системно» настроен: микрофон разрешён, слушает имя сам при запуске. Иначе показываем одну кнопку настройки. */
-  const ready = props.settings.micEnabled && props.settings.voiceMode === 'wake' && props.settings.autoListen;
+  const ready = props.settings.micEnabled && props.settings.voiceMode === 'wake';
 
   return (
     <section className="hud" data-state={props.orbState}>
@@ -147,6 +149,19 @@ export function HudView(props: {
           <IconMic />
           <span>{live ? (props.voice.state === 'hearing' ? 'Слышу' : props.voice.state === 'transcribing' ? (rtMode ? 'Думаю' : 'Распознаю') : 'Слушаю') : rtMode ? 'Живой разговор' : 'Микрофон'}</span>
         </button>
+        {ready && props.onToggleListen && (
+          <button
+            type="button"
+            className={`hud-btn ${props.armed || live ? 'listen-on' : ''}`}
+            onClick={props.onToggleListen}
+            aria-pressed={!!props.armed}
+            title={props.armed ? `Сейчас он ждёт слово «${props.settings.assistantName}». Нажмите, чтобы перестать слушать совсем.` : `Нажмите, чтобы он снова ждал слово «${props.settings.assistantName}»`}
+            data-testid="hud-listen"
+          >
+            <span className="listen-dot" aria-hidden="true" />
+            <span>{props.armed || live ? `Слушаю «${props.settings.assistantName}»` : 'Не слушаю'}</span>
+          </button>
+        )}
         <button type="button" className={`hud-btn ${typing ? 'on-soft' : ''}`} onClick={() => setTyping((t) => !t)} aria-pressed={typing} title="Написать вместо того, чтобы говорить" data-testid="hud-type">
           <IconSend />
           <span>Написать</span>

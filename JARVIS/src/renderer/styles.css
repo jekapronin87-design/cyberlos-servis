@@ -311,3 +311,6 @@ th { background: var(--panel-solid); position: sticky; top: 0; font-family: var(
 .hud-setup small { font: 500 12px var(--font); opacity: 0.75; letter-spacing: 0; }
 .hud-setup:hover { background: rgba(var(--h), 0.26); }
 .hud-btn.on-soft { background: rgba(var(--h), 0.25); }
+.hud-btn.listen-on { border-color: rgba(80, 220, 150, 0.6); background: rgba(80, 220, 150, 0.14); color: #d8ffe9; }
+.hud-btn .listen-dot { width: 8px; height: 8px; border-radius: 50%; background: #666d78; display: inline-block; }
+.hud-btn.listen-on .listen-dot { background: #5be39b; box-shadow: 0 0 8px #5be39b; }

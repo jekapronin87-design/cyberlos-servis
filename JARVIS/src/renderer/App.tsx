@@ -466,6 +466,16 @@ export function App() {
     return undefined;
   }, [rt.active]);
 
+  /** Кнопка «Слушаю / Не слушаю»: полностью выключает (или включает) ожидание слова-имени; выбор запоминается и после перезапуска. */
+  const toggleListening = async (): Promise<void> => {
+    if (classic.state !== 'idle') {
+      classic.stop();
+      setSettings(await window.jarvis.settings.update({ autoListen: false }));
+      return;
+    }
+    await setupHandsFree();
+  };
+
   /** Одна кнопка: разрешить микрофон, включить режим «слушать имя» (навсегда, при каждом запуске) и начать слушать. */
   const setupHandsFree = async (): Promise<void> => {
     if (!settingsRef.current.micEnabled && !(await enableDevice('mic')())) return;
@@ -628,6 +638,7 @@ export function App() {
             onStop={stop}
             armed={classic.state !== 'idle'}
             onSetupHandsFree={() => void setupHandsFree()}
+            onToggleListen={() => void toggleListening()}
           />
         )}
         {view === 'chat' && (
