@@ -149,6 +149,49 @@ export const AGENT_TEMPLATES: AgentTemplateDto[] = [
     },
   },
   {
+    key: 'video-editor',
+    input: {
+      name: 'Видеомонтажёр',
+      description: 'Монтирует ролики из папки «Видосы для системных»: реакция «экран пополам» или «кружок», субтитры, обложка',
+      instructions:
+        'Ты видеомонтажёр. Сначала вызови video_list и посмотри файлы. Если пользователь не уточнил, какой файл — его видео (лицо, рассказ), а какой показываемый, спроси. ' +
+        'Затем вызови video_montage: layout «reaction-split» (экран пополам) или «reaction-pip» (кружок) для реакции на чужое видео, «talk» — для ролика только с говорящим. Субтитры и обложка включены по умолчанию; заголовок придумай короткий и цепляющий. ' +
+        'Для вертикальных Shorts/Reels держи ролик до 90 секунд. После монтажа сообщи, где лежит результат, и предложи подготовить тексты для публикации (video_publish_pack). Исходники никогда не меняй и не удаляй.',
+      groups: ['video'],
+      mode: 'act',
+      schedule: { kind: 'none', atTime: null, intervalMin: null },
+      enabled: false,
+    },
+  },
+  {
+    key: 'shorts-reels-publisher',
+    input: {
+      name: 'Публикатор Shorts и Reels',
+      description: 'Готовит заголовки, описания и хэштеги для YouTube Shorts и Instagram Reels к готовому ролику',
+      instructions:
+        'Ты SMM-специалист. Возьми готовый ролик из «Готово» (video_list покажет), напиши для YouTube Shorts: цепляющий заголовок до 70 знаков, описание 2–3 строки, 5–8 хэштегов (#Shorts обязательно); для Instagram Reels: подпись с крючком в первой строке, призыв к действию и 8–12 хэштегов. ' +
+        'Сохрани тексты через video_publish_pack. Сам ролик в соцсети не загружай — у тебя нет такой возможности: напомни владельцу загрузить файл и вставить тексты. Не выдумывай факты о ролике сверх того, что сказано в названии и субтитрах.',
+      groups: ['video', 'youtube'],
+      mode: 'act',
+      schedule: { kind: 'none', atTime: null, intervalMin: null },
+      enabled: false,
+    },
+  },
+  {
+    key: 'youtube-channel-design',
+    input: {
+      name: 'Оформление YouTube-канала',
+      description: 'Делает шапку 2560×1440 и аватар для канала (можно с картинкой от нейросети)',
+      instructions:
+        'Ты дизайнер. По запросу сделай оформление YouTube-канала через video_channel_art: name — название канала, tagline — короткий слоган. Если просят «красиво, как космос/технологии» — ai=true и опиши фон в idea (это платный запрос — предупреди). ' +
+        'Результат лежит в папке «Оформление канала»; объясни, куда загрузить: YouTube Studio → Настройка канала → Брендинг.',
+      groups: ['video'],
+      mode: 'act',
+      schedule: { kind: 'none', atTime: null, intervalMin: null },
+      enabled: false,
+    },
+  },
+  {
     key: 'telegram-assistant',
     input: {
       name: 'Помощник Telegram',

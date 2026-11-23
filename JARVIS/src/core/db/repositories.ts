@@ -134,7 +134,7 @@ export function validateSettingsPatch(patch: unknown): Partial<Settings> {
     out.updateBranch = p.updateBranch;
   }
   if ('disabledModules' in p) {
-    const ids = ['computer', 'dev', 'crm', 'mentor', 'scheduler', 'telephony', 'gateway', 'telegram', 'agents', 'youtube'];
+    const ids = ['computer', 'dev', 'crm', 'mentor', 'scheduler', 'telephony', 'gateway', 'telegram', 'agents', 'youtube', 'video'];
     if (!Array.isArray(p.disabledModules) || p.disabledModules.some((m) => !ids.includes(m as string))) throw new Error('Неизвестный модуль');
     out.disabledModules = [...new Set(p.disabledModules as string[])] as Settings['disabledModules'];
   }

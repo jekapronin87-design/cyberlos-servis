@@ -139,6 +139,29 @@ export class VoiceService {
     }
   }
 
+  /** Расшифровка ФАЙЛА с отметками времени слов (для субтитров). Не связана с микрофоном: звук берётся из видео пользователя. */
+  async transcribeWords(audio: Uint8Array, mime: string, signal?: AbortSignal): Promise<{ text: string; words: { w: string; s: number; e: number }[] }> {
+    const s = this.deps.getSettings();
+    if (!(audio instanceof Uint8Array) || audio.byteLength === 0) throw new Error('Пустое аудио.');
+    if (audio.byteLength > 24 * 1024 * 1024) throw new Error('Звук слишком длинный для расшифровки (лимит сервиса — 25 МБ, около 100 минут).');
+    const form = new FormData();
+    form.append('file', new Blob([audio as BlobPart], { type: mime }), `speech.${mime.includes('wav') ? 'wav' : 'mp3'}`);
+    form.append('model', 'whisper-1'); // только эта модель отдаёт время каждого слова
+    form.append('language', 'ru');
+    form.append('response_format', 'verbose_json');
+    form.append('timestamp_granularities[]', 'word');
+    form.append('temperature', '0');
+    const f = this.deps.fetchImpl ?? fetch;
+    const res = await f(`${s.voiceBaseUrl}/audio/transcriptions`, { method: 'POST', headers: { Authorization: `Bearer ${this.key()}` }, body: form, signal: withTimeout(signal, 180_000) }).catch((e: unknown) => {
+      throw friendly(e);
+    });
+    if (!res.ok) throw await apiError(res);
+    const j = (await res.json().catch(() => ({}))) as { text?: unknown; words?: { word?: unknown; start?: unknown; end?: unknown }[] };
+    const words = (j.words ?? []).filter((w) => typeof w.word === 'string' && Number.isFinite(Number(w.start)) && Number.isFinite(Number(w.end))).map((w) => ({ w: String(w.word).trim(), s: Number(w.start), e: Number(w.end) }));
+    this.deps.audit.record({ actor: 'user', action: 'voice.transcribe_file', decision: 'info', details: { bytes: audio.byteLength, words: words.length } });
+    return { text: typeof j.text === 'string' ? j.text : '', words };
+  }
+
   async speak(text: string, signal?: AbortSignal): Promise<{ mime: string; data: Uint8Array }> {
     const s = this.deps.getSettings();
     if (s.ttsMode !== 'api') throw new Error('Облачная озвучка выключена.');

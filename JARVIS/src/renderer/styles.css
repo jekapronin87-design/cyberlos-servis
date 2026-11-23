@@ -410,3 +410,62 @@ th { background: var(--panel-solid); position: sticky; top: 0; font-family: var(
 .show-hint { font-size: 12px; color: #6f9fc0; }
 .show-progress { position: absolute; left: 0; bottom: 0; height: 3px; background: linear-gradient(90deg, #5cc8ff, #a98bff); transform-origin: left; animation: grow linear both; z-index: 3; }
 @media (prefers-reduced-motion: reduce) { .show *, .show { animation-duration: 0.01s !important; animation-delay: 0s !important; } }
+
+/* ---------- Студия ---------- */
+.studio { padding: 18px 28px 40px; overflow: auto; height: 100%; }
+.studio-head h1 { margin: 0; font: 700 22px var(--font-hud); letter-spacing: 3px; }
+.studio-files { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.sf { border: 1px solid rgba(92, 200, 255, 0.25); border-radius: 12px; background: rgba(92, 200, 255, 0.05); padding: 8px; display: flex; flex-direction: column; gap: 4px; transition: 0.2s; }
+.sf.is-face { border-color: #5be39b; box-shadow: 0 0 16px rgba(91, 227, 155, 0.35); }
+.sf.is-ref { border-color: #ffd166; box-shadow: 0 0 16px rgba(255, 209, 102, 0.35); }
+.sf img, .sf-ph { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 8px; background: #0a1730; display: grid; place-items: center; color: #5cc8ff; }
+.sf-n { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sf-m { font-size: 12px; color: #8fc9ee; }
+.sf-b { display: flex; gap: 6px; margin-top: 2px; }
+.sf-b button { flex: 1; border: 1px solid rgba(92, 200, 255, 0.35); background: transparent; color: #cfe9ff; border-radius: 8px; padding: 4px 6px; cursor: pointer; font: 600 12px var(--font); }
+.sf-b button.on { background: #5cc8ff; color: #02121f; }
+.studio-layouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.lay { text-align: left; display: flex; flex-direction: column; gap: 6px; border: 1px solid rgba(92, 200, 255, 0.3); background: rgba(92, 200, 255, 0.05); color: #dff3ff; border-radius: 12px; padding: 12px; cursor: pointer; transition: 0.2s; }
+.lay small { color: #8fc9ee; line-height: 1.35; }
+.lay.on { border-color: #5cc8ff; background: rgba(92, 200, 255, 0.16); box-shadow: 0 0 18px rgba(92, 200, 255, 0.35); }
+.lay-ic { position: relative; width: 36px; height: 62px; border: 2px solid #5cc8ff; border-radius: 6px; overflow: hidden; display: block; }
+.lay-ic i, .lay-ic b { position: absolute; display: block; }
+.lay-talk i { inset: 0; background: rgba(91, 227, 155, 0.5); }
+.lay-reaction-split i { left: 0; right: 0; top: 0; height: 50%; background: rgba(255, 209, 102, 0.55); }
+.lay-reaction-split b { left: 0; right: 0; bottom: 0; height: 50%; background: rgba(91, 227, 155, 0.55); }
+.lay-reaction-pip i { inset: 0; background: rgba(255, 209, 102, 0.55); }
+.lay-reaction-pip b { right: 3px; bottom: 8px; width: 15px; height: 15px; border-radius: 50%; background: rgba(91, 227, 155, 0.95); }
+/* монтажный стол */
+.tl { display: grid; grid-template-columns: 200px 1fr; gap: 16px; align-items: start; }
+.tl-steps { display: flex; flex-direction: column; gap: 6px; }
+.tl-step { display: flex; align-items: center; gap: 8px; font-size: 13.5px; padding: 5px 8px; border-radius: 8px; color: #8fb5d0; transition: 0.3s; }
+.tl-ic { width: 18px; text-align: center; font-weight: 700; }
+.tl-step em { margin-left: auto; font-style: normal; font-weight: 700; color: #5cc8ff; }
+.st-run { background: rgba(92, 200, 255, 0.12); color: #fff; }
+.st-run .tl-ic { animation: spin 1s linear infinite; display: inline-block; }
+.st-done { color: #5be39b; }
+.st-error { color: #ff7a6a; }
+.tl-board { position: relative; border: 1px solid rgba(92, 200, 255, 0.25); border-radius: 12px; background: linear-gradient(180deg, rgba(6, 16, 36, 0.9), rgba(4, 10, 24, 0.9)); padding: 8px 10px 12px 0; overflow: hidden; min-height: 150px; }
+.tl-ruler { position: relative; height: 22px; margin-left: 150px; font-size: 11px; color: #6f9fc0; }
+.tl-ruler span { position: absolute; transform: translateX(-50%); }
+.tl-row { display: flex; align-items: stretch; margin: 5px 0; animation: up 0.5s calc(var(--ti) * 0.12s) both; }
+.tl-label { width: 150px; flex: none; padding: 0 12px; display: flex; align-items: center; font: 600 12.5px var(--font); color: #9fd8f5; }
+.tl-lane { position: relative; flex: 1; height: 56px; border-radius: 8px; background: rgba(92, 200, 255, 0.05); }
+.tl-clip { position: absolute; top: 3px; bottom: 3px; border-radius: 7px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.25); transform-origin: left; animation: grow 0.8s calc(0.3s + var(--ci) * 0.05s) cubic-bezier(0.2, 0.8, 0.2, 1) both; display: flex; align-items: center; }
+.kind-ref .tl-clip { background: rgba(255, 209, 102, 0.4); border-color: #ffd166; }
+.kind-face .tl-clip { background: rgba(91, 227, 155, 0.35); border-color: #5be39b; }
+.kind-audio .tl-clip { background: repeating-linear-gradient(90deg, rgba(92, 200, 255, 0.5) 0 3px, rgba(92, 200, 255, 0.15) 3px 6px); border-color: #5cc8ff; }
+.kind-subs .tl-clip { background: rgba(169, 139, 255, 0.55); border-color: #a98bff; }
+.kind-title .tl-clip { background: rgba(255, 122, 200, 0.5); border-color: #ff7ac8; }
+.tl-thumbs { position: absolute; inset: 0; display: flex; opacity: 0.55; }
+.tl-thumbs img { flex: 1; min-width: 0; height: 100%; object-fit: cover; }
+.tl-cl { position: relative; padding: 0 8px; font: 600 11px var(--font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 3px #000; }
+.tl-split { position: absolute; top: 22px; bottom: 8px; width: 0; border-left: 2px dashed #ffd166; z-index: 2; }
+.tl-split span { position: absolute; top: -18px; left: 6px; font-size: 11px; color: #ffd166; white-space: nowrap; }
+.tl-head { position: absolute; top: 18px; bottom: 6px; width: 2px; background: #fff; box-shadow: 0 0 12px #5cc8ff, 0 0 24px #5cc8ff; transition: left 0.4s linear; z-index: 3; }
+.tl-head.done { background: #5be39b; box-shadow: 0 0 14px #5be39b; }
+.studio-done { margin-top: 12px; }
+.studio-results { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.studio-results li { display: flex; align-items: center; gap: 10px; }
+.studio-results li span { flex: 1; }
+@media (max-width: 1000px) { .tl { grid-template-columns: 1fr; } }

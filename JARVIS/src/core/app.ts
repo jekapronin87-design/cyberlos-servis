@@ -58,6 +58,8 @@ import { SECRET_ANTHROPIC_KEY, validateApiKey, type SecretStore } from './securi
 import { SECRET_VOICE_KEY, VoiceService } from './voice/service';
 import { RealtimeService } from './realtime/service';
 import { ShowService } from './show/service';
+import { VideoService } from './video/service';
+import { generateImage } from './media/images';
 import { registerBuiltinTools } from './tools/builtin';
 import { ToolRegistry } from './tools/registry';
 
@@ -137,6 +139,7 @@ export class JarvisCore {
   readonly crm: CrmService;
   readonly aqua: AquaService;
   readonly show: ShowService;
+  readonly video: VideoService;
   readonly mentor: MentorService;
   readonly jobs: JobRepo;
   readonly scheduler: Scheduler;
@@ -202,6 +205,15 @@ export class JarvisCore {
       },
     });
     this.show.registerTools(this.tools);
+    this.video = new VideoService({
+      db: this.db,
+      audit: this.audit,
+      getSettings: () => this.settings.get(),
+      voice: this.voice,
+      image: (prompt, size, signal) => generateImage({ getSettings: () => this.settings.get(), secrets: opts.secrets, audit: this.audit, dir: join(opts.dataDir, 'images'), fetchImpl: opts.fetchImpl }, prompt, size, signal),
+      allowFolder: (p) => void this.addAllowedFolder(p),
+    });
+    this.video.registerTools(this.tools);
     this.mentor = new MentorService(this.db, this.crm, this.audit, this.browser);
     registerMentorTools(this.tools, this.mentor);
     this.telephony = new TelephonyService(this.db, this.settings, this.audit, this.mentor, opts.telephonyNow, opts.telephonyHearTimeoutMs);

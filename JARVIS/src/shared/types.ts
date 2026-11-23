@@ -10,7 +10,7 @@ export type RiskLevel = 'safe' | 'low' | 'medium' | 'high' | 'critical';
 export type DataDomain = 'local' | 'training' | 'production';
 
 /** Модули JARVIS: каждый можно отключить целиком (инструменты, вкладки). */
-export type ModuleId = 'computer' | 'dev' | 'crm' | 'mentor' | 'scheduler' | 'telephony' | 'gateway' | 'telegram' | 'agents' | 'youtube';
+export type ModuleId = 'computer' | 'dev' | 'crm' | 'mentor' | 'scheduler' | 'telephony' | 'gateway' | 'telegram' | 'agents' | 'youtube' | 'video';
 export const MODULES: { id: ModuleId; title: string; description: string }[] = [
   { id: 'computer', title: 'Управление компьютером', description: 'Файлы, программы, браузер, снимок экрана, камера' },
   { id: 'dev', title: 'ИИ-программист', description: 'Проекты, правка кода, тесты, Git, субагенты' },
@@ -22,6 +22,7 @@ export const MODULES: { id: ModuleId; title: string; description: string }[] = [
   { id: 'telegram', title: 'Telegram', description: 'Бот: переписка, автоответчик, управление из Telegram' },
   { id: 'agents', title: 'Агенты', description: 'Свои ИИ-агенты: роль, права, расписание, отчёты' },
   { id: 'youtube', title: 'YouTube', description: 'Поиск, каналы, видео, комментарии (только чтение, по API-ключу)' },
+  { id: 'video', title: 'Видео-студия', description: 'Монтаж роликов, субтитры, обложки, оформление канала' },
 ];
 
 export type ProviderChoice = 'auto' | 'demo' | 'anthropic';
@@ -595,9 +596,10 @@ export interface TelegramMessageDto {
 
 // ---------- Агенты ----------
 
-export type AgentGroupId = 'youtube' | 'web' | 'files' | 'apps' | 'crm' | 'dev' | 'telegram' | 'knowledge' | 'images' | 'screen';
+export type AgentGroupId = 'youtube' | 'web' | 'files' | 'apps' | 'crm' | 'dev' | 'telegram' | 'knowledge' | 'images' | 'screen' | 'video';
 
 export const AGENT_GROUPS: { id: AgentGroupId; title: string; description: string; risky?: boolean }[] = [
+  { id: 'video', title: 'Видео-студия', description: 'Монтаж из папки с исходниками, субтитры, обложки, пакет для публикации', risky: true },
   { id: 'web', title: 'Интернет (браузер)', description: 'Поиск, открыть сайт, прочитать, прокрутить, нажать, ввести текст' },
   { id: 'youtube', title: 'YouTube (только чтение)', description: 'Поиск видео и каналов, статистика, описания, комментарии' },
   { id: 'crm', title: 'CRM (только чтение)', description: 'Заявки, воронки, задачи, команда, производство, отчёты' },
@@ -674,4 +676,86 @@ export interface YoutubeStatusDto {
   hasKey: boolean;
   usedToday: number;
   limit: number;
+}
+
+// ---------- Видео-студия ----------
+
+export type VideoLayout = 'talk' | 'reaction-split' | 'reaction-pip';
+export type VideoSubStyle = 'bold' | 'neon' | 'clean';
+
+export interface VideoFileDto {
+  name: string;
+  sizeMb: number;
+  durationSec: number | null;
+  /** Миниатюра (data URL), если уже снята. */
+  thumb: string | null;
+}
+
+export interface VideoSpecDto {
+  /** Ваше видео (лицо/рассказ) — имя файла из папки или часть названия. */
+  face: string;
+  /** Видео, которое вы показываете (для режимов реакции). */
+  reference?: string;
+  layout: VideoLayout;
+  title?: string;
+  subtitles: boolean;
+  subStyle?: VideoSubStyle;
+  cover?: boolean;
+  /** Название папки результата. */
+  name?: string;
+}
+
+export interface VideoStepDto {
+  id: string;
+  label: string;
+  status: 'wait' | 'run' | 'done' | 'error' | 'skip';
+  pct?: number;
+}
+
+export interface VideoClipDto {
+  start: number;
+  end: number;
+  label: string;
+  thumbs?: string[];
+}
+
+export interface VideoTrackDto {
+  id: string;
+  label: string;
+  kind: 'ref' | 'face' | 'audio' | 'subs' | 'title';
+  clips: VideoClipDto[];
+}
+
+/** Монтажный стол: что куда кладётся и как идёт работа (показывается на экране в космическом стиле). */
+export interface VideoPlanDto {
+  id: string;
+  name: string;
+  layout: VideoLayout;
+  width: number;
+  height: number;
+  duration: number;
+  /** Секунда, где «реакция» переходит в ваш рассказ (0 — без реакции). */
+  split: number;
+  tracks: VideoTrackDto[];
+  steps: VideoStepDto[];
+  warnings: string[];
+  output?: { dir: string; video: string; cover?: string };
+  error?: string;
+  finished: boolean;
+}
+
+export interface VideoStatusDto {
+  folder: string | null;
+  /** Предложение папки (на рабочем столе), если она есть, но ещё не выбрана. */
+  suggested: string | null;
+  ffmpeg: boolean;
+  hasVoiceKey: boolean;
+  busy: boolean;
+}
+
+export interface VideoResultDto {
+  name: string;
+  dir: string;
+  video: string | null;
+  cover: string | null;
 }

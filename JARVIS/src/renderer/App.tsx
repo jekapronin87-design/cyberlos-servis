@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS, type ModuleId } from '../shared/types';
 import { stripUntrustedWrapper } from '../shared/text';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { HudView, type ActivityItem } from './hud/HudView';
-import { IconAgents, IconAudit, IconCalls, IconChat, IconCrm, IconHud, IconJobs, IconMentor, IconMemory, IconProfile, IconSettings } from './hud/Icons';
+import { IconAgents, IconAudit, IconCalls, IconCam, IconChat, IconCrm, IconHud, IconJobs, IconMentor, IconMemory, IconProfile, IconSettings } from './hud/Icons';
 import type { OrbState } from './hud/Orb';
 import { AuditView } from './views/AuditView';
 import { ChatView } from './views/ChatView';
@@ -14,6 +14,7 @@ import { parseAppIntent, parseNavIntent, parseSectionIntent, parseShowControl } 
 import { buildStatsDeck, type DeckDto } from '../shared/deck';
 import { SAMPLE_DASHBOARD } from './hud/sampleData';
 import { ShowView, type ShowCommand } from './views/ShowView';
+import { StudioView } from './views/StudioView';
 import { maskText } from '../core/crm/mask';
 import { useRealtime } from './voice/useRealtime';
 import { MentorView } from './views/MentorView';
@@ -30,7 +31,7 @@ import { cancelSpeech, getSpeechLevel, onSpeaking, speak, SpeechSession } from '
 import { useCamera } from './voice/useCamera';
 import { useVoice, type VoiceControl } from './voice/useVoice';
 
-type View = 'hud' | 'chat' | 'crm' | 'mentor' | 'calls' | 'telegram' | 'agents' | 'space' | 'jobs' | 'profile' | 'memory' | 'audit' | 'settings';
+type View = 'hud' | 'studio' | 'chat' | 'crm' | 'mentor' | 'calls' | 'telegram' | 'agents' | 'space' | 'jobs' | 'profile' | 'memory' | 'audit' | 'settings';
 
 const cleanError = (e: unknown): string =>
   e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'Неизвестная ошибка';
@@ -238,6 +239,15 @@ export function App() {
     await openConversation(c.id);
   };
 
+  // Монтаж запущен (кнопкой или голосом) — показываем монтажный стол
+  useEffect(
+    () =>
+      window.jarvis.video.onPlan((p) => {
+        if (!p.finished) setView((v) => (v === 'studio' ? v : 'studio'));
+      }),
+    [],
+  );
+
   // ----- «Показ»: презентации на экране -----
   const [deck, setDeck] = useState<DeckDto | null>(null);
   const [showCmd, setShowCmd] = useState<ShowCommand | null>(null);
@@ -295,6 +305,12 @@ export function App() {
       setView('hud');
       say('Возвращаюсь.');
       return 'Вернулся на главный экран.';
+    }
+    if (intent === 'studio') {
+      uiSounds.play('open');
+      setView('studio');
+      say('Открываю студию.');
+      return 'Открыл видео-студию на экране.';
     }
     if (intent === 'agents') {
       uiSounds.play('open');
@@ -606,6 +622,7 @@ export function App() {
     ['space', 'Аналитика', <IconHud key="sp" />],
     ['crm', 'CRM', <IconCrm key="r" />],
     ['mentor', 'Наставник', <IconMentor key="n" />],
+    ['studio', 'Студия', <IconCam key="st" />],
     ['agents', 'Агенты', <IconAgents key="ag" />],
     ['telegram', 'Telegram', <IconCalls key="tg" />],
     ['calls', 'Звонки', <IconCalls key="t" />],
@@ -615,7 +632,7 @@ export function App() {
     ['audit', 'Журнал', <IconAudit key="a" />],
     ['settings', 'Настройки', <IconSettings key="s" />],
   ] as const;
-  const needs: Partial<Record<View, ModuleId>> = { crm: 'crm', mentor: 'mentor', calls: 'telephony', telegram: 'telegram', agents: 'agents', jobs: 'scheduler' };
+  const needs: Partial<Record<View, ModuleId>> = { crm: 'crm', mentor: 'mentor', calls: 'telephony', telegram: 'telegram', agents: 'agents', studio: 'video', jobs: 'scheduler' };
   const nav = navAll.filter(([v]) => !(needs[v] && off.includes(needs[v]!)));
 
   return (
@@ -727,6 +744,7 @@ export function App() {
         }} />}
         {view === 'space' && <SpaceView mode={spaceMode} onMode={setSpaceMode} onClose={() => setView('hud')} onAsk={(t) => void sendSpoken(t)} onNarrate={(t) => void narrate(t)} request={sectionReq} orbState={orbState} getLevel={getLevel} />}
         {view === 'jobs' && <JobsView onOpenConversation={(id) => void openConversation(id)} />}
+        {view === 'studio' && <StudioView onAsk={(t) => void sendSpoken(t)} />}
         {view === 'crm' && <CrmView onAsk={(t) => void sendSpoken(t)} onOpenSettings={() => setView('settings')} />}
         {view === 'profile' && (
           <ProfileView

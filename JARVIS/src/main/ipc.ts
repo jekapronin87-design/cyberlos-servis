@@ -1,6 +1,6 @@
 import { readFileSync, statSync } from 'node:fs';
 import { basename } from 'node:path';
-import { app, dialog, ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron';
+import { app, dialog, ipcMain, shell, type BrowserWindow, type IpcMainInvokeEvent } from 'electron';
 import { IPC } from '../shared/ipc';
 import type { ChatEvent, ConfirmRequest, FreeProviderId, MemoryKind, Settings } from '../shared/types';
 import { FREE_PROVIDER_PRESETS } from '../shared/types';
@@ -252,6 +252,50 @@ export function registerIpc(opts: {
   handle(IPC.aquaDisconnect, () => core.aquaDisconnect());
   handle(IPC.aquaTest, () => core.aquaTest());
   handle(IPC.showStats, () => core.show.stats());
+  handle(IPC.videoStatus, () => core.video.status());
+  handle(IPC.videoPick, async () => {
+    const test = process.env.JARVIS_E2E_PICK;
+    let p: string | null = null;
+    if (test && !app.isPackaged) p = (JSON.parse(test) as { folder?: string }).folder ?? null;
+    else {
+      const w = getWindow();
+      const opts: Electron.OpenDialogOptions = { title: 'Выберите папку с видео для студии', properties: ['openDirectory'] };
+      const r = w ? await dialog.showOpenDialog(w, opts) : await dialog.showOpenDialog(opts);
+      p = r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
+    }
+    if (!p) return null;
+    core.video.setFolder(p);
+    return core.video.status();
+  });
+  handle(IPC.videoUseSuggested, () => {
+    const s = core.video.suggested();
+    if (!s) throw new Error('Папка «Видосы для системных» на рабочем столе не найдена. Выберите папку вручную.');
+    core.video.setFolder(s);
+    return core.video.status();
+  });
+  handle(IPC.videoList, () => core.video.list(true));
+  handle(IPC.videoResults, () => core.video.results());
+  handle(IPC.videoMontage, (_e, spec) => {
+    const s = spec as Record<string, unknown>;
+    return core.video.montageUi({
+      face: str(s['face'], 'face', 300),
+      reference: s['reference'] ? str(s['reference'], 'reference', 300) : undefined,
+      layout: str(s['layout'], 'layout', 30) as 'talk',
+      title: s['title'] ? str(s['title'], 'title', 80) : undefined,
+      subtitles: s['subtitles'] !== false,
+      subStyle: (['bold', 'neon', 'clean'].includes(String(s['subStyle'])) ? s['subStyle'] : 'bold') as 'bold',
+      cover: s['cover'] === true,
+      name: s['name'] ? str(s['name'], 'name', 60) : undefined,
+    });
+  });
+  handle(IPC.videoOpen, async (_e, p) => {
+    const path = str(p, 'path', 1000);
+    if (!core.video.isInside(path)) throw new Error('Открывать можно только файлы из папки студии.');
+    const err = await shell.openPath(path);
+    if (err) throw new Error(`Не удалось открыть: ${err}`);
+  });
+  handle(IPC.videoStop, () => core.video.stop());
+  core.video.onPlan((p) => send(IPC.evtVideo, p));
   core.show.onDeck((d) => send(IPC.evtShow, d));
   handle(IPC.aquaDashboard, () => core.aquaDashboard());
   handle(IPC.aquaSection, (_e, kind, arg) => {

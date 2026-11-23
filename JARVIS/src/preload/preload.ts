@@ -77,6 +77,17 @@ const api: JarvisApi = {
     setStartMenu: (on) => invoke(IPC.appsSetStartMenu, on),
     launch: (query) => invoke(IPC.appsLaunch, query),
   },
+  video: {
+    status: () => invoke(IPC.videoStatus),
+    pickFolder: () => invoke(IPC.videoPick),
+    useSuggested: () => invoke(IPC.videoUseSuggested),
+    list: () => invoke(IPC.videoList),
+    results: () => invoke(IPC.videoResults),
+    montage: (spec) => invoke(IPC.videoMontage, spec),
+    open: (p) => invoke(IPC.videoOpen, p),
+    stop: () => invoke(IPC.videoStop),
+    onPlan: subscribe(IPC.evtVideo),
+  },
   show: {
     onDeck: subscribe(IPC.evtShow),
     stats: () => invoke(IPC.showStats),

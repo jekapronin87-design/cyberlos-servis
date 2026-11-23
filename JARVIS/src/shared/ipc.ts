@@ -20,6 +20,11 @@ import type {
   FreeProviderId,
   TelegramStatusDto,
   YoutubeStatusDto,
+  VideoStatusDto,
+  VideoFileDto,
+  VideoResultDto,
+  VideoSpecDto,
+  VideoPlanDto,
   AquaStatusDto,
   AquaSectionDto,
   AgentDto,
@@ -99,6 +104,14 @@ export const IPC = {
   aquaDashboard: 'aqua:dashboard',
   aquaSection: 'aqua:section',
   showStats: 'show:stats',
+  videoStatus: 'video:status',
+  videoPick: 'video:pick',
+  videoUseSuggested: 'video:useSuggested',
+  videoList: 'video:list',
+  videoResults: 'video:results',
+  videoMontage: 'video:montage',
+  videoOpen: 'video:open',
+  videoStop: 'video:stop',
   agentsList: 'agents:list',
   agentsTemplates: 'agents:templates',
   agentsSave: 'agents:save',
@@ -149,6 +162,7 @@ export const IPC = {
   updateRestart: 'update:restart',
   evtUpdate: 'evt:update',
   evtShow: 'evt:show',
+  evtVideo: 'evt:video',
   profileGet: 'profile:get',
   profileSet: 'profile:set',
   profileClear: 'profile:clear',
@@ -249,6 +263,20 @@ export interface JarvisApi {
     setStartMenu(on: boolean): Promise<ComputerAccess>;
     /** Голосовая команда «открой …»: matched=false — не нашли, пусть разбирается модель. */
     launch(query: string): Promise<{ matched: boolean; ok: boolean; message: string }>;
+  };
+  video: {
+    status(): Promise<VideoStatusDto>;
+    /** Окно Windows: выбрать папку с видео (она становится разрешённой). null — отмена. */
+    pickFolder(): Promise<VideoStatusDto | null>;
+    useSuggested(): Promise<VideoStatusDto>;
+    list(): Promise<VideoFileDto[]>;
+    results(): Promise<VideoResultDto[]>;
+    /** Запустить монтаж (по кнопке в «Студии»). Ход работы приходит событиями onPlan. */
+    montage(spec: VideoSpecDto): Promise<VideoPlanDto>;
+    /** Открыть файл/папку результата в проводнике (только внутри папки студии). */
+    open(path: string): Promise<void>;
+    stop(): Promise<void>;
+    onPlan(cb: (p: VideoPlanDto) => void): () => void;
   };
   show: {
     /** Подписка на презентации, которые открывает ассистент (инструмент show_deck/show_stats). */

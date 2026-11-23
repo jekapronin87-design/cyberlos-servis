@@ -36,10 +36,20 @@ export function registerImageTool(registry: ToolRegistry, d: ImageDeps): void {
     },
     describe: (i) => `Создать картинку (платный запрос к OpenAI): «${String(i.prompt).slice(0, 300)}»`,
     execute: async (i, ctx) => {
-      const prompt = String(i.prompt ?? '').trim();
+      const r = await generateImage(d, String(i.prompt ?? ''), i.size, ctx.signal);
+      const b64 = r.b64;
+      const file = r.file;
+      return { text: `Картинка создана и показана в чате. Файл сохранён: ${file}`, images: [{ mime: 'image/png', base64: b64, kind: 'image' }] };
+    },
+  });
+}
+
+/** Создаёт картинку через OpenAI-совместимый API и сохраняет в папку приложения (общая часть инструмента image_generate и видео-студии). */
+export async function generateImage(d: ImageDeps, promptIn: string, sizeIn: string | undefined, signal: AbortSignal): Promise<{ file: string; b64: string }> {
+      const prompt = promptIn.trim();
       if (!prompt) throw new Error('Опишите, что нарисовать');
       if (prompt.length > 3000) throw new Error('Описание длиннее 3000 символов');
-      const size = (SIZES as readonly string[]).includes(i.size ?? '') ? (i.size as string) : '1024x1024';
+      const size = (SIZES as readonly string[]).includes(sizeIn ?? '') ? (sizeIn as string) : '1024x1024';
       const key = d.secrets.get(SECRET_VOICE_KEY);
       if (!key) throw new Error('Для картинок нужен ключ OpenAI: Настройки → Голос → «API-ключ» (тот же ключ).');
       const s = d.getSettings();
@@ -49,7 +59,7 @@ export function registerImageTool(registry: ToolRegistry, d: ImageDeps): void {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
         body: JSON.stringify({ model: s.imageModel, prompt, size, n: 1, ...(isGpt ? {} : { response_format: 'b64_json' }) }),
-        signal: AbortSignal.any([ctx.signal, AbortSignal.timeout(180_000)]),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(180_000)]),
       }).catch(() => {
         throw new Error('Нет связи с сервисом картинок. Проверьте интернет.');
       });
@@ -70,7 +80,5 @@ export function registerImageTool(registry: ToolRegistry, d: ImageDeps): void {
       const file = join(d.dir, `image-${new Date().toISOString().replace(/[:.]/g, '-')}.png`);
       writeFileSync(file, Buffer.from(b64, 'base64'));
       d.audit.record({ actor: 'assistant', action: 'media.image_generated', decision: 'info', details: { model: s.imageModel, size, chars: prompt.length } });
-      return { text: `Картинка создана и показана в чате. Файл сохранён: ${file}`, images: [{ mime: 'image/png', base64: b64, kind: 'image' }] };
-    },
-  });
+  return { file, b64 };
 }

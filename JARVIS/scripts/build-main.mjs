@@ -12,7 +12,7 @@ const common = {
   bundle: true,
   sourcemap: true,
   target: 'node24',
-  external: ['electron', 'playwright-core'],
+  external: ['electron', 'playwright-core', 'ffmpeg-static'],
   logLevel: 'info',
 };
 

@@ -13,6 +13,7 @@ const GROUP_TOOLS: Record<AgentGroupId, RegExp> = {
   knowledge: /^(kb_|mentor_)/,
   images: /^image_generate$/,
   screen: /^(screen_capture|camera_)/,
+  video: /^video_/,
 };
 
 /** Всегда доступно агенту: узнать время и прочитать память пользователя. */
