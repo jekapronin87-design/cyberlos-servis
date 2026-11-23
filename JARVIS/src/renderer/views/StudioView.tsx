@@ -190,12 +190,26 @@ function YoutubeCard({ target, onTarget }: { target: string | null; onTarget: (n
       {msg && <div className={`banner ${msg.ok ? 'banner-ok' : 'banner-err'}`}>{msg.text}</div>}
       {!st?.hasClient && (
         <>
-          <p className="muted small">Один раз настройте доступ к своему каналу (бесплатно, 5 минут):</p>
-          <ol className="muted small">
-            <li>Откройте <code>console.cloud.google.com</code> → тот же проект, где включён «YouTube Data API v3» (или создайте новый и включите его).</li>
-            <li>«API и сервисы» → «Экран согласия OAuth»: тип «Внешний», название «Системно», ваша почта. В «Тестовых пользователях» добавьте свой Gmail, затем нажмите <strong>«Опубликовать приложение»</strong> (иначе доступ будет слетать через 7 дней).</li>
-            <li>«Учётные данные» → «Создать учётные данные» → «Идентификатор клиента OAuth» → тип <strong>«Приложение для ПК»</strong>. Скопируйте Client ID и Client secret сюда.</li>
+          <p className="muted small">
+            Это нужно сделать один раз (около 10–15 минут). Ничего платного. Нажимайте «Открыть» — нужная страница Google откроется в браузере, а здесь написано, какие кнопки нажимать. Google пишет по-английски, поэтому в скобках — перевод.
+            Если путаетесь — загружать ролики на YouTube можно и вручную: готовый ролик и файл «Публикация.txt» с текстами лежат в папке «Готово».
+          </p>
+          <ol className="yt-steps">
+            {[
+              { id: 'lang', t: 'Включите русский язык (по желанию)', d: 'Откроется «Preferences». Найдите «Language & region» → выберите «Русский» → «Save». Так все кнопки дальше будут по-русски. Если пропустите — используйте переводы ниже.' },
+              { id: 'project', t: 'Создайте проект', d: 'В поле «Project name» впишите «Sistemno» → нажмите синюю кнопку «Create» («Создать»). Подождите полминуты, потом вверху страницы убедитесь, что выбран этот проект.' },
+              { id: 'api', t: 'Включите YouTube', d: 'Откроется страница «YouTube Data API v3» («v3» — просто номер версии, ничего выбирать не надо). Нажмите синюю кнопку «Enable» («Включить»).' },
+              { id: 'consent', t: 'Заполните «экран согласия»', d: 'Нажмите «Get started» («Начать»). App name — «Системно»; User support email — ваша почта → «Next». Audience («Аудитория») — выберите «External» («Внешний») → «Next». Contact — ваша почта → «Next». Поставьте галочку согласия → «Continue» → «Create».' },
+              { id: 'audience', t: 'Добавьте себя и опубликуйте', d: 'В «Audience»: блок «Test users» → «Add users» → впишите свой Gmail (тот, где канал) → «Save». Затем кнопка «Publish app» («Опубликовать приложение») → «Confirm». Без этого доступ слетает через 7 дней.' },
+              { id: 'client', t: 'Создайте ключи', d: 'В «Application type» («Тип приложения») выберите «Desktop app» («Приложение для ПК») → «Create». Появится окно с «Client ID» и «Client secret» — скопируйте оба и вставьте ниже. (Secret показывается один раз — не закрывайте окно, пока не скопируете.)' },
+            ].map((s, k) => (
+              <li key={s.id}>
+                <div className="yt-step-h"><strong>Шаг {k + 1}. {s.t}</strong><button className="btn" onClick={() => void window.jarvis.ytUpload.openStep(s.id as 'lang').catch(() => undefined)}>Открыть страницу Google</button></div>
+                <p className="muted small">{s.d}</p>
+              </li>
+            ))}
           </ol>
+          <p className="muted small">Если страницы нет или она выглядит иначе (Google часто меняет сайт) — вверху страницы есть поиск: впишите «OAuth consent screen» или «Credentials» и откройте первый результат. Если Google попросит войти — входите тем аккаунтом, где ваш YouTube-канал.</p>
           <div className="row">
             <input style={{ flex: 2 }} placeholder="Client ID (…apps.googleusercontent.com)" value={cid} onChange={(e) => setCid(e.target.value)} spellCheck={false} />
             <input style={{ flex: 1 }} type="password" placeholder="Client secret" value={sec} onChange={(e) => setSec(e.target.value)} autoComplete="off" />

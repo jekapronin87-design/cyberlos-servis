@@ -316,6 +316,19 @@ export function registerIpc(opts: {
       privacy: (['private', 'unlisted', 'public'].includes(String(s['privacy'])) ? s['privacy'] : 'private') as 'private',
     });
   });
+  const STEPS: Record<string, string> = {
+    lang: 'https://console.cloud.google.com/user-preferences',
+    project: 'https://console.cloud.google.com/projectcreate',
+    api: 'https://console.cloud.google.com/apis/library/youtube.googleapis.com',
+    consent: 'https://console.cloud.google.com/auth/overview',
+    audience: 'https://console.cloud.google.com/auth/audience',
+    client: 'https://console.cloud.google.com/auth/clients/create',
+  };
+  handle(IPC.ytuOpenStep, async (_e, step) => {
+    const url = STEPS[str(step, 'step', 20)];
+    if (!url) throw new Error('Неизвестный шаг.');
+    await shell.openExternal(url); // адреса зашиты выше, из интерфейса пришёл только номер шага
+  });
   core.onUploadProgress((p) => send(IPC.evtYtu, p));
   core.video.onPlan((p) => send(IPC.evtVideo, p));
   core.show.onDeck((d) => send(IPC.evtShow, d));

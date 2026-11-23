@@ -121,6 +121,7 @@ export const IPC = {
   ytuConnect: 'ytu:connect',
   ytuDisconnect: 'ytu:disconnect',
   ytuUpload: 'ytu:upload',
+  ytuOpenStep: 'ytu:openStep',
   agentsList: 'agents:list',
   agentsTemplates: 'agents:templates',
   agentsSave: 'agents:save',
@@ -284,6 +285,8 @@ export interface JarvisApi {
     /** Загрузка готового ролика (по кнопке; доступ по умолчанию закрытый). */
     upload(spec: { video: string; title: string; description: string; tags: string[]; privacy: 'private' | 'unlisted' | 'public' }): Promise<YtUploadResultDto>;
     onProgress(cb: (p: { pct: number; stage: string }) => void): () => void;
+    /** Открывает в браузере страницу Google для шага мастера настройки (адреса зашиты в программе). */
+    openStep(step: 'lang' | 'project' | 'api' | 'consent' | 'audience' | 'client'): Promise<void>;
   };
   video: {
     status(): Promise<VideoStatusDto>;

@@ -485,3 +485,7 @@ th { background: var(--panel-solid); position: sticky; top: 0; font-family: var(
 .art-g-safe span { position: absolute; left: 6px; top: 4px; font: 600 11px var(--font); color: #5be39b; }
 .art-av { display: flex; align-items: center; gap: 12px; }
 .art-av img { width: 96px; height: 96px; border-radius: 50%; border: 2px solid rgba(92, 200, 255, 0.5); }
+.yt-steps { list-style: none; padding: 0; margin: 10px 0; display: flex; flex-direction: column; gap: 10px; }
+.yt-steps li { border: 1px solid rgba(92, 200, 255, 0.22); border-radius: 10px; padding: 10px 12px; background: rgba(92, 200, 255, 0.04); }
+.yt-step-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.yt-steps p { margin: 6px 0 0; line-height: 1.45; }

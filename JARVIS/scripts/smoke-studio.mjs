@@ -71,6 +71,7 @@ try {
 
   // YouTube: карточка настройки проверяет ввод и ведёт к входу (сам вход — в браузере, здесь не проверяется)
   await page.waitForSelector('#yt-upload-card');
+  assert.equal(await page.locator('#yt-upload-card .yt-steps li').count(), 6, 'мастер настройки: шесть шагов с кнопками «Открыть страницу Google»');
   await page.fill('#yt-upload-card input[placeholder^="Client ID"]', 'не-тот-формат');
   await page.fill('#yt-upload-card input[type=password]', 'GOCSPX-testsecret1234567890');
   await page.click('#yt-upload-card button:has-text("Сохранить")');
