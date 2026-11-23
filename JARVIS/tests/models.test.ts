@@ -301,3 +301,10 @@ describe('Сбои сети и закрытые для страны сервис
     expect(describeProviderHttp(new ProviderHttpError(403, 'Access denied', 'groq'))).toMatch(/закрыт для вашей страны/);
   });
 });
+
+describe('402: закончились деньги у сервиса', () => {
+  it('Gemini — как создать ключ на бесплатном тарифе; DeepSeek — пополнить', () => {
+    expect(describeProviderHttp(new ProviderHttpError(402, '{"error":{"message":"Your prepayment credits are depleted"}}', 'gemini'))).toMatch(/новом проекте/);
+    expect(describeProviderHttp(new ProviderHttpError(402, 'Insufficient Balance', 'deepseek'))).toMatch(/Пополните баланс/);
+  });
+});

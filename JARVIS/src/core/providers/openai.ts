@@ -233,6 +233,10 @@ export function describeProviderHttp(e: ProviderHttpError): string {
   const why = e.status >= 400 ? upstreamReason(e.message) : '';
   if (e.status >= 500 && /overload|unavailable|high demand|capacity/i.test(why + e.message)) return `Сервис «${e.provider}» перегружен (бесплатный тариф часто так отвечает). Подождите минуту и повторите — программа уже пробовала 3 раза${why ? `. Ответ сервиса: ${why}` : ''}.`;
   if (e.status === 401 || e.status === 403) return `«${e.provider}» не принял запрос (${e.status}): неверный ключ — или сервис закрыт для вашей страны/сети (Groq и Gemini так делают для России — нужен VPN для их адреса)${why ? `. Ответ сервиса: ${why}` : ''}.`;
+  if (e.status === 402) {
+    const hint = e.provider === 'gemini' ? 'Ключ создан в проекте с платным тарифом, а предоплаченные деньги закончились. Создайте новый ключ в aistudio.google.com/apikey → «Create API key» → «в новом проекте» (без привязки карты) — он будет на бесплатном тарифе.' : e.provider === 'deepseek' ? 'Пополните баланс на platform.deepseek.com (раздел «Top up»).' : 'Пополните баланс у сервиса или выберите другую модель.';
+    return `У «${e.provider}» закончились предоплаченные средства (402). ${hint}`;
+  }
   if (e.status === 404) return `Модель или адрес для «${e.provider}» не найдены. Проверьте название модели.`;
   if (e.status === 429) return `Лимит бесплатных запросов «${e.provider}» исчерпан. Попробуйте позже.`;
   if (e.status >= 500) return `Сервис «${e.provider}» временно недоступен (${e.status})${why ? `. Ответ сервиса: ${why}` : ''}.`;
