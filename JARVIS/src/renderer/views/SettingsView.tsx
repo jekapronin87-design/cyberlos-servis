@@ -7,6 +7,7 @@ import { GatewayCard } from '../components/GatewayCard';
 import { ModelsCard } from '../components/ModelsCard';
 import { YoutubeCard } from '../components/YoutubeCard';
 import { AquaCard } from '../components/AquaCard';
+import { BriefingCard } from '../components/BriefingCard';
 import { RealtimeCard } from '../components/RealtimeCard';
 import { CostCard } from '../components/CostCard';
 import { MicTest } from '../components/MicTest';
@@ -393,6 +394,7 @@ export function SettingsView(props: {
       <UpdateCard branch={s.updateBranch} onBranch={(b) => run(() => props.onUpdate({ updateBranch: b }), 'Ветка сохранена')} />
 
       {!s.disabledModules.includes('crm') && <AquaCard />}
+      <BriefingCard />
 
       <CrmCard />
 

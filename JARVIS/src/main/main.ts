@@ -259,8 +259,18 @@ if (!app.requestSingleInstanceLock()) {
         });
       },
     });
+    core.briefing.onAlerts((e) => {
+      // Системное уведомление о новых тревогах (внутри окна их показывает интерфейс)
+      try {
+        const hot = e.alerts.filter((a) => a.level === 'hot').length;
+        if (Notification.isSupported()) new Notification({ title: hot ? `Системно: тревога (${e.alerts.length})` : `Системно: внимание (${e.alerts.length})`, body: e.alerts.slice(0, 3).map((a) => a.title).join('\n').slice(0, 220) }).show();
+      } catch {
+        /* уведомления недоступны */
+      }
+    });
     applyLoginItem(core.getSettings().launchAtLogin);
     core.startScheduler();
+    if (!process.env.JARVIS_DATA_DIR) core.startBriefing(); // в автотестах (свой каталог данных) сводка сама не всплывает
     core.startTelegram();
     core.startAgents();
     void core.applyGateway();

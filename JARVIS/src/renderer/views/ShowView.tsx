@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { DeckDto, SlideDto, Tone } from '../../shared/deck';
+import { uiSounds } from '../audio/uiSounds';
 
 export type ShowCommand = { kind: 'next' | 'prev' | 'pause' | 'play' | 'first'; nonce: number };
 
@@ -148,6 +149,19 @@ function Slide({ s, source }: { s: SlideDto; source: string }) {
           </table>
         </div>
       )}
+      {s.kind === 'alerts' && (
+        <ul className="sh-alerts">
+          {s.items.map((a, i) => (
+            <li key={i} className={`sh-alert lv-${a.level}`} style={idx(i)}>
+              <span className="sh-alert-dot" aria-hidden="true" />
+              <div>
+                <b>{a.title}</b>
+                {a.detail && <small>{a.detail}</small>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
       {s.kind === 'text' && (
         <ul className="sh-text">
           {s.bullets.map((b, i) => <li key={i} style={idx(i)}>{b}</li>)}
@@ -174,6 +188,20 @@ export function ShowView(props: { deck: DeckDto; command: ShowCommand | null; on
     setDir(t >= i ? 1 : -1);
     setI(t);
   };
+
+  // космические звуки: вход в показ и «пролёт» при каждой смене слайда; тревожный слайд — свой сигнал
+  const firstRef = useRef(true);
+  useEffect(() => {
+    const kind = deck.slides[i]?.kind;
+    if (firstRef.current) {
+      firstRef.current = false;
+      uiSounds.play(deck.title.startsWith('Утренняя') ? 'sweep' : 'open');
+      return;
+    }
+    uiSounds.play('whoosh');
+    if (kind === 'alerts' && (deck.slides[i] as { items?: { level: string }[] }).items?.some((a) => a.level === 'hot')) window.setTimeout(() => uiSounds.play('alarm'), 380);
+    else if (kind === 'kpis') window.setTimeout(() => uiSounds.play('tick'), 420);
+  }, [i]);
 
   // автопоказ
   useEffect(() => {

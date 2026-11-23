@@ -11,7 +11,9 @@ export type SlideDto =
   | { kind: 'funnel'; title: string; subtitle?: string; stages: { label: string; value: number; tone?: Tone }[] }
   | { kind: 'donut'; title: string; subtitle?: string; items: { label: string; value: number; tone?: Tone }[] }
   | { kind: 'table'; title: string; subtitle?: string; columns: string[]; rows: string[][] }
-  | { kind: 'text'; title: string; bullets: string[]; subtitle?: string };
+  | { kind: 'text'; title: string; bullets: string[]; subtitle?: string }
+  /** Тревоги: красные/жёлтые карточки с пульсацией. */
+  | { kind: 'alerts'; title: string; subtitle?: string; items: { level: 'hot' | 'warn' | 'info'; title: string; detail?: string }[] };
 
 export interface DeckDto {
   title: string;
@@ -46,7 +48,8 @@ export function sanitizeDeck(input: unknown): DeckDto {
       const columns = (Array.isArray(raw['columns']) ? (raw['columns'] as unknown[]) : []).slice(0, 8).map((c) => s(c, 30));
       const rows = (Array.isArray(raw['rows']) ? (raw['rows'] as unknown[]) : []).slice(0, 14).map((r) => (Array.isArray(r) ? (r as unknown[]).slice(0, columns.length).map((c) => s(c, 60)) : []));
       slides.push({ kind, title, subtitle, columns, rows });
-    } else if (kind === 'text') slides.push({ kind, title, subtitle, bullets: (Array.isArray(raw['bullets']) ? (raw['bullets'] as unknown[]) : []).slice(0, 8).map((b) => s(b, 200)).filter(Boolean) });
+    } else if (kind === 'alerts') slides.push({ kind, title, subtitle, items: arr(raw['items'], 8).map((i) => ({ level: (['hot', 'warn', 'info'].includes(String(i['level'])) ? i['level'] : 'info') as 'info', title: s(i['title'], 90), detail: s(i['detail'], 160) || undefined })) });
+    else if (kind === 'text') slides.push({ kind, title, subtitle, bullets: (Array.isArray(raw['bullets']) ? (raw['bullets'] as unknown[]) : []).slice(0, 8).map((b) => s(b, 200)).filter(Boolean) });
   }
   if (slides.length === 0) throw new Error('В колоде нет ни одного слайда (kind: title, kpis, bars, funnel, donut, table, text).');
   const sec = n(d['autoplaySec']);
@@ -124,4 +127,139 @@ export function buildStatsDeck(dash: CrmDashboardDto, opts: { sample?: boolean; 
   if (groups.size > 0) slides.push({ kind: 'bars', title: 'Что не так', subtitle: 'замечания по работе в CRM', unit: 'шт', items: [...groups.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => ({ label: NAMES[k] ?? k, value: v, tone: 'warn' as Tone })) });
   slides.push({ kind: 'text', title: 'Главное — коротко', bullets: statsFacts(dash) });
   return sanitizeDeck({ title: 'Статистика бизнеса', source: opts.sample ? 'ПРИМЕР ДАННЫХ' : live ? 'Живые данные · CRM «Аквамастер»' : 'Данные CRM', autoplaySec: 9, slides });
+}
+
+// ---------- Утренняя сводка ----------
+
+export interface AlertDto {
+  /** Ключ для «не повторять одно и то же»: меняется, когда меняется суть (например, число просрочек). */
+  key: string;
+  level: 'hot' | 'warn' | 'info';
+  title: string;
+  detail?: string;
+}
+
+export interface ClubStatsDto {
+  total: number;
+  withAccess: number;
+  paying: number;
+  paidRub: number;
+  byStep: { step: string; count: number; stuck: number }[];
+}
+
+export interface MailItemDto {
+  account: string;
+  from: string;
+  subject: string;
+  date: string;
+  seen: boolean;
+  score: number;
+  important: boolean;
+  reasons: string[];
+}
+
+export interface ChatItemDto {
+  channel: string;
+  from: string;
+  text: string;
+  at: string;
+  unanswered: boolean;
+}
+
+export interface BriefingData {
+  userName: string;
+  at: string;
+  tz: string;
+  dash: CrmDashboardDto | null;
+  club: ClubStatsDto | null;
+  mail: { items: MailItemDto[]; accounts: number; errors: string[] } | null;
+  chats: { items: ChatItemDto[] } | null;
+  /** Что не удалось получить и почему (показывается на последнем слайде). */
+  missing: string[];
+}
+
+const dayName = (d: Date, tz: string): string => d.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: tz });
+const hourOf = (d: Date, tz: string): number => Number(d.toLocaleString('en-GB', { hour: '2-digit', hour12: false, timeZone: tz }));
+export const greetingFor = (hour: number): string => (hour < 5 ? 'Доброй ночи' : hour < 12 ? 'Доброе утро' : hour < 18 ? 'Добрый день' : 'Добрый вечер');
+
+/** Колода «Утренняя сводка»: приветствие → тревоги → цифры бизнеса → клуб (Telegram-бот) → почта → чаты → итог. */
+export function buildBriefingDeck(b: BriefingData, alerts: AlertDto[]): DeckDto {
+  const now = new Date(b.at);
+  const slides: SlideDto[] = [];
+  const hello = `${greetingFor(hourOf(now, b.tz))}${b.userName ? ', ' + b.userName : ''}`;
+  slides.push({ kind: 'title', title: hello, subtitle: `${dayName(now, b.tz)} · сводка бизнеса` });
+  if (alerts.length) {
+    slides.push({ kind: 'alerts', title: 'Требует внимания', subtitle: `${alerts.length} ${alerts.length === 1 ? 'сигнал' : alerts.length < 5 ? 'сигнала' : 'сигналов'}`, items: alerts.slice(0, 8).map((a) => ({ level: a.level, title: a.title, detail: a.detail })) });
+  } else {
+    slides.push({ kind: 'alerts', title: 'Тревог нет', subtitle: 'всё спокойно', items: [{ level: 'info', title: 'Критичных сигналов нет', detail: 'Просрочек, зависших сделок и неотвеченных сообщений не найдено' }] });
+  }
+  if (b.dash) slides.push(...buildStatsDeck(b.dash).slides.filter((s) => s.kind !== 'title' && !(s.kind === 'text' && s.title.startsWith('Главное'))));
+  if (b.club) {
+    const c = b.club;
+    slides.push({ kind: 'kpis', title: 'Telegram-бот: клуб', items: [{ label: 'Всего зашло', value: c.total }, { label: 'Платящих', value: c.paying, tone: 'good' }, { label: 'С доступом сейчас', value: c.withAccess, tone: 'good' }, { label: 'Оплачено', value: c.paidRub, unit: ' ₽', tone: 'good' }] });
+    const steps = c.byStep.filter((x) => x.count > 0);
+    if (steps.length) slides.push({ kind: 'funnel', title: 'Воронка бота: кто на каком этапе', subtitle: '⚠ — застрявшие дольше 3 дней, красным — этапы, где они есть', stages: steps.map((x) => ({ label: `${x.step}${x.stuck ? ` (⚠ ${x.stuck})` : ''}`, value: x.count, tone: x.stuck > 0 ? ('bad' as Tone) : undefined })) });
+  }
+  if (b.mail) {
+    const imp = b.mail.items.filter((m) => m.important);
+    slides.push(imp.length
+      ? { kind: 'table', title: 'Важная почта', subtitle: `${imp.length} из ${b.mail.items.length} новых писем · ящиков: ${b.mail.accounts}`, columns: ['Ящик', 'От кого', 'Тема', 'Почему'], rows: imp.slice(0, 10).map((m) => [m.account, m.from, m.subject, m.reasons.join(', ')]) }
+      : { kind: 'kpis', title: 'Почта', items: [{ label: 'Новых писем', value: b.mail.items.length }, { label: 'Важных', value: 0, tone: 'good' }, { label: 'Ящиков', value: b.mail.accounts }] });
+  }
+  if (b.chats) {
+    const un = b.chats.items.filter((m) => m.unanswered);
+    slides.push(un.length
+      ? { kind: 'table', title: 'Рабочие чаты: без ответа', subtitle: `${un.length} сообщений (Telegram и Max из CRM)`, columns: ['Канал', 'От кого', 'Сообщение', 'Когда'], rows: un.slice(0, 10).map((m) => [m.channel, m.from, m.text, new Date(m.at).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short', timeZone: b.tz })]) }
+      : { kind: 'kpis', title: 'Рабочие чаты', items: [{ label: 'Сообщений за сутки', value: b.chats.items.length }, { label: 'Без ответа', value: 0, tone: 'good' }] });
+  }
+  const bullets = [...(b.dash ? statsFacts(b.dash) : []), ...(b.club ? [`Клуб: зашло ${b.club.total}, платящих ${b.club.paying}, оплачено ${Math.round(b.club.paidRub).toLocaleString('ru-RU')} ₽.`] : []), ...(b.mail ? [`Важных писем: ${b.mail.items.filter((m) => m.important).length}.`] : []), ...(b.chats ? [`Сообщений без ответа в чатах: ${b.chats.items.filter((m) => m.unanswered).length}.`] : [])];
+  if (b.missing.length) bullets.push(`Не удалось получить: ${b.missing.join('; ')}.`);
+  slides.push({ kind: 'text', title: 'Главное — коротко', bullets });
+  return sanitizeDeck({ title: 'Утренняя сводка', source: 'Живые данные · CRM «Аквамастер», почта, чаты', autoplaySec: 8, slides });
+}
+
+/** Короткий текст для голоса — без нейросети, шаблоном. */
+export function briefingSpeech(b: BriefingData, alerts: AlertDto[]): string {
+  const hello = `${greetingFor(hourOf(new Date(b.at), b.tz))}${b.userName ? ', ' + b.userName : ''}.`;
+  const parts: string[] = [hello];
+  if (b.dash) {
+    const o = b.dash.overview;
+    parts.push(`В работе ${o.pipelines.reduce((a, p) => a + p.open, 0)} сделок, новых за сутки ${o.newLast24h}.`);
+  }
+  if (alerts.length) parts.push(`Тревог: ${alerts.length}. ${alerts.slice(0, 3).map((a) => a.title).join('. ')}.`);
+  else parts.push('Тревог нет.');
+  if (b.club) parts.push(`В боте клуба ${b.club.total} человек, платящих ${b.club.paying}.`);
+  if (b.mail) parts.push(`Важных писем ${b.mail.items.filter((m) => m.important).length}.`);
+  if (b.chats) parts.push(`Сообщений без ответа ${b.chats.items.filter((m) => m.unanswered).length}.`);
+  return parts.join(' ');
+}
+
+export interface BriefingConfigDto {
+  enabled: boolean;
+  /** «ЧЧ:ММ» по часовому поясу tz. */
+  time: string;
+  tz: string;
+  speak: boolean;
+  alerts: boolean;
+  vip: string[];
+}
+export interface MailAccountDto {
+  id: string;
+  provider: 'gmail' | 'yandex';
+  email: string;
+  hasPassword: boolean;
+}
+export interface BriefingPayloadDto {
+  deck: DeckDto;
+  speech: string;
+  alerts: AlertDto[];
+  manual: boolean;
+  /** Озвучить приветствие (настройка на момент показа). */
+  speak: boolean;
+}
+export interface BriefingStateDto {
+  config: BriefingConfigDto;
+  mail: MailAccountDto[];
+  lastDate: string;
+  crm: boolean;
 }

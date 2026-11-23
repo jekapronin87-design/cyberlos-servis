@@ -144,7 +144,7 @@ export function isPromptLeak(transcript: string, hint: string): boolean {
   return t.every((w) => h.has(w)) && new Set(t).size >= 2;
 }
 
-export type NavIntent = 'analytics' | 'city' | 'home' | 'agents' | 'stats' | 'studio';
+export type NavIntent = 'analytics' | 'city' | 'home' | 'agents' | 'stats' | 'studio' | 'briefing';
 
 /**
  * Локальные команды перехода по интерфейсу («открой аналитику», «покажи наш город», «вернись»).
@@ -160,6 +160,7 @@ export function parseNavIntent(text: string): NavIntent | null {
   if (/(^| )агент/.test(t)) return null; // «запусти агента Аналитик» — это поручение модели, а не переход
   if (/(^| )(вернись|вернуться|назад|домой|свернись|сверни)( |$)|закрой (аналитику|город|карточки|все|это)|на главную|главный экран/.test(t)) return 'home';
   if (/(^| )(город|города|городом|городу)( |$)|что (там )?(у нас )?с бизнесом|как (там )?(у нас )?бизнес|состояние бизнеса|карта бизнеса/.test(t)) return 'city';
+  if (/сводк|брифинг|утренн(ий|юю|ее|ем)|что нового|что (у нас )?сегодня|что случилось/.test(t)) return 'briefing';
   if (/студи|монтажн(ый|ого|ому) стол|видеомонтаж/.test(t)) return 'studio';
   if (/аналитик|дашборд|карточки/.test(t)) return 'analytics';
   if (/статистик|показател|цифры|отчет по бизнесу|как дела в бизнесе/.test(t)) return 'stats';

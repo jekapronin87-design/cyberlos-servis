@@ -343,6 +343,19 @@ export function registerIpc(opts: {
   core.onUploadProgress((p) => send(IPC.evtYtu, p));
   core.video.onPlan((p) => send(IPC.evtVideo, p));
   core.show.onDeck((d) => send(IPC.evtShow, d));
+  core.briefing.onBriefing((p) => send(IPC.evtBriefing, p));
+  core.briefing.onAlerts((e) => send(IPC.evtAlerts, e));
+  const briefingState = () => ({ config: core.briefing.config(), mail: core.mail.list(), lastDate: core.briefing.lastDate(), crm: core.aquaStatus().configured });
+  handle(IPC.briefingGet, () => briefingState());
+  handle(IPC.briefingSave, (_e, cfg) => {
+    core.briefing.save(cfg);
+    return briefingState();
+  });
+  handle(IPC.briefingRun, () => core.briefing.run(true));
+  handle(IPC.briefingPending, () => core.briefing.takePending());
+  handle(IPC.briefingMailAdd, (_e, provider, email, password) => core.mail.add(provider, str(email, 'email', 200), str(password, 'password', 300)));
+  handle(IPC.briefingMailRemove, (_e, id) => core.mail.remove(str(id, 'id', 60)));
+  handle(IPC.briefingMailTest, (_e, id) => core.mail.test(str(id, 'id', 60)));
   handle(IPC.aquaDashboard, () => core.aquaDashboard());
   handle(IPC.aquaSection, (_e, kind, arg) => {
     const a = (arg ?? {}) as { pipeline?: unknown; stage?: unknown };

@@ -261,6 +261,29 @@ export function App() {
       }),
     [],
   );
+  // Утренняя сводка по расписанию (и по кнопке/голосу): открыть показ и поздороваться
+  const openBriefing = (p: { deck: DeckDto; speech: string; speak: boolean }): void => {
+    setDeck(p.deck);
+    const st = settingsRef.current;
+    const mute = noLocalSpeechRef.current;
+    noLocalSpeechRef.current = false;
+    if (st.ttsMode !== 'off' && p.speak && !mute) {
+      const s = new SpeechSession({ mode: st.ttsMode, systemVoice: st.systemVoice, speed: st.ttsSpeed, onError: setError });
+      s.push(p.speech);
+      void s.end();
+    }
+  };
+  const noLocalSpeechRef = useRef(false);
+  useEffect(() => {
+    void window.jarvis.briefing.pending().then((p) => p && openBriefing(p), () => undefined);
+    const off1 = window.jarvis.briefing.onBriefing((p) => openBriefing(p));
+    const off2 = window.jarvis.briefing.onAlerts((e) => {
+      const hot = e.alerts.some((a) => a.level === 'hot');
+      uiSounds.play(hot ? 'alarm' : 'chime');
+      setJobToast({ title: hot ? 'Тревога' : 'Внимание', summary: e.alerts.slice(0, 3).map((a) => a.title).join(' · '), ok: false });
+    });
+    return () => (off1(), off2());
+  }, []);
   /** Голосом при открытом показе: «дальше», «назад», «пауза», «закрой». */
   const showControlByIntent = (text: string): string | null => {
     if (!deckRef.current) return null;
@@ -285,6 +308,17 @@ export function App() {
       return 'CRM не подключена, поэтому на экране пример данных.';
     }
   };
+  /** «Покажи утреннюю сводку»: собирает данные (CRM, клуб, почта, чаты) и открывает показ; приветствие озвучивается шаблоном, без нейросети. */
+  const briefingByIntent = async (text: string, viaRealtime = false): Promise<string | null> => {
+    if (parseNavIntent(text) !== 'briefing') return null;
+    try {
+      noLocalSpeechRef.current = viaRealtime; // в живом разговоре приветствие произнесёт сама голосовая модель
+      const p = await window.jarvis.briefing.run(); // само придёт и событием onBriefing → откроется показ
+      return viaRealtime ? `Сводка открыта на экране. Зачитай её коротко своими словами: ${p.speech}` : p.speech;
+    } catch (e) {
+      return e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'Не получилось собрать сводку.';
+    }
+  };
   const statsByIntent = async (text: string, silent = false): Promise<string | null> => {
     if (parseNavIntent(text) !== 'stats') return null;
     uiSounds.play('open');
@@ -296,7 +330,7 @@ export function App() {
   /** Голосовая/текстовая навигация без обращения к модели: мгновенно и бесплатно. */
   const navigateByIntent = (text: string, silent = false): string | null => {
     const intent = parseNavIntent(text);
-    if (!intent || intent === 'stats') return null;
+    if (!intent || intent === 'stats' || intent === 'briefing') return null;
     const st = settingsRef.current;
     const say = (t: string): void => {
       if (!silent && st.ttsMode !== 'off') void speak(t, st.ttsMode, { systemVoice: st.systemVoice, speed: st.ttsSpeed }).catch(() => undefined);
@@ -404,6 +438,8 @@ export function App() {
   const runRealtimeRequest = async (text: string): Promise<string> => {
     const ctl = showControlByIntent(text);
     if (ctl) return ctl;
+    const br = await briefingByIntent(text, true);
+    if (br) return br;
     const st = await statsByIntent(text, true);
     if (st) return st;
     const nav = navigateByIntent(text, true);
@@ -419,6 +455,7 @@ export function App() {
 
   const send = async (text: string): Promise<void> => {
     if (showControlByIntent(text)) return;
+    if (await briefingByIntent(text)) return;
     if (await statsByIntent(text)) return;
     if (navigateByIntent(text)) return;
     if (await openSectionByIntent(text)) return;

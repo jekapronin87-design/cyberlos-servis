@@ -21,7 +21,7 @@ describe('звуки интерфейса', () => {
     for (const [k, notes] of Object.entries(RECIPES)) {
       expect(notes.length, k).toBeGreaterThan(0);
       for (const n of notes) {
-        expect(n.dur).toBeLessThan(k === 'boot' ? 1.2 : 0.4);
+        expect(n.dur).toBeLessThan(k === 'boot' ? 1.2 : k === 'sweep' ? 1.6 : k === 'whoosh' ? 0.5 : 0.4);
         expect(n.gain).toBeLessThanOrEqual(0.3);
         expect(n.f).toBeGreaterThan(50);
       }

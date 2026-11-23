@@ -58,6 +58,8 @@ import { SECRET_ANTHROPIC_KEY, validateApiKey, type SecretStore } from './securi
 import { SECRET_VOICE_KEY, VoiceService } from './voice/service';
 import { RealtimeService } from './realtime/service';
 import { ShowService } from './show/service';
+import { BriefingService } from './briefing/service';
+import { MailService, type MailFetcher } from './briefing/mail';
 import { VideoService } from './video/service';
 import { YoutubeUploader } from './youtube/upload';
 import { UsageService } from './usage/service';
@@ -91,6 +93,8 @@ export interface CoreOptions {
   onJobResult?: (e: JobResultEvent) => void;
   /** Подмена часов планировщика (тесты). */
   schedulerNow?: () => Date;
+  /** Для тестов: подмена IMAP-клиента. */
+  mailFetcher?: MailFetcher;
   schedulerTimeoutMs?: number;
   /** Результат запуска агента по расписанию (в Electron — системное уведомление и сообщение окну). */
   onAgent?: (e: AgentEvent) => void;
@@ -147,6 +151,8 @@ export class JarvisCore {
   readonly crm: CrmService;
   readonly aqua: AquaService;
   readonly show: ShowService;
+  readonly briefing: BriefingService;
+  readonly mail: MailService;
   readonly video: VideoService;
   readonly ytUpload: YoutubeUploader;
   readonly usage: UsageService;
@@ -226,6 +232,20 @@ export class JarvisCore {
       },
     });
     this.show.registerTools(this.tools);
+    this.mail = new MailService(this.db, opts.secrets, this.audit, opts.mailFetcher);
+    this.briefing = new BriefingService({
+      db: this.db,
+      audit: this.audit,
+      mail: this.mail,
+      dashboard: async () => {
+        if (this.aqua.status().configured) return this.aqua.dashboard();
+        if (this.crm.client.configured()) return this.crm.dashboard();
+        return null;
+      },
+      crmGet: () => (this.aqua.status().configured ? (p, q) => this.aqua.get(p, q) : null),
+      userName: () => this.settings.get().userName,
+      now: opts.schedulerNow,
+    });
     this.video = new VideoService({
       db: this.db,
       audit: this.audit,
@@ -855,6 +875,10 @@ export class JarvisCore {
   }
 
   // ----- расписание -----
+  startBriefing(): void {
+    this.briefing.start();
+  }
+
   startScheduler(): void {
     this.scheduler.start();
   }
@@ -1010,6 +1034,7 @@ export class JarvisCore {
 
   async close(): Promise<void> {
     this.scheduler.stop();
+    this.briefing.stop();
     this.stopAll();
     this.telephony.stopAll();
     this.agents.close();

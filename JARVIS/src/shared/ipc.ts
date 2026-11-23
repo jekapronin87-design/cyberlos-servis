@@ -1,4 +1,4 @@
-import type { DeckDto } from './deck';
+import type { AlertDto, BriefingConfigDto, BriefingPayloadDto, BriefingStateDto, DeckDto, MailAccountDto } from './deck';
 import type {
   AppInfo,
   ComputerAccess,
@@ -108,6 +108,15 @@ export const IPC = {
   aquaDashboard: 'aqua:dashboard',
   aquaSection: 'aqua:section',
   showStats: 'show:stats',
+  briefingGet: 'briefing:get',
+  briefingSave: 'briefing:save',
+  briefingRun: 'briefing:run',
+  briefingPending: 'briefing:pending',
+  briefingMailAdd: 'briefing:mailAdd',
+  briefingMailRemove: 'briefing:mailRemove',
+  briefingMailTest: 'briefing:mailTest',
+  evtBriefing: 'evt:briefing',
+  evtAlerts: 'evt:alerts',
   videoStatus: 'video:status',
   videoPick: 'video:pick',
   videoUseSuggested: 'video:useSuggested',
@@ -327,6 +336,19 @@ export interface JarvisApi {
     onDeck(cb: (deck: DeckDto) => void): () => void;
     /** Открыть «Статистику бизнеса» из CRM; без подключённой CRM — ошибка (интерфейс покажет пример). */
     stats(): Promise<{ facts: string[]; slides: number }>;
+  };
+  briefing: {
+    get(): Promise<BriefingStateDto>;
+    save(cfg: BriefingConfigDto): Promise<BriefingStateDto>;
+    /** Показать сводку прямо сейчас («покажи утреннюю сводку»). */
+    run(): Promise<BriefingPayloadDto>;
+    /** Сводка, которая была готова, пока окно ещё не открылось (забирается один раз). */
+    pending(): Promise<BriefingPayloadDto | null>;
+    mailAdd(provider: 'gmail' | 'yandex', email: string, password: string): Promise<MailAccountDto[]>;
+    mailRemove(id: string): Promise<MailAccountDto[]>;
+    mailTest(id: string): Promise<string>;
+    onBriefing(cb: (p: BriefingPayloadDto) => void): () => void;
+    onAlerts(cb: (e: { alerts: AlertDto[] }) => void): () => void;
   };
   aqua: {
     get(): Promise<AquaStatusDto>;

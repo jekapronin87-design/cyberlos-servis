@@ -109,6 +109,17 @@ const api: JarvisApi = {
     onDeck: subscribe(IPC.evtShow),
     stats: () => invoke(IPC.showStats),
   },
+  briefing: {
+    get: () => invoke(IPC.briefingGet),
+    save: (cfg) => invoke(IPC.briefingSave, cfg),
+    run: () => invoke(IPC.briefingRun),
+    pending: () => invoke(IPC.briefingPending),
+    mailAdd: (provider, email, password) => invoke(IPC.briefingMailAdd, provider, email, password),
+    mailRemove: (id) => invoke(IPC.briefingMailRemove, id),
+    mailTest: (id) => invoke(IPC.briefingMailTest, id),
+    onBriefing: subscribe(IPC.evtBriefing),
+    onAlerts: subscribe(IPC.evtAlerts),
+  },
   aqua: {
     get: () => invoke(IPC.aquaGet),
     save: (cfg, key) => invoke(IPC.aquaSave, cfg, key),

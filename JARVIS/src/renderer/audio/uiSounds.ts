@@ -1,6 +1,6 @@
 // Звуки интерфейса: синтезируются на лету (Web Audio), файлов нет. Тихие, короткие, «космические».
 
-export type SoundKind = 'click' | 'hover' | 'toggleOn' | 'toggleOff' | 'open' | 'send' | 'wake' | 'sleep' | 'reply' | 'success' | 'error' | 'boot';
+export type SoundKind = 'click' | 'hover' | 'toggleOn' | 'toggleOff' | 'open' | 'send' | 'wake' | 'sleep' | 'reply' | 'success' | 'error' | 'boot' | 'whoosh' | 'tick' | 'sweep' | 'alarm' | 'chime';
 
 interface Note {
   f: number;
@@ -66,6 +66,34 @@ export const RECIPES: Record<SoundKind, Note[]> = {
     { f: 140, to: 1040, dur: 1.0, type: 'triangle', gain: 0.1 },
     { f: 1568, at: 0.85, dur: 0.5, type: 'sine', gain: 0.2, fm: { ratio: 2.7, depth: 380 } },
     { f: 2349, at: 0.95, dur: 0.55, type: 'sine', gain: 0.14, fm: { ratio: 2.7, depth: 380 } },
+  ],
+  /** Смена слайда: мягкий «пролёт» вверх. */
+  whoosh: [
+    { f: 220, to: 1500, dur: 0.38, type: 'sine', gain: 0.11 },
+    { f: 110, to: 760, dur: 0.42, type: 'triangle', gain: 0.07 },
+    { f: 2600, at: 0.26, dur: 0.16, type: 'sine', gain: 0.06, fm: { ratio: 2.7, depth: 260 } },
+  ],
+  /** Цифра «встала на место». */
+  tick: [{ f: 2800, to: 2200, dur: 0.05, type: 'sine', gain: 0.1, fm: { ratio: 2, depth: 300 } }],
+  /** Начало сводки: широкий восходящий «выход на орбиту». */
+  sweep: [
+    { f: 60, to: 900, dur: 1.3, type: 'sine', gain: 0.18 },
+    { f: 120, to: 1800, dur: 1.4, type: 'triangle', gain: 0.08 },
+    { f: 1319, at: 1.0, dur: 0.6, type: 'sine', gain: 0.16, fm: { ratio: 2.7, depth: 360 } },
+    { f: 1976, at: 1.1, dur: 0.7, type: 'sine', gain: 0.12, fm: { ratio: 2.7, depth: 360 } },
+    { f: 2637, at: 1.2, dur: 0.8, type: 'sine', gain: 0.08, fm: { ratio: 2.7, depth: 360 } },
+  ],
+  /** Тревога: двойной низкий «сигнал», не пугающий. */
+  alarm: [
+    { f: 660, dur: 0.14, type: 'sine', gain: 0.2, fm: { ratio: 1.5, depth: 160 } },
+    { f: 495, at: 0.17, dur: 0.22, type: 'sine', gain: 0.2, fm: { ratio: 1.5, depth: 160 } },
+    { f: 660, at: 0.5, dur: 0.14, type: 'sine', gain: 0.16, fm: { ratio: 1.5, depth: 160 } },
+    { f: 495, at: 0.67, dur: 0.24, type: 'sine', gain: 0.16, fm: { ratio: 1.5, depth: 160 } },
+  ],
+  /** Новое важное письмо или сообщение. */
+  chime: [
+    { f: 1568, dur: 0.12, type: 'sine', gain: 0.16, fm: { ratio: 3, depth: 200 } },
+    { f: 2093, at: 0.1, dur: 0.3, type: 'sine', gain: 0.14, fm: { ratio: 3, depth: 200 } },
   ],
 };
 
