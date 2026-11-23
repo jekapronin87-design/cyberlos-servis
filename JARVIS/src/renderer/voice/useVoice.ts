@@ -14,6 +14,7 @@ const cleanError = (e: unknown): string =>
 
 /** Журнал голоса (последние реплики и что с ними сделано) — виден в «Настройки → Голос → Проверить микрофон»: помогает понять, почему он (не) отвечает. */
 export const voiceLog: { at: number; text: string }[] = [];
+(window as unknown as { __voiceLog: typeof voiceLog }).__voiceLog = voiceLog; // для самопроверок (видно только внутри окна)
 export const logVoice = (text: string): void => {
   voiceLog.push({ at: Date.now(), text });
   while (voiceLog.length > 14) voiceLog.shift();
@@ -50,6 +51,8 @@ export function useVoice(p: {
   onError(message: string): void;
   /** Включить главный выключатель микрофона (с подтверждением пользователя). Вернёт true, если включён. */
   enableMic(): Promise<boolean>;
+  /** Выбран «живой разговор»: услышав имя, не выполнять команду здесь, а начать разговор (text — сказанное после имени). */
+  onRealtimeWake?: (text: string) => void;
 }): VoiceControl {
   const [listenState, setListenState] = useState<ListenerState>('idle');
   const [transcribing, setTranscribing] = useState(0);
@@ -156,6 +159,12 @@ export function useVoice(p: {
           clearPending();
           cancelSpeech();
           cur.onStopCommand();
+        } else if (cmd.kind === 'wake' && cur.settings.voiceEngine === 'realtime' && cur.onRealtimeWake) {
+          say('Слышу вас — начинаю разговор…');
+          const t = cmd.text;
+          stop(); // микрофон переходит к живому разговору
+          cur.onRealtimeWake(t);
+          return;
         } else if (cmd.kind === 'wake') {
           if (isSpeaking()) {
             // В наушниках эхо невозможно: ваша речь поверх ассистента — это перебивание, он замолкает и слушает вас.

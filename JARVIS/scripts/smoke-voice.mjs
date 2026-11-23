@@ -146,10 +146,11 @@ try {
 
   // 4в. Главный экран подсказывает, почему он не отвечает: фраза без слова «Джарвис» в режиме ожидания
   await page.click('.nav-item:has-text("Системно")');
-  await page.waitForSelector('.hud-wakehint:has-text("Беседа не идёт")', { timeout: 30000 }); // окно «без слова Джарвис» закрыто
+  await page.waitForFunction(() => (window.__voiceLog ?? []).some((l) => /Беседа закончилась/.test(l.text)), null, { timeout: 40000 }); // окно «без слова Джарвис» закрыто
   transcripts = ['Купи хлеба и молока'];
-  await page.waitForSelector('.hud-note-warn:has-text("нет слова")', { timeout: 30000 });
-  step('фраза без слова «Джарвис» не молчит: на экране написано, что услышано и почему нет ответа');
+  await page.waitForFunction(() => (window.__voiceLog ?? []).some((l) => /нет слова/.test(l.text)), null, { timeout: 30000 });
+  assert.equal(await page.locator('.hud-note, .hud-wakehint, .hud-captions').count(), 0, 'на главном экране нет всплывающих подписей');
+  step('фраза без слова «Джарвис» не молчит (причина в журнале голоса), а главный экран остаётся чистым');
 
   // 4г. Второй запрос подряд после озвученного ответа обрабатывается (раньше «после первого ответа тишина»)
   transcripts = ['Джарвис, который час?'];
@@ -169,16 +170,23 @@ try {
   // 5b. «Живой разговор»: карточка есть, включается; проверка доступа с чужим адресом API честно отказывает, ключ не утекает; кнопка микрофона не зависает
   await page.click('.nav-item:has-text("Настройки")');
   await page.waitForSelector('#realtime-card');
-  await page.locator('#rt-on').click();
+  await page.locator('#rt-enable').click();
   await page.waitForFunction(() => window.jarvis.settings.get().then((s) => s.voiceEngine === 'realtime'));
   await page.locator('#rt-test').click();
   await page.waitForSelector('#realtime-card .banner-err:has-text("только с OpenAI")');
+  await page.waitForSelector('#realtime-card .pill.on');
   await page.click('.nav-item:has-text("Системно")');
+  assert.match(await page.locator('[data-testid=hud-mic]').textContent(), /Живой разговор/);
   await page.click('[data-testid=hud-mic]');
   await page.waitForTimeout(1200);
   assert.ok((await page.locator('[data-testid=hud-mic].on').count()) === 0, 'при отказе живой разговор не должен «висеть» включённым');
   await page.locator('.hud').waitFor();
-  await page.evaluate(() => window.jarvis.settings.update({ voiceEngine: 'classic' }));
+  await page.click('.nav-item:has-text("Настройки")');
+  await page.click('#rt-disable');
+  await page.waitForFunction(() => window.jarvis.settings.get().then((s) => s.voiceEngine === 'classic'));
+  await page.click('.nav-item:has-text("Системно")');
+  assert.match(await page.locator('[data-testid=hud-mic]').textContent(), /Микрофон/);
+
   step('живой разговор: карточка, переключатель, понятный отказ при чужом адресе API, микрофон не зависает');
 
   // 6. Выключение главного выключателя гасит микрофон

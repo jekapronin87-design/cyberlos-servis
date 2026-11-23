@@ -45,7 +45,9 @@ try {
   // 3. Импорт из файла: текст уходит в диалог (демо-режим отвечает шаблоном)
   await page.click('button:has-text("Импорт из файла")');
   await page.waitForSelector('.hud');
-  await page.waitForSelector('.cap-user:has-text("Меня зовут Евгений")', { timeout: 15000 });
+  await page.waitForFunction(async () => (await window.jarvis.conversations.list()).length > 0, null, { timeout: 15000 });
+  await page.click('.nav-item:has-text("Чат")');
+  await page.waitForSelector('.bubble-user:has-text("Меня зовут Евгений")', { timeout: 15000 });
   step('импорт из файла: текст отправлен Джарвису для выделения важного');
 
   // 4. Досье сохранено на диске и видно после перезапуска окна

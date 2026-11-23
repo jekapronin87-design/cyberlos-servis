@@ -95,7 +95,7 @@ export class RealtimeConversation {
     this.setState(this.toolBusy > 0 ? 'thinking' : speaking ? 'speaking' : this.userSpeaking ? 'hearing' : this.responsePending ? 'thinking' : 'listening');
   }
 
-  async start(): Promise<void> {
+  async start(initialText?: string): Promise<void> {
     this.setState('connecting');
     this.startedAt = Date.now();
     this.lastActivity = Date.now();
@@ -148,6 +148,14 @@ export class RealtimeConversation {
       this.setState('listening');
       this.timer = window.setInterval(() => this.tick(), 250);
       this.h.onNote('Живой разговор включён. Говорите — «пока» закончит разговор.');
+      // Если разговор начался со слова-имени и команды («Системно, покажи производство») — передаём сказанное сразу
+      const first = (initialText ?? '').trim();
+      if (first) {
+        this.send({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: first }] } });
+        this.send({ type: 'response.create' });
+        this.responsePending = true;
+        this.h.onUserText(first);
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'Не удалось начать живой разговор';
       this.teardown();

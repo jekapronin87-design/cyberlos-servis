@@ -17,6 +17,12 @@ if (process.platform === 'linux') args.unshift('--no-sandbox', '--disable-gpu');
 const app = await electron.launch({ executablePath: electronPath, args, cwd: root, env: { ...process.env, JARVIS_DATA_DIR: dataDir, ANTHROPIC_API_KEY: '' } });
 const errors = [];
 const step = (m) => console.log('  ✓', m);
+const hudType = async (page, text) => {
+  if (!(await page.locator('.hud-input').count())) await page.click('[data-testid=hud-type]');
+  await page.fill('.hud-input', text);
+  await page.press('.hud-input', 'Enter');
+};
+
 try {
   const page = await app.firstWindow();
   page.on('pageerror', (e) => errors.push(String(e)));
@@ -54,8 +60,7 @@ try {
   step('камера включена: превью и красный индикатор');
 
   // 4. «Что я делаю?» — Джарвис смотрит без лишних окон подтверждения
-  await page.fill('.hud-input', 'Джарвис, посмотри на меня');
-  await page.press('.hud-input', 'Enter');
+  await hudType(page, 'Джарвис, посмотри на меня');
   await page.waitForSelector('.act-ok:has-text("Смотрю на вас")', { timeout: 20000 });
   assert.equal(await page.locator('[role=alertdialog]').count(), 0);
   await page.click('.nav-item:has-text("Чат")');
@@ -66,8 +71,7 @@ try {
   // 5. Камера выключена кнопкой — инструмент отказывает
   await page.click('[data-testid=hud-cam]');
   await page.waitForSelector('.hud-cam', { state: 'detached' });
-  await page.fill('.hud-input', 'посмотри на меня');
-  await page.press('.hud-input', 'Enter');
+  await hudType(page, 'посмотри на меня');
   await page.waitForSelector('.act-err:has-text("Смотрю на вас")', { timeout: 20000 });
   step('при выключенной камере ассистент не получает кадр');
 

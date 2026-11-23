@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Settings } from '../../shared/types';
 import { testRealtime } from '../voice/realtime';
 
@@ -25,6 +25,10 @@ const clean = (e: unknown): string =>
 export function RealtimeCard({ settings: s, onUpdate }: { settings: Settings; onUpdate: (p: Partial<Settings>) => Promise<void> }) {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [hasKey, setHasKey] = useState<boolean | null>(null);
+  useEffect(() => {
+    void window.jarvis.app.info().then((i) => setHasKey(i.hasVoiceKey), () => setHasKey(null));
+  }, []);
   const run = async (fn: () => Promise<unknown>, ok: string): Promise<void> => {
     setBusy(true);
     try {
@@ -47,10 +51,28 @@ export function RealtimeCard({ settings: s, onUpdate }: { settings: Settings; on
         <strong>Что важно знать.</strong> Пока разговор идёт, звук передаётся в OpenAI, а их голосовая модель пересказывает вам ответы ассистента (включая данные CRM; телефоны и почта скрываются). Разговор <strong>платный по минутам</strong> (тариф OpenAI смотрите на их сайте), поэтому он включается кнопкой микрофона и сам заканчивается после тишины ({Math.round(s.voiceSessionSec / 60)} мин — это настройка «беседа» выше) или по слову «пока». Работает только с ключом OpenAI.
       </div>
       {msg && <div className={`banner ${msg.ok ? 'banner-ok' : 'banner-err'}`}>{msg.text}</div>}
-      <label className="check">
-        <input type="checkbox" id="rt-on" checked={on} onChange={(e) => void run(() => onUpdate({ voiceEngine: e.target.checked ? 'realtime' : 'classic' }), e.target.checked ? 'Включено: кнопка микрофона теперь запускает живой разговор.' : 'Выключено: обычный режим (слово «Системно»).')} />
-        <span><strong>Использовать живой разговор вместо обычного голосового режима</strong></span>
-      </label>
+      <div className="rt-status" data-testid="rt-status">
+        <span className={`pill ${on ? 'on' : 'off'}`}>{on ? '● Живой разговор ВКЛЮЧЁН' : '○ Живой разговор выключен (сейчас обычный режим)'}</span>
+        {hasKey === false && <span className="muted small">⚠ Нет ключа OpenAI — добавьте его в «Голос» выше.</span>}
+        {!s.micEnabled && <span className="muted small">⚠ Микрофон не разрешён — включите «Разрешить использование микрофона» в блоке «Голос».</span>}
+      </div>
+      <div className="row">
+        {!on ? (
+          <button className="btn btn-primary rt-big" id="rt-enable" disabled={busy} onClick={() => void run(() => onUpdate({ voiceEngine: 'realtime' }), 'Включено. Теперь на главном экране нажмите кнопку «Живой разговор» (внизу слева) — и говорите.')}>
+            ▶ Включить живой разговор
+          </button>
+        ) : (
+          <button className="btn rt-big" id="rt-disable" disabled={busy} onClick={() => void run(() => onUpdate({ voiceEngine: 'classic' }), 'Выключено: снова обычный режим (слово «Системно»).')}>
+            ■ Выключить живой разговор
+          </button>
+        )}
+      </div>
+      <ol className="small muted" style={{ margin: '8px 0' }}>
+        <li>Нажмите «Включить живой разговор».</li>
+        <li>Перейдите на главный экран («Системно» в меню слева): внизу будет кнопка <strong>«Живой разговор»</strong> — нажмите её и говорите. Ещё там можно переключать режим «Голос: Обычный / Живой разговор».</li>
+        <li>Чтобы закончить — скажите «пока» или нажмите ту же кнопку.</li>
+      </ol>
+      <p className="muted small">Озвучка «Голоса Windows / Облачный синтез» ниже относится только к <strong>обычному</strong> режиму. В живом разговоре говорит голос OpenAI — его вы выбираете в этой карточке.</p>
       <div className="row">
         <label className="field grow">
           <span>Модель</span>

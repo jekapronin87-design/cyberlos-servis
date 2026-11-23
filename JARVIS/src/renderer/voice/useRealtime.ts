@@ -17,7 +17,7 @@ export function useRealtime(p: {
   onAssistantText(text: string): void;
   /** Перед стартом: выключить обычный слушатель и озвучку. */
   beforeStart(): void;
-}): { control: VoiceControl; active: boolean; speaking: boolean; level(): number } {
+}): { control: VoiceControl; active: boolean; speaking: boolean; level(): number; start(initialText?: string): Promise<void> } {
   const [rtState, setRtState] = useState<RtState>('idle');
   const [note, setNote] = useState<VoiceNote | null>(null);
   const [left, setLeft] = useState(0);
@@ -34,9 +34,9 @@ export function useRealtime(p: {
     conv.current?.stop('user');
   }, []);
 
-  const toggle = useCallback(() => {
-    void (async () => {
-      if (conv.current?.active) return stop();
+  const start = useCallback(async (initialText?: string): Promise<void> => {
+    {
+      if (conv.current?.active) return;
       const cur = pRef.current;
       if (!cur.settings.micEnabled && !(await cur.enableMic())) return;
       const hasKey = (await window.jarvis.app.info()).hasVoiceKey;
@@ -71,14 +71,18 @@ export function useRealtime(p: {
       conv.current = c;
       say('Подключаюсь к живому разговору…');
       try {
-        await c.start();
+        await c.start(initialText);
         uiSounds.play('wake');
       } catch (e) {
         if (conv.current === c) conv.current = null;
         cur.onError(e instanceof Error ? e.message : 'Не удалось начать живой разговор');
       }
-    })();
-  }, [say, stop]);
+    }
+  }, [say]);
+  const toggle = useCallback(() => {
+    if (conv.current?.active) stop();
+    else void start();
+  }, [start, stop]);
 
   useEffect(() => {
     if (rtState === 'idle') return;
@@ -103,5 +107,5 @@ export function useRealtime(p: {
     sessionLeft: left,
     heal: () => undefined,
   };
-  return { control, active: rtState !== 'idle', speaking: rtState === 'speaking', level: () => conv.current?.level() ?? 0 };
+  return { control, active: rtState !== 'idle', speaking: rtState === 'speaking', level: () => conv.current?.level() ?? 0, start };
 }

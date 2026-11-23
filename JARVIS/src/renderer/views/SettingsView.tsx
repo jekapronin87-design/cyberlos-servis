@@ -227,7 +227,7 @@ export function SettingsView(props: {
           </div>
         )}
         <label className="field">
-          <span>Озвучка ответов (на голосовые команды)</span>
+          <span>Озвучка ответов в обычном режиме (в живом разговоре говорит голос OpenAI — см. карточку «Живой разговор»)</span>
           <select value={s.ttsMode} onChange={(e) => run(() => props.onUpdate({ ttsMode: e.target.value as Settings['ttsMode'] }), 'Сохранено')}>
             <option value="api">Облачный синтез речи — естественный голос (нужен ключ, рекомендуется)</option>
             <option value="system">Голоса Windows (бесплатно, звучат роботизированно)</option>

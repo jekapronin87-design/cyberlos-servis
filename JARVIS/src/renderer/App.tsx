@@ -406,7 +406,7 @@ export function App() {
     (what: 'mic' | 'cam') => async (): Promise<boolean> => {
       const text =
         what === 'mic'
-          ? 'Включить микрофон?\n\nФразы, которые вы произносите, будут отправляться выбранному сервису распознавания речи. Микрофон слушает только пока вы включили кнопку «Микрофон».'
+          ? 'Включить микрофон?\n\nПока приложение открыто, микрофон будет ждать ваше слово «Системно». Услышанные фразы отправляются на распознавание в выбранный сервис (OpenAI), поэтому лучше включать там, где вас не слушают посторонние. Выключить можно в любой момент: «Настройки → Голос».'
           : 'Включить камеру?\n\nАссистент сможет смотреть на вас, когда вы об этом просите («Системно, что я сейчас делаю?»). Кадр отправляется ИИ только по запросу и хранится до перезапуска приложения. Пока камера включена, в окне виден индикатор и превью.';
       if (!window.confirm(text)) return false;
       setSettings(await window.jarvis.settings.update(what === 'mic' ? { micEnabled: true } : { cameraEnabled: true }));
@@ -415,6 +415,8 @@ export function App() {
     [],
   );
 
+  /** Слово-имя услышано при выбранном «живом разговоре»: начинаем разговор (и передаём сказанное после имени). */
+  const realtimeWakeRef = useRef<(text: string) => void>(() => undefined);
   const classic = useVoice({
     settings,
     isBusy: () => runningRef.current,
@@ -429,6 +431,7 @@ export function App() {
     onStopCommand: stop,
     onError: setError,
     enableMic: enableDevice('mic'),
+    onRealtimeWake: (text) => realtimeWakeRef.current(text),
   });
   const followUpRef = useRef<(() => void) | null>(null);
   followUpRef.current = classic.followUp;
@@ -447,10 +450,30 @@ export function App() {
       cancelSpeech();
     },
   });
-  const voice: VoiceControl = settings.voiceEngine === 'realtime' || rt.active ? rt.control : classic;
+  realtimeWakeRef.current = (text) => void rt.start(text);
+  const engineRt = settings.voiceEngine === 'realtime';
+  // Живой разговор: кнопка микрофона = «говорить сейчас / закончить»; в фоне классический слушатель ждёт только слово-имя
+  const voice: VoiceControl = rt.active ? rt.control : engineRt ? { ...classic, state: 'idle', toggle: () => void rt.start() } : classic;
+  // Разговор закончился — снова ждём слово-имя (микрофон «по слову», без ручного включения)
+  const wasRt = useRef(false);
   useEffect(() => {
-    if (settings.voiceEngine === 'realtime' && classic.state !== 'idle') classic.stop();
-  }, [settings.voiceEngine, classic.state]);
+    if (wasRt.current && !rt.active && settings.autoListen && settings.micEnabled && settings.voiceMode === 'wake' && classic.state === 'idle') {
+      const t = window.setTimeout(() => classic.toggle(), 700);
+      wasRt.current = rt.active;
+      return () => window.clearTimeout(t);
+    }
+    wasRt.current = rt.active;
+    return undefined;
+  }, [rt.active]);
+
+  /** Одна кнопка: разрешить микрофон, включить режим «слушать имя» (навсегда, при каждом запуске) и начать слушать. */
+  const setupHandsFree = async (): Promise<void> => {
+    if (!settingsRef.current.micEnabled && !(await enableDevice('mic')())) return;
+    const hasKey = (await window.jarvis.app.info()).hasVoiceKey;
+    if (!hasKey) return setError('Для голоса нужен ключ OpenAI: «Настройки → Голос».');
+    setSettings(await window.jarvis.settings.update({ voiceMode: 'wake', autoListen: true }));
+    window.setTimeout(() => classic.toggle(), 300);
+  };
 
   const camera = useCamera({ settings, enableCamera: enableDevice('cam'), onError: setError });
 
@@ -459,7 +482,7 @@ export function App() {
   useEffect(() => {
     if (greeted.current || !info) return;
     greeted.current = true;
-    if (settings.autoListen && settings.micEnabled && settings.voiceMode === 'wake' && info.hasVoiceKey && settings.voiceEngine === 'classic') {
+    if (settings.autoListen && settings.micEnabled && settings.voiceMode === 'wake' && info.hasVoiceKey) {
       classic.toggle();
       if (settings.ttsMode !== 'off') {
         const s = new SpeechSession({ mode: settings.ttsMode, systemVoice: settings.systemVoice, speed: settings.ttsSpeed, onError: setError });
@@ -603,6 +626,8 @@ export function App() {
             camera={camera}
             onSend={(t) => void send(t)}
             onStop={stop}
+            armed={classic.state !== 'idle'}
+            onSetupHandsFree={() => void setupHandsFree()}
           />
         )}
         {view === 'chat' && (

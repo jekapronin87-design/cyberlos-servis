@@ -61,17 +61,14 @@ export function HudView(props: {
   camera: CameraControl;
   onSend: (t: string) => void;
   onStop: () => void;
+  /** Микрофон «ждёт имя» в фоне (режим «Системно»): флаг МИК горит, хотя разговор не идёт. */
+  armed?: boolean;
+  /** Одно нажатие: разрешить микрофон, включить режим «слушать имя» и начать слушать. */
+  onSetupHandsFree?: () => void;
 }) {
   const [text, setText] = useState('');
   const [boot, setBoot] = useState(true);
   const [, force] = useState(0);
-  const note = props.voice.note;
-  const noteFresh = !!note && Date.now() - note.at < 10_000;
-  useEffect(() => {
-    if (!note) return;
-    const t = setTimeout(() => force((n) => n + 1), 10_200);
-    return () => clearTimeout(t);
-  }, [note]);
   useEffect(() => {
     const t = setTimeout(() => setBoot(false), 1800);
     return () => clearTimeout(t);
@@ -84,16 +81,10 @@ export function HudView(props: {
     setText('');
   };
   const live = props.voice.state !== 'idle';
-  const wake = props.settings.voiceMode === 'wake';
-  const hint = props.voice.awaiting
-    ? 'Слушаю вас…'
-    : live
-      ? wake
-        ? `Скажите: «${props.settings.assistantName}, …»`
-        : 'Говорите…'
-      : props.info?.mode === 'demo'
-        ? 'Демо-режим: подключите ключ Claude в настройках'
-        : 'Нажмите микрофон или напишите';
+  const rtMode = props.settings.voiceEngine === 'realtime';
+  const [typing, setTyping] = useState(false);
+  /** Режим «Системно» настроен: микрофон разрешён, слушает имя сам при запуске. Иначе показываем одну кнопку настройки. */
+  const ready = props.settings.micEnabled && props.settings.voiceMode === 'wake' && props.settings.autoListen;
 
   return (
     <section className="hud" data-state={props.orbState}>
@@ -113,7 +104,7 @@ export function HudView(props: {
         <div className="hud-right">
           <Clock />
           <div className="hud-flags">
-            <span className={`flag ${live ? 'flag-on' : ''}`}>МИК</span>
+            <span className={`flag ${live || props.armed ? 'flag-on' : ''}`}>МИК</span>
             <span className={`flag ${props.camera.active ? 'flag-on' : ''}`}>КАМ</span>
             <span className={`flag ${props.info?.mode === 'live' ? 'flag-ok' : ''}`}>ИИ</span>
           </div>
@@ -135,23 +126,12 @@ export function HudView(props: {
         <Orb state={props.orbState} getLevel={props.getLevel} />
       </div>
 
-      <div className="hud-captions" aria-live="polite">
-        {props.userText && <div className="cap-user">{props.userText}</div>}
-        {props.replyText && <div className="cap-reply">{props.replyText}</div>}
-        {!props.userText && !props.replyText && <div className="cap-hint">{hint}</div>}
-      </div>
-
-      {live && wake && !noteFresh && (
-        <div className="hud-wakehint" role="status">
-          {props.voice.awaiting
-            ? `Беседа идёт — говорите без имени${props.voice.sessionLeft > 0 ? ` (ещё ${Math.floor(props.voice.sessionLeft / 60)}:${String(props.voice.sessionLeft % 60).padStart(2, '0')}, «пока» — закончить)` : ''}`
-            : `Беседа не идёт — начните со слова «${props.settings.assistantName}, …», без него я не отвечу`}
-        </div>
-      )}
-      {noteFresh && (
-        <div className={`hud-note hud-note-${note!.kind}`} role="status">
-          {note!.text}
-        </div>
+      {!ready && !live && props.onSetupHandsFree && (
+        <button type="button" className="hud-setup" onClick={props.onSetupHandsFree} data-testid="hud-setup">
+          <IconMic />
+          <span>Включить режим «{props.settings.assistantName}»</span>
+          <small>микрофон будет включаться, когда вы скажете «{props.settings.assistantName}»</small>
+        </button>
       )}
 
       {props.camera.stream && <CameraPreview stream={props.camera.stream} />}
@@ -163,29 +143,37 @@ export function HudView(props: {
           submit();
         }}
       >
-        <button type="button" className={`hud-btn ${live ? 'on' : ''}`} onClick={props.voice.toggle} aria-pressed={live} title={live ? 'Выключить микрофон' : 'Включить микрофон'} data-testid="hud-mic">
+        <button type="button" className={`hud-btn ${live ? 'on' : ''}`} onClick={props.voice.toggle} aria-pressed={live} title={live ? (rtMode ? 'Закончить разговор' : 'Выключить микрофон') : rtMode ? 'Начать живой разговор' : 'Включить микрофон'} data-testid="hud-mic">
           <IconMic />
-          <span>{live ? (props.voice.state === 'hearing' ? 'Слышу' : props.voice.state === 'transcribing' ? 'Распознаю' : 'Слушаю') : 'Микрофон'}</span>
+          <span>{live ? (props.voice.state === 'hearing' ? 'Слышу' : props.voice.state === 'transcribing' ? (rtMode ? 'Думаю' : 'Распознаю') : 'Слушаю') : rtMode ? 'Живой разговор' : 'Микрофон'}</span>
         </button>
+        <button type="button" className={`hud-btn ${typing ? 'on-soft' : ''}`} onClick={() => setTyping((t) => !t)} aria-pressed={typing} title="Написать вместо того, чтобы говорить" data-testid="hud-type">
+          <IconSend />
+          <span>Написать</span>
+        </button>
+        {typing && (
         <input
           className="hud-input"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={hint}
+          placeholder="Напишите сообщение…"
           aria-label={`Сообщение: ${props.settings.assistantName}`}
           maxLength={20000}
           autoComplete="off"
+          autoFocus
         />
+        )}
+        {typing && !props.running && (
+          <button type="submit" className="hud-btn primary" disabled={!text.trim()} title="Отправить">
+            <IconSend />
+          </button>
+        )}
         {props.running ? (
           <button type="button" className="hud-btn danger" onClick={props.onStop} title="Остановить">
             <IconStop />
             <span>Стоп</span>
           </button>
-        ) : (
-          <button type="submit" className="hud-btn primary" disabled={!text.trim()} title="Отправить">
-            <IconSend />
-          </button>
-        )}
+        ) : null}
         <button type="button" className={`hud-btn ${props.camera.active ? 'on' : ''}`} onClick={props.camera.toggle} aria-pressed={props.camera.active} title={props.camera.active ? 'Выключить камеру' : `Включить камеру (${props.settings.assistantName} сможет видеть вас)`} data-testid="hud-cam">
           <IconCam />
           <span>{props.camera.active ? 'Камера вкл' : 'Камера'}</span>

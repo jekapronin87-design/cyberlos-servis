@@ -18,6 +18,12 @@ if (process.platform === 'linux') args.unshift('--no-sandbox', '--disable-gpu');
 const app = await electron.launch({ executablePath: electronPath, args, cwd: root, env: { ...process.env, JARVIS_DATA_DIR: dataDir, ANTHROPIC_API_KEY: '' } });
 const errors = [];
 const step = (m) => console.log('  ✓', m);
+const hudType = async (page, text) => {
+  if (!(await page.locator('.hud-input').count())) await page.click('[data-testid=hud-type]');
+  await page.fill('.hud-input', text);
+  await page.press('.hud-input', 'Enter');
+};
+
 try {
   const page = await app.firstWindow();
   page.on('pageerror', (e) => errors.push(String(e)));
@@ -34,8 +40,7 @@ try {
   assert.ok(p1 > p0, `звуки интерфейса не воспроизводятся: ${p0} → ${p1}`);
   step(`звуки на кнопки работают (проиграно: ${p1 - p0})`);
 
-  await page.fill('.hud-input', 'Открой аналитику');
-  await page.press('.hud-input', 'Enter');
+  await hudType(page, 'Открой аналитику');
   await page.waitForSelector('[data-testid=space] .sp-tile');
   await page.waitForSelector('.space-banner:has-text("ПРИМЕР ДАННЫХ")');
   await page.waitForTimeout(1500);
@@ -51,8 +56,7 @@ try {
 
   await page.click('.space-close');
   await page.waitForSelector('.hud');
-  await page.fill('.hud-input', 'Покажи наш город');
-  await page.press('.hud-input', 'Enter');
+  await hudType(page, 'Покажи наш город');
   await page.waitForSelector('.city-canvas');
   step('«Покажи наш город» открывает город сразу');
 
@@ -81,8 +85,7 @@ try {
   await page.evaluate(([url, key]) => window.jarvis.aqua.save({ baseUrl: url, maskPii: true }, key), [`http://127.0.0.1:${live.address().port}`, KEY]);
   await page.click('.space-close');
   await page.waitForSelector('.hud');
-  await page.fill('.hud-input', 'Открой аналитику');
-  await page.press('.hud-input', 'Enter');
+  await hudType(page, 'Открой аналитику');
   await page.waitForSelector('[data-testid=space-live]');
   assert.equal(await page.locator('.space-banner:has-text("ПРИМЕР ДАННЫХ")').count(), 0, 'пример не должен показываться при живых данных');
   assert.match(await page.locator('.sp-tile', { hasText: 'Без движения' }).textContent(), /1/);
@@ -122,8 +125,7 @@ try {
   // Голос/текст: «покажи, что у нас в производстве» открывает раздел и запускает рассказ
   await page.click('.space-close');
   await page.waitForSelector('.hud');
-  await page.fill('.hud-input', 'Покажи, что у нас в производстве');
-  await page.press('.hud-input', 'Enter');
+  await hudType(page, 'Покажи, что у нас в производстве');
   await page.waitForSelector('[data-testid=space-drawer]');
   await page.waitForSelector('[data-testid=space-drawer] :text("Сайберлос 15")');
   assert.match(await page.locator('[data-testid=space-drawer]').textContent(), /Сварка \(Алексей\)/);
