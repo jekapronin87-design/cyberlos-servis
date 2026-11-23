@@ -11,7 +11,7 @@ const ctx = { runId: 'r', conversationId: 0, signal: new AbortController().signa
 
 interface Rec { url: string; method: string; headers: Headers; body: string }
 
-function fakeGoogle(o: { tokenError?: string; videoPrivacy?: string; flaky?: boolean; thumbFails?: boolean; initStatus?: number } = {}) {
+function fakeGoogle(o: { channels?: 'none' | 'error'; tokenError?: string; videoPrivacy?: string; flaky?: boolean; thumbFails?: boolean; initStatus?: number } = {}) {
   const log: Rec[] = [];
   let received = 0;
   let failedOnce = false;
@@ -26,7 +26,11 @@ function fakeGoogle(o: { tokenError?: string; videoPrivacy?: string; flaky?: boo
       return new Response(JSON.stringify({ access_token: `at-${p.get('grant_type')}`, refresh_token: p.get('grant_type') === 'authorization_code' ? 'rt-secret-1' : undefined, expires_in: 3600 }), { status: 200 });
     }
     if (u.pathname === '/revoke') return new Response('{}', { status: 200 });
-    if (u.pathname === '/youtube/v3/channels') return new Response(JSON.stringify({ items: [{ snippet: { title: 'Евгений Пронин и Системно' } }] }), { status: 200 });
+    if (u.pathname === '/youtube/v3/channels') {
+      if (o.channels === 'error') return new Response(JSON.stringify({ error: { errors: [{ reason: 'accessNotConfigured' }] } }), { status: 403 });
+      if (o.channels === 'none') return new Response(JSON.stringify({}), { status: 200 });
+      return new Response(JSON.stringify({ items: [{ id: 'UCabcdefghijklmnopqrstuv', snippet: { title: 'Евгений Пронин и Системно', customUrl: '@evgeny-sistemno' } }] }), { status: 200 });
+    }
     if (u.pathname === '/upload/youtube/v3/videos' && !u.searchParams.get('upload_id')) {
       if (o.initStatus) return new Response(JSON.stringify({ error: { errors: [{ reason: 'quotaExceeded' }], message: 'quota' } }), { status: o.initStatus });
       return new Response('{}', { status: 200, headers: { location: 'https://www.googleapis.com/upload/youtube/v3/videos?upload_id=UP1' } });
@@ -93,7 +97,8 @@ describe('Загрузка на YouTube', () => {
     expect(h.secrets.get('youtubeUpload.clientSecret')).toBe(CSEC);
     expect(h.core.ytUpload.status()).toMatchObject({ hasClient: true, connected: false, clientId: CID });
     const st = await h.core.ytUpload.connect();
-    expect(st).toMatchObject({ connected: true, channel: 'Евгений Пронин и Системно' });
+    expect(st).toMatchObject({ connected: true, channel: 'Евгений Пронин и Системно', channelId: 'UCabcdefghijklmnopqrstuv', handle: '@evgeny-sistemno', channelError: null });
+    expect(b.seen[0]!.url.searchParams.get('prompt')).toBe('select_account consent'); // Google спрашивает аккаунт и канал
     const au = b.seen[0]!.url;
     expect(au.origin + au.pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth');
     expect(au.searchParams.get('code_challenge_method')).toBe('S256');
@@ -105,6 +110,19 @@ describe('Загрузка на YouTube', () => {
     expect(createHash('sha256').update(exch.get('code_verifier')!).digest('base64url')).toBe(au.searchParams.get('code_challenge'));
     expect(h.secrets.get('youtubeUpload.refresh')).toBe('rt-secret-1');
     expect(JSON.stringify(h.core.listAudit(200))).not.toMatch(/rt-secret-1|GOCSPX/);
+  });
+
+  it('канал не определён: понятная причина (нет канала / API не включён), «Проверить канал» перечитывает', async () => {
+    const a = setup(fakeGoogle({ channels: 'none' }));
+    a.h.core.ytUpload.saveClient(CID, CSEC);
+    const s1 = await a.h.core.ytUpload.connect();
+    expect(s1).toMatchObject({ connected: true, channel: null });
+    expect(s1.channelError).toMatch(/нет YouTube-канала/);
+    const b = setup(fakeGoogle({ channels: 'error' }));
+    b.h.core.ytUpload.saveClient(CID, CSEC);
+    const s2 = await b.h.core.ytUpload.connect();
+    expect(s2.channelError).toMatch(/YouTube Data API v3/);
+    expect((await b.h.core.ytUpload.refreshStatus(true)).channelError).toMatch(/YouTube Data API v3/);
   });
 
   it('отказ в окне Google и неверный клиент — понятные ошибки; отключение отзывает доступ', async () => {
@@ -179,6 +197,7 @@ describe('Загрузка на YouTube', () => {
     await h.core.ytUpload.connect();
     const out = String(await h.core.tools.get('video_youtube_upload')!.execute({ video: 'ролик', title: 'Заголовок', tags: ['а'] }, ctx));
     expect(out).toContain('youtube.com/shorts/VID123');
+    expect(out).toContain('канал «Евгений Пронин и Системно»');
     expect(out).toContain('закрытый');
     await expect(Promise.resolve().then(() => h.core.tools.get('video_youtube_upload')!.execute({ video: 'нет такого', title: 'T' }, ctx))).rejects.toThrow(/нет готового ролика/);
   });

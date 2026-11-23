@@ -122,6 +122,8 @@ export const IPC = {
   ytuDisconnect: 'ytu:disconnect',
   ytuUpload: 'ytu:upload',
   ytuOpenStep: 'ytu:openStep',
+  ytuCheck: 'ytu:check',
+  ytuOpenChannel: 'ytu:openChannel',
   agentsList: 'agents:list',
   agentsTemplates: 'agents:templates',
   agentsSave: 'agents:save',
@@ -277,6 +279,10 @@ export interface JarvisApi {
   };
   ytUpload: {
     status(): Promise<YtUploadStatusDto>;
+    /** Заново узнать, к какому каналу выдан доступ. */
+    checkChannel(): Promise<YtUploadStatusDto>;
+    /** Открыть канал в браузере (по номеру канала, который вернул YouTube). */
+    openChannel(channelId: string): Promise<void>;
     /** Client ID и Client secret из Google Cloud (тип «Приложение для ПК»). */
     saveClient(clientId: string, clientSecret: string): Promise<YtUploadStatusDto>;
     /** Открывает вход Google в браузере; возвращается, когда вход завершён. */

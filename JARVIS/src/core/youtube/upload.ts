@@ -26,6 +26,11 @@ export interface YtUploadStatus {
   hasClient: boolean;
   connected: boolean;
   channel: string | null;
+  channelId: string | null;
+  /** Короткое имя канала («@evgeny»), если задано. */
+  handle: string | null;
+  /** Почему не удалось узнать канал (показывается пользователю). */
+  channelError: string | null;
   clientId: string;
 }
 
@@ -44,6 +49,7 @@ export interface YtUploadResult {
   url: string;
   privacy: Privacy;
   warnings: string[];
+  channel: string | null;
 }
 
 type Fetch = typeof fetch;
@@ -70,7 +76,8 @@ interface Deps {
  */
 export class YoutubeUploader {
   private access: { token: string; exp: number } | null = null;
-  private channelCache: string | null = null;
+  private channelCache: { title: string; id: string; handle: string | null } | null = null;
+  private channelError: string | null = null;
 
   constructor(private d: Deps) {}
 
@@ -92,7 +99,8 @@ export class YoutubeUploader {
 
   status(): YtUploadStatus {
     const clientId = this.clientId();
-    return { hasClient: !!clientId && this.d.secrets.has(SECRET_YTU_CLIENT_SECRET), connected: this.d.secrets.has(SECRET_YTU_REFRESH), channel: this.channelCache, clientId };
+    const c = this.channelCache;
+    return { hasClient: !!clientId && this.d.secrets.has(SECRET_YTU_CLIENT_SECRET), connected: this.d.secrets.has(SECRET_YTU_REFRESH), channel: c?.title ?? null, channelId: c?.id ?? null, handle: c?.handle ?? null, channelError: this.channelError, clientId };
   }
 
   saveClient(clientId: string, clientSecret: string): YtUploadStatus {
@@ -106,6 +114,7 @@ export class YoutubeUploader {
     this.d.secrets.delete(SECRET_YTU_REFRESH); // новый клиент — новый вход
     this.access = null;
     this.channelCache = null;
+    this.channelError = null;
     this.d.audit.record({ actor: 'user', action: 'youtube_upload.client_saved', risk: 'high', decision: 'info' });
     return this.status();
   }
@@ -126,7 +135,7 @@ export class YoutubeUploader {
     });
     const redirect = `http://127.0.0.1:${port}`;
     try {
-      const url = `${AUTH_URL}?${new URLSearchParams({ client_id: clientId, redirect_uri: redirect, response_type: 'code', scope: SCOPES.join(' '), code_challenge: challenge, code_challenge_method: 'S256', access_type: 'offline', prompt: 'consent', state })}`;
+      const url = `${AUTH_URL}?${new URLSearchParams({ client_id: clientId, redirect_uri: redirect, response_type: 'code', scope: SCOPES.join(' '), code_challenge: challenge, code_challenge_method: 'S256', access_type: 'offline', prompt: 'select_account consent', state })}`;
       const codeP = new Promise<string>((resolve, reject) => {
         const to = setTimeout(() => reject(new Error('Вход не завершён за 5 минут. Нажмите «Подключить» ещё раз.')), 300_000);
         server.on('request', (req, res) => {
@@ -149,7 +158,7 @@ export class YoutubeUploader {
       if (!tok.refresh_token) throw new Error('Google не выдал постоянный доступ. Откройте myaccount.google.com/permissions, удалите приложение и подключите заново.');
       this.d.secrets.set(SECRET_YTU_REFRESH, tok.refresh_token);
       this.access = { token: tok.access_token, exp: this.now() + (tok.expires_in - 60) * 1000 };
-      this.channelCache = await this.channelTitle().catch(() => null);
+      await this.loadChannel();
       this.d.audit.record({ actor: 'user', action: 'youtube_upload.connected', risk: 'high', decision: 'info' });
       return this.status();
     } finally {
@@ -163,6 +172,7 @@ export class YoutubeUploader {
     this.d.secrets.delete(SECRET_YTU_REFRESH);
     this.access = null;
     this.channelCache = null;
+    this.channelError = null;
     this.d.audit.record({ actor: 'user', action: 'youtube_upload.disconnected', decision: 'info' });
     return this.status();
   }
@@ -195,15 +205,30 @@ export class YoutubeUploader {
     return t.access_token;
   }
 
-  private async channelTitle(): Promise<string | null> {
-    const r = await this.f()(CHANNELS_URL, { headers: { Authorization: `Bearer ${await this.bearer()}` }, signal: AbortSignal.timeout(15_000) });
-    if (!r.ok) return null;
-    const j = (await r.json().catch(() => ({}))) as { items?: { snippet?: { title?: string } }[] };
-    return j.items?.[0]?.snippet?.title ?? null;
+  /** Узнаёт, к какому каналу выдан доступ (если у аккаунта несколько каналов — к выбранному в окне Google). */
+  private async loadChannel(): Promise<void> {
+    this.channelError = null;
+    try {
+      const r = await this.f()(CHANNELS_URL, { headers: { Authorization: `Bearer ${await this.bearer()}` }, signal: AbortSignal.timeout(15_000) });
+      const j = (await r.json().catch(() => ({}))) as { items?: { id?: string; snippet?: { title?: string; customUrl?: string } }[]; error?: { message?: string; errors?: { reason?: string }[] } };
+      if (!r.ok) {
+        const reason = j.error?.errors?.[0]?.reason ?? String(r.status);
+        this.channelError = reason === 'accessNotConfigured' || reason === 'forbidden' ? 'Google не отдал сведения о канале: проверьте, что включён «YouTube Data API v3» в том же проекте.' : `Не удалось узнать название канала (${reason}).`;
+        return;
+      }
+      const it = j.items?.[0];
+      if (!it?.id) {
+        this.channelError = 'У выбранного аккаунта Google нет YouTube-канала. Отключите YouTube и подключите заново, выбрав аккаунт или канал, где он есть.';
+        return;
+      }
+      this.channelCache = { title: it.snippet?.title ?? 'Без названия', id: it.id, handle: it.snippet?.customUrl ?? null };
+    } catch {
+      this.channelError = 'Не удалось связаться с YouTube, чтобы узнать название канала.';
+    }
   }
 
-  async refreshStatus(): Promise<YtUploadStatus> {
-    if (this.d.secrets.has(SECRET_YTU_REFRESH) && !this.channelCache) this.channelCache = await this.channelTitle().catch(() => null);
+  async refreshStatus(force = false): Promise<YtUploadStatus> {
+    if (this.d.secrets.has(SECRET_YTU_REFRESH) && (force || !this.channelCache)) await this.loadChannel();
     return this.status();
   }
 
@@ -308,7 +333,7 @@ export class YoutubeUploader {
     if (privacy !== 'private' && actual === 'private') warnings.push('YouTube оставил ролик закрытым: проекты Google без проверки (аудита YouTube API) не могут публиковать ролики открыто. Откройте его вручную в YouTube Studio или пройдите проверку проекта.');
     this.d.onProgress?.({ pct: 100, stage: 'Готово' });
     this.d.audit.record({ actor: 'user', action: 'youtube_upload.uploaded', risk: 'high', decision: 'info', details: { id: video.id, privacy: actual, bytes: size } });
-    return { id: video.id, url: `https://youtube.com/shorts/${video.id}`, privacy: actual, warnings };
+    return { id: video.id, url: `https://youtube.com/shorts/${video.id}`, privacy: actual, warnings, channel: this.channelCache?.title ?? null };
   }
 
   private async apiError(res: Response, what: string): Promise<Error> {
@@ -335,7 +360,7 @@ export class YoutubeUploader {
         if (!this.d.resolveResult) throw new Error('Студия недоступна.');
         const r = this.d.resolveResult(i.video);
         const res = await this.upload({ file: r.video, thumbnail: r.cover, title: i.title, description: i.description, tags: i.tags, privacy: i.privacy as Privacy }, ctx.signal);
-        return `Загружено на YouTube: ${res.url} (доступ: ${res.privacy === 'private' ? 'закрытый — откройте в YouTube Studio' : res.privacy}).${res.warnings.length ? ' ' + res.warnings.join(' ') : ''}`;
+        return `Загружено на YouTube${res.channel ? ` (канал «${res.channel}»)` : ''}: ${res.url} (доступ: ${res.privacy === 'private' ? 'закрытый — откройте в YouTube Studio' : res.privacy}).${res.warnings.length ? ' ' + res.warnings.join(' ') : ''}`;
       },
     });
   }

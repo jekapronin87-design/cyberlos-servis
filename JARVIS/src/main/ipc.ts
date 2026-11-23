@@ -324,6 +324,12 @@ export function registerIpc(opts: {
     audience: 'https://console.cloud.google.com/auth/audience',
     client: 'https://console.cloud.google.com/auth/clients/create',
   };
+  handle(IPC.ytuCheck, () => core.ytUpload.refreshStatus(true));
+  handle(IPC.ytuOpenChannel, async (_e, id) => {
+    const c = str(id, 'channelId', 40);
+    if (!/^UC[\w-]{22}$/.test(c)) throw new Error('Некорректный номер канала.');
+    await shell.openExternal(`https://www.youtube.com/channel/${c}`);
+  });
   handle(IPC.ytuOpenStep, async (_e, step) => {
     const url = STEPS[str(step, 'step', 20)];
     if (!url) throw new Error('Неизвестный шаг.');

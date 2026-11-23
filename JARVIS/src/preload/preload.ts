@@ -84,6 +84,8 @@ const api: JarvisApi = {
     disconnect: () => invoke(IPC.ytuDisconnect),
     upload: (spec) => invoke(IPC.ytuUpload, spec),
     openStep: (step) => invoke(IPC.ytuOpenStep, step),
+    checkChannel: () => invoke(IPC.ytuCheck),
+    openChannel: (id) => invoke(IPC.ytuOpenChannel, id),
     onProgress: subscribe(IPC.evtYtu),
   },
   video: {

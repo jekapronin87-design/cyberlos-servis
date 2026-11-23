@@ -489,3 +489,4 @@ th { background: var(--panel-solid); position: sticky; top: 0; font-family: var(
 .yt-steps li { border: 1px solid rgba(92, 200, 255, 0.22); border-radius: 10px; padding: 10px 12px; background: rgba(92, 200, 255, 0.04); }
 .yt-step-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .yt-steps p { margin: 6px 0 0; line-height: 1.45; }
+.yt-conn { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid rgba(91, 227, 155, 0.4); border-radius: 10px; background: rgba(91, 227, 155, 0.06); }

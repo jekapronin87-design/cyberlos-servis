@@ -224,9 +224,18 @@ function YoutubeCard({ target, onTarget }: { target: string | null; onTarget: (n
         </div>
       )}
       {st?.connected && (
-        <div className="row">
-          <span>✓ Подключён{st.channel ? `: ${st.channel}` : ''}</span>
-          <button className="btn btn-danger" disabled={busy} onClick={() => void run(async () => { if (window.confirm('Отключить YouTube? Системно больше не сможет загружать ролики.')) setSt(await window.jarvis.ytUpload.disconnect()); })}>Отключить</button>
+        <div className="yt-conn" data-testid="yt-connected">
+          <div>
+            <strong>✓ Подключён канал: {st.channel ?? 'название не удалось узнать'}</strong>
+            {st.handle && <span className="muted"> · {st.handle}</span>}
+            {st.channelError && <div className="banner banner-err">{st.channelError}</div>}
+          </div>
+          <div className="row">
+            {st.channelId && <button className="btn" onClick={() => void run(async () => window.jarvis.ytUpload.openChannel(st.channelId!))}>Открыть этот канал</button>}
+            <button className="btn" disabled={busy} onClick={() => void run(async () => setSt(await window.jarvis.ytUpload.checkChannel()))}>Проверить канал</button>
+            <button className="btn btn-danger" disabled={busy} onClick={() => void run(async () => { if (window.confirm('Отключить YouTube? Системно больше не сможет загружать ролики.')) setSt(await window.jarvis.ytUpload.disconnect()); })}>Сменить канал / отключить</button>
+          </div>
+          <p className="muted small">Если это не тот канал: нажмите «Сменить канал / отключить», затем «Подключить YouTube» — Google спросит, какой аккаунт и какой канал выбрать. Если каналов несколько, выберите нужный в списке в окне Google.</p>
         </div>
       )}
       <p className="muted small">Ролики загружаются <strong>закрытыми</strong> — вы проверяете их в YouTube Studio и сами открываете. Google может не позволить проектам без проверки (аудита YouTube API) публиковать ролики открыто — тогда они останутся закрытыми.</p>

@@ -765,6 +765,9 @@ export interface YtUploadStatusDto {
   hasClient: boolean;
   connected: boolean;
   channel: string | null;
+  channelId: string | null;
+  handle: string | null;
+  channelError: string | null;
   clientId: string;
 }
 
@@ -773,6 +776,7 @@ export interface YtUploadResultDto {
   url: string;
   privacy: 'private' | 'unlisted' | 'public';
   warnings: string[];
+  channel: string | null;
 }
 
 export interface VideoResultDto {
