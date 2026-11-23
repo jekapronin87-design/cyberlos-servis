@@ -89,27 +89,26 @@ export class CrmClient {
     const c = this.cfg();
     const password = this.secrets.get(SECRET_CRM_PASSWORD);
     if (!password) throw new CrmError('Не задан пароль учётной записи CRM.');
-    // Люди часто вводят адрес сайта CRM (https://app.example.ru), а API живёт по /api. Пробуем оба варианта и запоминаем рабочий.
-    const candidates = [c.baseUrl, ...(c.baseUrl.endsWith('/api') ? [] : [`${c.baseUrl}/api`])];
-    let res: Response | null = null;
-    for (const b of candidates) {
-      const r = await this.fetchImpl(`${b}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: c.email, password }),
-        signal: AbortSignal.timeout(20_000),
-      }).catch((e: unknown) => {
-        throw this.netError(e);
-      });
-      const looksLikeApi = r.status !== 404 && r.status !== 405 && ((r.headers.get('content-type') ?? '').includes('json') || r.status >= 400);
-      if (looksLikeApi) {
-        res = r;
-        this.base = b;
-        break;
-      }
-      res = r;
+    // Люди вводят адрес сайта CRM, а сервер (API) может жить по /api на том же адресе или на отдельном (api.домен). Ищем сервер проверкой /health
+    // (без пароля!) и только потом входим — пароль не уходит на «угаданные» адреса, где нет настоящего сервера CRM.
+    const d = this.base ? { found: this.base, allFailed: false } : await this.discover(c.baseUrl);
+    const found = d.found;
+    if (!found) {
+      if (d.allFailed) throw new CrmError('Нет связи с CRM. Проверьте адрес и интернет.');
+      throw new CrmError(
+        'Не нашёл сервер CRM по этому адресу (проверял адрес, адрес/api и api.ваш-домен). Если CRM работает в браузере, значит сервер на другом адресе: откройте CRM, нажмите F12 → вкладка Network (Сеть), обновите страницу и посмотрите адрес любого запроса к /api/… — этот адрес и нужен.',
+        404,
+      );
     }
-    if (!res || this.base === null) throw new CrmError('По этому адресу нет сервера CRM (ответ не похож на API). Вводите только адрес CRM без ссылок-приглашений и страниц входа (например https://crm.ваш-домен.ru). Если сайт и сервер размещены раздельно (Vercel + Railway и т. п.) — нужен адрес СЕРВЕРА. Проверка: откройте в браузере адрес + /health (или /api/health) — должно быть {"ok":true}.', 404);
+    this.base = found;
+    const res = await this.fetchImpl(`${found}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: c.email, password }),
+      signal: AbortSignal.timeout(20_000),
+    }).catch((e: unknown) => {
+      throw this.netError(e);
+    });
     if (res.status === 401) throw new CrmError('CRM отклонила вход: неверный email или пароль.', 401);
     if (res.status === 403) {
       const j = (await res.json().catch(() => ({}))) as { error?: string };
@@ -119,6 +118,31 @@ export class CrmClient {
     const j = (await res.json()) as { token?: unknown };
     if (typeof j.token !== 'string') throw new CrmError('Неожиданный ответ CRM при входе.');
     this.token = j.token;
+  }
+
+  /** Кандидаты адреса сервера и проверка /health ({"ok":true}). Пароль на этом шаге не отправляется. */
+  private async discover(baseUrl: string): Promise<{ found: string | null; allFailed: boolean }> {
+    const u = new URL(baseUrl);
+    const list = [baseUrl];
+    if (!baseUrl.endsWith('/api')) list.push(`${baseUrl}/api`);
+    const isName = /[a-z]/i.test(u.hostname) && !['localhost'].includes(u.hostname) && u.hostname.includes('.');
+    if (isName && !u.hostname.startsWith('api.')) {
+      const parts = u.hostname.split('.');
+      list.push(`${u.protocol}//api.${u.hostname}`);
+      if (parts.length > 2) list.push(`${u.protocol}//api.${parts.slice(1).join('.')}`);
+    }
+    let failed = 0;
+    for (const cand of list) {
+      try {
+        const r = await this.fetchImpl(`${cand}/health`, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(7000) });
+        if (!r.ok || !(r.headers.get('content-type') ?? '').includes('json')) continue;
+        const j = (await r.json().catch(() => null)) as { ok?: unknown } | null;
+        if (j?.ok === true) return { found: cand, allFailed: false };
+      } catch {
+        failed += 1; // нет такого адреса или нет сети — пробуем следующий
+      }
+    }
+    return { found: null, allFailed: failed === list.length };
   }
 
   private netError(e: unknown): CrmError {

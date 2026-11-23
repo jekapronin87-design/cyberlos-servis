@@ -273,7 +273,32 @@ describe('адрес CRM: «/api» подставляется сам', () => {
       // сайт вообще без API
       const bad = makeCore({ crmFetch: (async () => new Response('<html></html>', { status: 200, headers: { 'content-type': 'text/html' } })) as typeof fetch, crmNow: () => NOW });
       bad.core.crmSave({ baseUrl: 'https://example.com', environment: 'test', email: 'a@b.ru', maskPii: true }, 'pass-12345');
-      await expect(bad.core.crm.client.get('/auth/me')).rejects.toThrow(/нет сервера CRM/);
+      await expect(bad.core.crm.client.get('/auth/me')).rejects.toThrow(/Не нашёл сервер CRM/);
+    } finally {
+      await fx.close();
+    }
+  });
+});
+
+describe('адрес CRM: сервер на отдельном поддомене', () => {
+  it('сайт crm.домен отдаёт только страницы, а сервер — api.домен: находится по /health, пароль уходит только на найденный сервер', async () => {
+    const fx = await startCrmFixture();
+    try {
+      const logins: string[] = [];
+      const wrapped = (async (url: string, init?: RequestInit) => {
+        const u = new URL(url);
+        if (u.hostname === 'api.example.ru') {
+          if (u.pathname === '/auth/login') logins.push(u.hostname);
+          return fetch(`${fx.url}${u.pathname}${u.search}`, init);
+        }
+        if (u.pathname === '/auth/login') logins.push(u.hostname);
+        return new Response('<!doctype html>Такой страницы нет', { status: 200, headers: { 'content-type': 'text/html' } });
+      }) as typeof fetch;
+      const h = makeCore({ crmFetch: wrapped, crmNow: () => NOW });
+      h.core.crmSave({ baseUrl: 'https://crm.example.ru', environment: 'test', email: 'jarvis@aquamaster.ru', maskPii: true }, 'ro-pass-123');
+      expect(await run(h, 'crm_overview')).toMatch(/воронк|Воронк|заявк/i);
+      expect(h.core.crm.client.effectiveBase()).toBe('https://api.example.ru');
+      expect(logins).toEqual(['api.example.ru']); // на сайт с «Такой страницы нет» пароль не отправлялся
     } finally {
       await fx.close();
     }

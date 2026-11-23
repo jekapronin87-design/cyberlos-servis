@@ -53,7 +53,7 @@ export function CrmCard() {
       <label className="field">
         <span>Адрес CRM (тот, по которому вы заходите в неё в браузере)</span>
         <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://app.ваш-домен.ru" spellCheck={false} />
-        <small className="muted">Только адрес сайта, без ссылок из писем и страниц входа — например <code>https://crm.ваш-домен.ru</code>. Если сервер лежит отдельно (Railway и т. п.) — адрес сервера. Приписку «/api» программа подберёт сама. Для проверки на своём компьютере: http://localhost:4000</small>
+        <small className="muted">Только адрес сайта, без ссылок из писем и страниц входа — например <code>https://crm.ваш-домен.ru</code>. Если сервер лежит отдельно (Railway и т. п.) — адрес сервера. Приписку «/api» и поддомен api. программа подберёт сама. Для проверки на своём компьютере: http://localhost:4000</small>
       </label>
       <label className="field">
         <span>Адрес сайта CRM (необязательно — для подсказок в уроках)</span>

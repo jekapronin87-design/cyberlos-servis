@@ -97,6 +97,7 @@ export async function startCrmFixture(): Promise<Fixture> {
       res.setHeader('content-type', 'application/json');
       res.end(JSON.stringify(json));
     };
+    if (method === 'GET' && u.pathname === '/health') return send(200, { ok: true });
     if (method === 'POST' && u.pathname === '/auth/login') {
       const j = JSON.parse((await body(req)) || '{}') as { email?: string; password?: string };
       const a = accounts[j.email ?? ''];
