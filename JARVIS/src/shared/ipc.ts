@@ -19,6 +19,7 @@ import type {
   FreeProviderId,
   TelegramStatusDto,
   YoutubeStatusDto,
+  AquaStatusDto,
   AgentDto,
   AgentInputDto,
   AgentRunDto,
@@ -87,6 +88,10 @@ export const IPC = {
   ytSetKey: 'yt:key:set',
   ytClearKey: 'yt:key:clear',
   ytTest: 'yt:test',
+  aquaGet: 'aqua:get',
+  aquaSave: 'aqua:save',
+  aquaDisconnect: 'aqua:disconnect',
+  aquaTest: 'aqua:test',
   agentsList: 'agents:list',
   agentsTemplates: 'agents:templates',
   agentsSave: 'agents:save',
@@ -231,6 +236,13 @@ export interface JarvisApi {
     setStartMenu(on: boolean): Promise<ComputerAccess>;
     /** Голосовая команда «открой …»: matched=false — не нашли, пусть разбирается модель. */
     launch(query: string): Promise<{ matched: boolean; ok: boolean; message: string }>;
+  };
+  aqua: {
+    get(): Promise<AquaStatusDto>;
+    /** Ключ передаётся только при первом вводе или замене; пустой — оставить прежний. */
+    save(cfg: { baseUrl: string; maskPii: boolean }, key?: string): Promise<AquaStatusDto>;
+    disconnect(): Promise<AquaStatusDto>;
+    test(): Promise<string>;
   };
   youtube: {
     status(): Promise<YoutubeStatusDto>;

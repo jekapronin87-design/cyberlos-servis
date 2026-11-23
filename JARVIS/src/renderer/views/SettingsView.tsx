@@ -6,6 +6,7 @@ import { CrmCard } from '../components/CrmCard';
 import { GatewayCard } from '../components/GatewayCard';
 import { ModelsCard } from '../components/ModelsCard';
 import { YoutubeCard } from '../components/YoutubeCard';
+import { AquaCard } from '../components/AquaCard';
 import { MicTest } from '../components/MicTest';
 import { UpdateCard } from '../components/UpdateCard';
 import { listSystemVoices, speak } from '../voice/speech';
@@ -372,6 +373,8 @@ export function SettingsView(props: {
       {!s.disabledModules.includes('youtube') && <YoutubeCard settings={s} onUpdate={async (p) => { await props.onUpdate(p); }} />}
 
       <UpdateCard branch={s.updateBranch} onBranch={(b) => run(() => props.onUpdate({ updateBranch: b }), 'Ветка сохранена')} />
+
+      {!s.disabledModules.includes('crm') && <AquaCard />}
 
       <CrmCard />
 

@@ -26,6 +26,7 @@ export interface OrchestratorDeps {
   computer: () => ComputerAccess;
   profile: () => { title: string; body: string }[];
   crm: () => { environment: 'test' | 'production'; maskPii: boolean } | null;
+  aqua?: () => { maskPii: boolean } | null;
   memory: MemoryRepo;
   settings: SettingsRepo;
   tools: ToolRegistry;
@@ -94,6 +95,7 @@ export class ChatOrchestrator {
           folders: this.d.computer().folders,
           profile: settings.profileEnabled ? this.d.profile() : undefined,
           crm: this.d.crm() ?? undefined,
+          aqua: this.d.aqua?.() ?? undefined,
           memory: settings.memoryEnabled ? this.d.memory.list().slice(0, 100) : [],
         });
         // Версия подсказки без личных данных — для сторонних облачных моделей.

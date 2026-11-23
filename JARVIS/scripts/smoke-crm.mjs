@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
 import { startCrmFixture } from '../tests/crmFixture.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -77,6 +78,39 @@ try {
   assert.ok(log.includes('crm.configured') && log.includes('crm.test'));
   assert.ok(!log.includes('ro-pass-123'));
   step('в CRM ушли только вход и чтение; пароль не попал в журнал');
+
+  // 6. Живая CRM «Аквамастер»: вставляем API-ключ — подключается; неверный ключ объясняется; в журнал ключ не попадает
+  const AQUA_KEY = 'sro_SmokeKey1234567890abcdefghijkl';
+  const aquaReqs = [];
+  const aquaSrv = createServer((req, res) => {
+    aquaReqs.push({ method: req.method, url: req.url, auth: req.headers.authorization });
+    res.setHeader('content-type', 'application/json');
+    if (req.headers.authorization !== `Bearer ${AQUA_KEY}`) { res.statusCode = 401; return res.end('{}'); }
+    if (req.url === '/api/readonly/health') return res.end('{"ok":true}');
+    res.statusCode = 404; res.end('{}');
+  });
+  await new Promise((r) => aquaSrv.listen(0, '127.0.0.1', r));
+  const aquaUrl = `http://127.0.0.1:${aquaSrv.address().port}`;
+  await page.click('.nav-item:has-text("Настройки")');
+  const aqua = page.locator('#aqua-card');
+  await aqua.locator('#aqua-url').fill(aquaUrl);
+  await aqua.locator('#aqua-key').fill('Qwerty12345');
+  await aqua.locator('#aqua-save').click();
+  await page.waitForSelector('#aqua-card .banner-err:has-text("sro_")');
+  await aqua.locator('#aqua-key').fill(AQUA_KEY);
+  await aqua.locator('#aqua-save').click();
+  await page.waitForSelector('#aqua-card .banner-ok:has-text("Сохранено")');
+  await aqua.locator('#aqua-test').click();
+  await page.waitForSelector('#aqua-card .banner-ok:has-text("ключ принят")');
+  await page.screenshot({ path: join(shots, 'r3-aqua.png') });
+  assert.ok(aquaReqs.length >= 1 && aquaReqs.every((r) => r.method === 'GET' && r.url.startsWith('/api/readonly')), 'к «Аквамастер» уходят только GET под /api/readonly');
+  const log2 = JSON.stringify(await page.evaluate(() => window.jarvis.audit.list(300)));
+  assert.ok(log2.includes('aqua.configured') && !log2.includes(AQUA_KEY));
+  assert.equal((await page.evaluate(() => window.jarvis.aqua.get())).hasKey, true);
+  await aqua.locator('button:has-text("Удалить ключ")').click();
+  await page.waitForFunction(() => window.jarvis.aqua.get().then((s) => !s.hasKey));
+  aquaSrv.close();
+  step('CRM «Аквамастер»: ключ принят, только GET /api/readonly, ключ не в журнале, удаление работает');
 
   assert.deepEqual(errors, [], 'ошибки рендерера: ' + errors.join('; '));
   console.log('CRM SMOKE OK. Скриншоты:', shots);

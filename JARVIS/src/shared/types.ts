@@ -639,6 +639,13 @@ export interface AgentTemplateDto {
   input: AgentInputDto;
 }
 
+export interface AquaStatusDto {
+  configured: boolean;
+  baseUrl: string;
+  hasKey: boolean;
+  maskPii: boolean;
+}
+
 export interface YoutubeStatusDto {
   hasKey: boolean;
   usedToday: number;

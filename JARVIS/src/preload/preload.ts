@@ -73,6 +73,12 @@ const api: JarvisApi = {
     setStartMenu: (on) => invoke(IPC.appsSetStartMenu, on),
     launch: (query) => invoke(IPC.appsLaunch, query),
   },
+  aqua: {
+    get: () => invoke(IPC.aquaGet),
+    save: (cfg, key) => invoke(IPC.aquaSave, cfg, key),
+    disconnect: () => invoke(IPC.aquaDisconnect),
+    test: () => invoke(IPC.aquaTest),
+  },
   youtube: {
     status: () => invoke(IPC.ytStatus),
     setKey: (key) => invoke(IPC.ytSetKey, key),

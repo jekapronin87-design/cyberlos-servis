@@ -242,6 +242,13 @@ export function registerIpc(opts: {
     core.revokeDevice(int(id, 'id'));
     return core.listDevices();
   });
+  handle(IPC.aquaGet, () => core.aquaStatus());
+  handle(IPC.aquaSave, (_e, cfg, key) => {
+    const c = cfg as { baseUrl?: unknown; maskPii?: unknown };
+    return core.aquaSave({ baseUrl: c.baseUrl ? str(c.baseUrl, 'baseUrl', 200) : '', maskPii: c.maskPii !== false }, key === undefined || key === null ? undefined : str(key, 'key', 400));
+  });
+  handle(IPC.aquaDisconnect, () => core.aquaDisconnect());
+  handle(IPC.aquaTest, () => core.aquaTest());
   handle(IPC.crmGet, () => core.crmStatus());
   handle(IPC.crmSave, (_e, cfg, password) => {
     const c = cfg as { baseUrl?: unknown; environment?: unknown; email?: unknown; maskPii?: unknown; frontendUrl?: unknown };

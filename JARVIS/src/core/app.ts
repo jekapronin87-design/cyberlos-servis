@@ -31,6 +31,7 @@ import { YoutubeService, SECRET_YOUTUBE_KEY } from './youtube/service';
 import { TelephonyService } from './telephony/service';
 import { ProviderHttpError } from './providers/types';
 import { describeProviderHttp } from './providers/openai';
+import { AquaService, type AquaStatus } from './aqua/service';
 import { CrmService, registerCrmTools, type CrmStatus, type CrmTestResult } from './crm/service';
 import { DEFAULT_SOURCE, downloadZip, extractUpdate, fetchLatest, installAndBuild, makeBackupDir, readInstalled, writeInstalled } from './update/updater';
 import { ChatOrchestrator } from './chat/orchestrator';
@@ -129,6 +130,7 @@ export class JarvisCore {
   readonly attachments: AttachmentRepo;
   readonly profile: ProfileRepo;
   readonly crm: CrmService;
+  readonly aqua: AquaService;
   readonly mentor: MentorService;
   readonly jobs: JobRepo;
   readonly scheduler: Scheduler;
@@ -163,6 +165,7 @@ export class JarvisCore {
     this.attachments = new AttachmentRepo(this.db);
     this.profile = new ProfileRepo(this.db);
     this.crm = new CrmService(this.db, opts.secrets, this.audit, opts.crmFetch, opts.crmNow);
+    this.aqua = new AquaService(this.db, opts.secrets, this.audit, opts.crmFetch);
     this.computer = new ComputerAccessRepo(this.db, { dataDir: opts.dataDir, home: opts.home });
     this.tools = registerBuiltinTools(new ToolRegistry(), this.memory);
     const host = opts.host ?? {};
@@ -182,6 +185,7 @@ export class JarvisCore {
     registerImageTool(this.tools, { getSettings: () => this.settings.get(), secrets: opts.secrets, audit: this.audit, dir: join(opts.dataDir, 'images'), fetchImpl: opts.fetchImpl });
     registerProfileTools(this.tools, this.profile);
     registerCrmTools(this.tools, this.crm);
+    this.aqua.registerTools(this.tools);
     this.mentor = new MentorService(this.db, this.crm, this.audit, this.browser);
     registerMentorTools(this.tools, this.mentor);
     this.telephony = new TelephonyService(this.db, this.settings, this.audit, this.mentor, opts.telephonyNow, opts.telephonyHearTimeoutMs);
@@ -247,6 +251,7 @@ export class JarvisCore {
       computer: () => this.computer.get(),
       profile: () => this.profile.forPrompt(),
       crm: () => (this.crm.client.configured() ? { environment: this.crm.status().environment, maskPii: this.crm.maskPii() } : null),
+      aqua: () => (this.aqua.status().configured ? { maskPii: this.aqua.status().maskPii } : null),
       memory: this.memory,
       settings: this.settings,
       tools: this.tools,
@@ -797,6 +802,20 @@ export class JarvisCore {
   }
   jobRuns(id: number) {
     return this.jobs.runs(id);
+  }
+
+  // ----- CRM «Аквамастер» (только чтение, по API-ключу) -----
+  aquaStatus(): AquaStatus {
+    return this.aqua.status();
+  }
+  aquaSave(cfg: { baseUrl?: string; maskPii?: boolean }, key?: string): AquaStatus {
+    return this.aqua.save(cfg, key);
+  }
+  aquaDisconnect(): AquaStatus {
+    return this.aqua.disconnect();
+  }
+  aquaTest(): Promise<string> {
+    return this.aqua.test();
   }
 
   // ----- CRM «Сайберлос» (только чтение) -----
