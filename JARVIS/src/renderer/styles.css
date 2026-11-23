@@ -469,3 +469,8 @@ th { background: var(--panel-solid); position: sticky; top: 0; font-family: var(
 .studio-results li { display: flex; align-items: center; gap: 10px; }
 .studio-results li span { flex: 1; }
 @media (max-width: 1000px) { .tl { grid-template-columns: 1fr; } }
+.studio-upload { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(92, 200, 255, 0.2); }
+.studio-upload h3 { margin: 0 0 8px; }
+.yt-prog { position: relative; height: 22px; border-radius: 11px; background: rgba(92, 200, 255, 0.12); overflow: hidden; margin-top: 10px; }
+.yt-prog > div { height: 100%; background: linear-gradient(90deg, #5cc8ff, #a98bff); transition: width 0.3s; }
+.yt-prog span { position: absolute; inset: 0; display: grid; place-items: center; font: 600 12px var(--font); }

@@ -58,6 +58,17 @@ try {
   await page.screenshot({ path: join(shots, 'st1-files.png') });
   step('студия: выбрана папка, видны два исходника с миниатюрами и длительностью');
 
+  // YouTube: карточка настройки проверяет ввод и ведёт к входу (сам вход — в браузере, здесь не проверяется)
+  await page.waitForSelector('#yt-upload-card');
+  await page.fill('#yt-upload-card input[placeholder^="Client ID"]', 'не-тот-формат');
+  await page.fill('#yt-upload-card input[type=password]', 'GOCSPX-testsecret1234567890');
+  await page.click('#yt-upload-card button:has-text("Сохранить")');
+  await page.waitForSelector('#yt-upload-card .banner-err:has-text("googleusercontent")');
+  await page.fill('#yt-upload-card input[placeholder^="Client ID"]', 'abcdefghij1234567890-test.apps.googleusercontent.com');
+  await page.click('#yt-upload-card button:has-text("Сохранить")');
+  await page.waitForSelector('#yt-connect');
+  step('YouTube: карточка проверяет Client ID, после сохранения предлагает «Подключить YouTube»');
+
   // «Экран пополам»: я — «Я на камеру», показываю — «Про септики»
   await page.locator('[data-testid=studio-file]', { hasText: 'Я на камеру' }).locator('button:has-text("Это я")').click();
   await page.click('[data-layout=reaction-split]');

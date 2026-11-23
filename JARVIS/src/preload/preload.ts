@@ -77,6 +77,14 @@ const api: JarvisApi = {
     setStartMenu: (on) => invoke(IPC.appsSetStartMenu, on),
     launch: (query) => invoke(IPC.appsLaunch, query),
   },
+  ytUpload: {
+    status: () => invoke(IPC.ytuStatus),
+    saveClient: (id, secret) => invoke(IPC.ytuSaveClient, id, secret),
+    connect: () => invoke(IPC.ytuConnect),
+    disconnect: () => invoke(IPC.ytuDisconnect),
+    upload: (spec) => invoke(IPC.ytuUpload, spec),
+    onProgress: subscribe(IPC.evtYtu),
+  },
   video: {
     status: () => invoke(IPC.videoStatus),
     pickFolder: () => invoke(IPC.videoPick),

@@ -295,6 +295,23 @@ export function registerIpc(opts: {
     if (err) throw new Error(`Не удалось открыть: ${err}`);
   });
   handle(IPC.videoStop, () => core.video.stop());
+  handle(IPC.ytuStatus, () => core.ytUpload.refreshStatus());
+  handle(IPC.ytuSaveClient, (_e, id, secret) => core.ytUpload.saveClient(str(id, 'clientId', 300), secret ? str(secret, 'clientSecret', 300) : ''));
+  handle(IPC.ytuConnect, () => core.ytUpload.connect());
+  handle(IPC.ytuDisconnect, () => core.ytUpload.disconnect());
+  handle(IPC.ytuUpload, (_e, spec) => {
+    const s = spec as Record<string, unknown>;
+    const r = core.video.resolveResult(str(s['video'], 'video', 300));
+    return core.ytUpload.upload({
+      file: r.video,
+      thumbnail: r.cover,
+      title: str(s['title'], 'title', 100),
+      description: typeof s['description'] === 'string' ? (s['description'] as string).slice(0, 4900) : '',
+      tags: Array.isArray(s['tags']) ? (s['tags'] as unknown[]).slice(0, 30).map((t) => String(t).slice(0, 40)) : [],
+      privacy: (['private', 'unlisted', 'public'].includes(String(s['privacy'])) ? s['privacy'] : 'private') as 'private',
+    });
+  });
+  core.onUploadProgress((p) => send(IPC.evtYtu, p));
   core.video.onPlan((p) => send(IPC.evtVideo, p));
   core.show.onDeck((d) => send(IPC.evtShow, d));
   handle(IPC.aquaDashboard, () => core.aquaDashboard());

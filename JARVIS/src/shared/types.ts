@@ -753,6 +753,20 @@ export interface VideoStatusDto {
   busy: boolean;
 }
 
+export interface YtUploadStatusDto {
+  hasClient: boolean;
+  connected: boolean;
+  channel: string | null;
+  clientId: string;
+}
+
+export interface YtUploadResultDto {
+  id: string;
+  url: string;
+  privacy: 'private' | 'unlisted' | 'public';
+  warnings: string[];
+}
+
 export interface VideoResultDto {
   name: string;
   dir: string;

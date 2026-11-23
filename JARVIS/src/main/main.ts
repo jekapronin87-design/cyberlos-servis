@@ -151,6 +151,10 @@ if (!app.requestSingleInstanceLock()) {
     core = new JarvisCore({
       dbPath: join(dataDir, 'jarvis.db'),
       dataDir,
+      openExternal: async (url: string) => {
+        if (!/^https:\/\/accounts\.google\.com\//.test(url)) throw new Error('Открывать можно только страницу входа Google.');
+        await shell.openExternal(url);
+      },
       installDir: app.isPackaged ? undefined : app.getAppPath(),
       onJobResult: (e) => {
         // Системное уведомление Windows + сообщение окну Системно

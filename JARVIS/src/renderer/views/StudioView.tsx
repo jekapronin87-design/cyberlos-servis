@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { VideoFileDto, VideoLayout, VideoPlanDto, VideoResultDto, VideoSpecDto, VideoStatusDto, VideoStepDto, VideoTrackDto } from '../../shared/types';
+import type { YtUploadResultDto, YtUploadStatusDto, VideoFileDto, VideoLayout, VideoPlanDto, VideoResultDto, VideoSpecDto, VideoStatusDto, VideoStepDto, VideoTrackDto } from '../../shared/types';
 
 const clean = (e: unknown): string => (e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'Ошибка');
 const mmss = (s: number): string => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -66,7 +66,115 @@ export function Timeline({ plan }: { plan: VideoPlanDto }) {
   );
 }
 
+/** YouTube: вход владельца канала (один раз) и загрузка готовых роликов. */
+function YoutubeCard({ target, onTarget }: { target: string | null; onTarget: (n: string | null) => void }) {
+  const [st, setSt] = useState<YtUploadStatusDto | null>(null);
+  const [cid, setCid] = useState('');
+  const [sec, setSec] = useState('');
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [title, setTitle] = useState('');
+  const [desc, setDesc] = useState('');
+  const [tags, setTags] = useState('');
+  const [privacy, setPrivacy] = useState<'private' | 'unlisted' | 'public'>('private');
+  const [prog, setProg] = useState<{ pct: number; stage: string } | null>(null);
+  const [res, setRes] = useState<YtUploadResultDto | null>(null);
+
+  useEffect(() => {
+    void window.jarvis.ytUpload.status().then((s) => { setSt(s); setCid(s.clientId); }, () => undefined);
+    return window.jarvis.ytUpload.onProgress(setProg);
+  }, []);
+  useEffect(() => {
+    if (target) {
+      setTitle(target);
+      setRes(null);
+      setProg(null);
+    }
+  }, [target]);
+
+  const run = async (fn: () => Promise<void>): Promise<void> => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await fn();
+    } catch (e) {
+      setMsg({ ok: false, text: clean(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card" id="yt-upload-card">
+      <h2>YouTube: загрузка роликов</h2>
+      {msg && <div className={`banner ${msg.ok ? 'banner-ok' : 'banner-err'}`}>{msg.text}</div>}
+      {!st?.hasClient && (
+        <>
+          <p className="muted small">Один раз настройте доступ к своему каналу (бесплатно, 5 минут):</p>
+          <ol className="muted small">
+            <li>Откройте <code>console.cloud.google.com</code> → тот же проект, где включён «YouTube Data API v3» (или создайте новый и включите его).</li>
+            <li>«API и сервисы» → «Экран согласия OAuth»: тип «Внешний», название «Системно», ваша почта. В «Тестовых пользователях» добавьте свой Gmail, затем нажмите <strong>«Опубликовать приложение»</strong> (иначе доступ будет слетать через 7 дней).</li>
+            <li>«Учётные данные» → «Создать учётные данные» → «Идентификатор клиента OAuth» → тип <strong>«Приложение для ПК»</strong>. Скопируйте Client ID и Client secret сюда.</li>
+          </ol>
+          <div className="row">
+            <input style={{ flex: 2 }} placeholder="Client ID (…apps.googleusercontent.com)" value={cid} onChange={(e) => setCid(e.target.value)} spellCheck={false} />
+            <input style={{ flex: 1 }} type="password" placeholder="Client secret" value={sec} onChange={(e) => setSec(e.target.value)} autoComplete="off" />
+            <button className="btn btn-primary" disabled={busy || !cid.trim() || !sec.trim()} onClick={() => void run(async () => { setSt(await window.jarvis.ytUpload.saveClient(cid, sec)); setSec(''); setMsg({ ok: true, text: 'Сохранено. Теперь нажмите «Подключить YouTube».' }); })}>Сохранить</button>
+          </div>
+        </>
+      )}
+      {st?.hasClient && !st.connected && (
+        <div className="row">
+          <button className="btn btn-primary" id="yt-connect" disabled={busy} onClick={() => void run(async () => { setMsg({ ok: true, text: 'Открыл окно входа Google в браузере — войдите тем аккаунтом, где ваш канал. Если Google пишет «Приложение не проверено», нажмите «Дополнительно» → «Перейти на Системно» (это ваше собственное приложение).' }); setSt(await window.jarvis.ytUpload.connect()); setMsg({ ok: true, text: 'YouTube подключён.' }); })}>Подключить YouTube</button>
+          <button className="btn" onClick={() => void run(async () => setSt(await window.jarvis.ytUpload.disconnect()))}>Сбросить настройки</button>
+        </div>
+      )}
+      {st?.connected && (
+        <div className="row">
+          <span>✓ Подключён{st.channel ? `: ${st.channel}` : ''}</span>
+          <button className="btn btn-danger" disabled={busy} onClick={() => void run(async () => { if (window.confirm('Отключить YouTube? Системно больше не сможет загружать ролики.')) setSt(await window.jarvis.ytUpload.disconnect()); })}>Отключить</button>
+        </div>
+      )}
+      <p className="muted small">Ролики загружаются <strong>закрытыми</strong> — вы проверяете их в YouTube Studio и сами открываете. Google может не позволить проектам без проверки (аудита YouTube API) публиковать ролики открыто — тогда они останутся закрытыми.</p>
+
+      {target && st?.connected && (
+        <div className="studio-upload" data-testid="yt-form">
+          <h3>На YouTube: {target}</h3>
+          <label className="field"><span>Название (до 100 знаков)</span><input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={100} /></label>
+          <label className="field"><span>Описание</span><textarea rows={3} value={desc} onChange={(e) => setDesc(e.target.value)} maxLength={4900} /></label>
+          <div className="row">
+            <label className="field grow"><span>Теги через запятую</span><input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="септик, автоматизация, бизнес" /></label>
+            <label className="field"><span>Доступ</span>
+              <select value={privacy} onChange={(e) => setPrivacy(e.target.value as 'private')}>
+                <option value="private">Закрытый (рекомендуется)</option>
+                <option value="unlisted">По ссылке</option>
+                <option value="public">Открытый</option>
+              </select>
+            </label>
+          </div>
+          <div className="row">
+            <button className="btn btn-primary" id="yt-go" disabled={busy || !title.trim()} onClick={() => void run(async () => {
+              if (!window.confirm(`Загрузить на ваш YouTube-канал?\n\n«${title.trim()}»\nДоступ: ${privacy === 'public' ? 'ОТКРЫТЫЙ (увидят все)' : privacy === 'unlisted' ? 'по ссылке' : 'закрытый'}`)) return;
+              setProg({ pct: 0, stage: 'Начинаю' });
+              const r = await window.jarvis.ytUpload.upload({ video: target, title: title.trim(), description: desc, tags: tags.split(',').map((t) => t.trim()).filter(Boolean), privacy });
+              setRes(r);
+            })}>⬆ Загрузить</button>
+            <button className="btn" onClick={() => onTarget(null)}>Закрыть</button>
+          </div>
+          {prog && !res && <div className="yt-prog"><div style={{ width: `${prog.pct}%` }} /><span>{prog.stage} · {prog.pct}%</span></div>}
+          {res && (
+            <div className="banner banner-ok" data-testid="yt-done">
+              Загружено: <code>{res.url}</code> (доступ: {res.privacy === 'private' ? 'закрытый — откройте в YouTube Studio' : res.privacy}). {res.warnings.join(' ')}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function StudioView(props: { onAsk: (text: string) => void }) {
+  const [ytTarget, setYtTarget] = useState<string | null>(null);
   const [st, setSt] = useState<VideoStatusDto | null>(null);
   const [files, setFiles] = useState<VideoFileDto[]>([]);
   const [results, setResults] = useState<VideoResultDto[]>([]);
@@ -218,6 +326,8 @@ export function StudioView(props: { onAsk: (text: string) => void }) {
         </>
       )}
 
+      {st?.folder && <YoutubeCard target={ytTarget} onTarget={setYtTarget} />}
+
       {plan && (
         <div className="card studio-table">
           <h2>Монтажный стол · {plan.name}</h2>
@@ -227,6 +337,7 @@ export function StudioView(props: { onAsk: (text: string) => void }) {
               <button className="btn btn-primary" onClick={() => void run(() => window.jarvis.video.open(plan.output!.video))}>▶ Открыть ролик</button>
               {plan.output.cover && <button className="btn" onClick={() => void run(() => window.jarvis.video.open(plan.output!.cover!))}>Обложка</button>}
               <button className="btn" onClick={() => void run(() => window.jarvis.video.open(plan.output!.dir))}>Папка с результатом</button>
+              <button className="btn btn-primary" onClick={() => setYtTarget(plan.name)}>⬆ На YouTube</button>
               <button className="btn" onClick={() => props.onAsk(`Подготовь тексты для публикации ролика «${plan.name}» в YouTube Shorts и Instagram Reels (заголовок, описание, хэштеги) и сохрани их через video_publish_pack.`)}>Тексты для Shorts и Reels</button>
             </div>
           )}
@@ -241,6 +352,7 @@ export function StudioView(props: { onAsk: (text: string) => void }) {
               <li key={r.dir}>
                 <span>🎬 {r.name}</span>
                 {r.video && <button className="btn" onClick={() => void run(() => window.jarvis.video.open(r.video!))}>Открыть</button>}
+                {r.video && <button className="btn" onClick={() => setYtTarget(r.name)}>⬆ На YouTube</button>}
                 <button className="btn" onClick={() => void run(() => window.jarvis.video.open(r.dir))}>Папка</button>
               </li>
             ))}

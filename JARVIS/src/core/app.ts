@@ -59,6 +59,7 @@ import { SECRET_VOICE_KEY, VoiceService } from './voice/service';
 import { RealtimeService } from './realtime/service';
 import { ShowService } from './show/service';
 import { VideoService } from './video/service';
+import { YoutubeUploader } from './youtube/upload';
 import { generateImage } from './media/images';
 import { registerBuiltinTools } from './tools/builtin';
 import { ToolRegistry } from './tools/registry';
@@ -90,6 +91,10 @@ export interface CoreOptions {
   schedulerTimeoutMs?: number;
   /** Результат запуска агента по расписанию (в Electron — системное уведомление и сообщение окну). */
   onAgent?: (e: AgentEvent) => void;
+  /** Подмена сети загрузки на YouTube (тесты). */
+  youtubeUploadFetch?: typeof fetch;
+  /** Открыть адрес входа Google в браузере пользователя (передаёт главный процесс). */
+  openExternal?: (url: string) => Promise<void>;
   /** Для тестов: подмена сети YouTube. */
   youtubeFetch?: typeof fetch;
   /** Событие Telegram (входящее, передача человеку, ошибка) — для уведомлений. */
@@ -140,6 +145,12 @@ export class JarvisCore {
   readonly aqua: AquaService;
   readonly show: ShowService;
   readonly video: VideoService;
+  readonly ytUpload: YoutubeUploader;
+  private uploadListeners = new Set<(p: { pct: number; stage: string }) => void>();
+  onUploadProgress(cb: (p: { pct: number; stage: string }) => void): () => void {
+    this.uploadListeners.add(cb);
+    return () => this.uploadListeners.delete(cb);
+  }
   readonly mentor: MentorService;
   readonly jobs: JobRepo;
   readonly scheduler: Scheduler;
@@ -214,6 +225,17 @@ export class JarvisCore {
       allowFolder: (p) => void this.addAllowedFolder(p),
     });
     this.video.registerTools(this.tools);
+    this.ytUpload = new YoutubeUploader({
+      db: this.db,
+      secrets: opts.secrets,
+      audit: this.audit,
+      fetchImpl: opts.youtubeUploadFetch,
+      openExternal: opts.openExternal,
+      spend: (u) => this.youtube.spendHard(u),
+      resolveResult: (ref) => this.video.resolveResult(ref),
+      onProgress: (p) => this.uploadListeners.forEach((l) => l(p)),
+    });
+    this.ytUpload.registerTools(this.tools);
     this.mentor = new MentorService(this.db, this.crm, this.audit, this.browser);
     registerMentorTools(this.tools, this.mentor);
     this.telephony = new TelephonyService(this.db, this.settings, this.audit, this.mentor, opts.telephonyNow, opts.telephonyHearTimeoutMs);

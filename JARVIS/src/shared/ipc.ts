@@ -25,6 +25,8 @@ import type {
   VideoResultDto,
   VideoSpecDto,
   VideoPlanDto,
+  YtUploadStatusDto,
+  YtUploadResultDto,
   AquaStatusDto,
   AquaSectionDto,
   AgentDto,
@@ -112,6 +114,11 @@ export const IPC = {
   videoMontage: 'video:montage',
   videoOpen: 'video:open',
   videoStop: 'video:stop',
+  ytuStatus: 'ytu:status',
+  ytuSaveClient: 'ytu:client',
+  ytuConnect: 'ytu:connect',
+  ytuDisconnect: 'ytu:disconnect',
+  ytuUpload: 'ytu:upload',
   agentsList: 'agents:list',
   agentsTemplates: 'agents:templates',
   agentsSave: 'agents:save',
@@ -163,6 +170,7 @@ export const IPC = {
   evtUpdate: 'evt:update',
   evtShow: 'evt:show',
   evtVideo: 'evt:video',
+  evtYtu: 'evt:ytu',
   profileGet: 'profile:get',
   profileSet: 'profile:set',
   profileClear: 'profile:clear',
@@ -263,6 +271,17 @@ export interface JarvisApi {
     setStartMenu(on: boolean): Promise<ComputerAccess>;
     /** Голосовая команда «открой …»: matched=false — не нашли, пусть разбирается модель. */
     launch(query: string): Promise<{ matched: boolean; ok: boolean; message: string }>;
+  };
+  ytUpload: {
+    status(): Promise<YtUploadStatusDto>;
+    /** Client ID и Client secret из Google Cloud (тип «Приложение для ПК»). */
+    saveClient(clientId: string, clientSecret: string): Promise<YtUploadStatusDto>;
+    /** Открывает вход Google в браузере; возвращается, когда вход завершён. */
+    connect(): Promise<YtUploadStatusDto>;
+    disconnect(): Promise<YtUploadStatusDto>;
+    /** Загрузка готового ролика (по кнопке; доступ по умолчанию закрытый). */
+    upload(spec: { video: string; title: string; description: string; tags: string[]; privacy: 'private' | 'unlisted' | 'public' }): Promise<YtUploadResultDto>;
+    onProgress(cb: (p: { pct: number; stage: string }) => void): () => void;
   };
   video: {
     status(): Promise<VideoStatusDto>;

@@ -386,6 +386,15 @@ export class VideoService {
     }
   }
 
+  /** Готовый ролик и его обложка по названию папки результата или пути (для загрузки на YouTube). */
+  resolveResult(ref: string): { video: string; cover: string | null } {
+    this.need();
+    const abs = resolve(ref);
+    const hit = this.results().find((r) => r.video && (r.name.toLowerCase() === ref.toLowerCase() || r.video === abs)) ?? this.results().find((r) => r.video && r.name.toLowerCase().includes(ref.toLowerCase()));
+    if (!hit?.video) throw new Error(`В «${DONE_DIR}» нет готового ролика «${ref}». Сначала смонтируйте его в студии.`);
+    return { video: hit.video, cover: hit.cover };
+  }
+
   /** Файл внутри папки студии (исходник или результат в «Готово»). */
   private resolveFileDeep(ref: string): string {
     const dir = this.need();

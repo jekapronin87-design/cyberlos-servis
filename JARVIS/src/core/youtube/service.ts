@@ -59,6 +59,13 @@ export class YoutubeService {
     return { hasKey: this.d.secrets.has(SECRET_YOUTUBE_KEY), usedToday: this.usedToday(), limit: this.d.getSettings().youtubeDailyUnits };
   }
 
+  /** Загрузка роликов не ограничивается «моим лимитом» чтения, но не может превысить предел Google (10 000 в сутки, берём запас). */
+  spendHard(units: number): void {
+    const used = this.usedToday();
+    if (used + units > 9500) throw new Error(`Суточная квота YouTube почти исчерпана (использовано ${used} из 10 000 единиц; загрузка стоит ${units}). Повторите завтра.`);
+    this.d.db.prepare('INSERT INTO yt_usage (day, units) VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET units = units + excluded.units').run(this.today(), units);
+  }
+
   private spend(units: number): void {
     const limit = this.d.getSettings().youtubeDailyUnits;
     const used = this.usedToday();
